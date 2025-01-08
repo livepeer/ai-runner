@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 
 import PIL
 import torch
-from diffusers import StableVideoDiffusionPipeline
+from diffusers import LTXImageToVideoPipeline, StableVideoDiffusionPipeline
 from huggingface_hub import file_download
 from PIL import ImageFile
 
@@ -22,6 +22,8 @@ SFAST_WARMUP_ITERATIONS = 2  # Model warm-up iterations when SFAST is enabled.
 
 class ImageToVideoPipeline(Pipeline):
     def __init__(self, model_id: str):
+        self.pipeline_name = ""
+
         self.model_id = model_id
         kwargs = {"cache_dir": get_model_dir()}
 
@@ -41,7 +43,28 @@ class ImageToVideoPipeline(Pipeline):
             kwargs["torch_dtype"] = torch.float16
             kwargs["variant"] = "fp16"
 
-        self.ldm = StableVideoDiffusionPipeline.from_pretrained(model_id, **kwargs)
+        try:
+            if any(substring in model_id.lower() for substring in ("ltx-video", "ltx")):
+                logger.info("Loading LTXImageToVideoPipeline for model_id: %s", model_id)
+                self.pipeline_name = "LTXImageToVideoPipeline"
+                self.ldm = LTXImageToVideoPipeline.from_pretrained(model_id, **kwargs)
+            else:
+                logger.info("Loading StableVideoDiffusionPipeline for model_id: %s", model_id)
+                self.pipeline_name = "StableVideoDiffusionPipeline"
+                self.ldm = StableVideoDiffusionPipeline.from_pretrained(model_id, **kwargs)
+        except Exception as loading_error:
+            logger.error("Failed to load %s : %s." %(self.pipeline_name,loading_error))
+            # Trying to load the LTXImageToVideoPipeline if the StableVideoDiffusionPipeline fails to load and there is a chance that model name doesn't match the if condition for LTX-Video
+            # (for future extra models support)
+            try:
+                logger.info("Trying LTXImageToVideoPipeline for model_id: %s", model_id)
+                self.pipeline_name = "LTXImageToVideoPipeline"
+                self.ldm = LTXImageToVideoPipeline.from_pretrained(model_id, **kwargs)
+            except Exception as loading_error:
+                logger.error("Failed to load both LTXImageToVideoPipeline and StableVideoDiffusionPipeline: %s. Please ensure the model ID is compatible.", loading_error)
+                raise loading_error
+            
+
         self.ldm.to(get_torch_device())
 
         sfast_enabled = os.getenv("SFAST", "").strip().lower() == "true"
@@ -112,6 +135,14 @@ class ImageToVideoPipeline(Pipeline):
     ) -> Tuple[List[PIL.Image], List[Optional[bool]]]:
         seed = kwargs.pop("seed", None)
         safety_check = kwargs.pop("safety_check", True)
+
+        if self.pipeline_name == "LTXImageToVideoPipeline":
+            del kwargs["fps"]
+            del kwargs["motion_bucket_id"]
+            del kwargs["noise_aug_strength"]
+        elif self.pipeline_name == "StableVideoDiffusionPipeline":
+            del kwargs["prompt"]
+            del kwargs["negative_prompt"]
 
         if "decode_chunk_size" not in kwargs:
             # Decrease decode_chunk_size to reduce memory usage.
