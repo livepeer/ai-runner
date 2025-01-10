@@ -1,4 +1,4 @@
-diffusers==0.31.0
+diffusers==0.32.1
 accelerate==0.30.1
 transformers==4.43.3
 fastapi==0.111.0
