@@ -76,7 +76,9 @@ class ImageToVideoPipeline(Pipeline):
                 "as it may lead to suboptimal performance. Please disable one of them."
             )
 
-        if sfast_enabled:
+        if sfast_enabled and self.pipeline_name == "LTXImageToVideoPipeline":
+            logger.warning("StableFast optimization is not compatible with LTXImageToVideoPipeline so,skipping.")
+        elif sfast_enabled:
             logger.info(
                 "ImageToVideoPipeline will be dynamically compiled with stable-fast "
                 "for %s",
@@ -119,9 +121,11 @@ class ImageToVideoPipeline(Pipeline):
                     )
                 logger.info("Total warmup time: %s seconds", total_time)
 
-        if deepcache_enabled:
+        if deepcache_enabled and self.pipeline_name == "LTXImageToVideoPipeline":
+            logger.warning("DeepCache optimization is not compatible with LTXImageToVideoPipeline so,skipping.")
+        elif deepcache_enabled:
             logger.info(
-                "TextToImagePipeline will be optimized with DeepCache for %s",
+                "ImageToVideoPipeline will be optimized with DeepCache for %s",
                 model_id,
             )
             from app.pipelines.optim.deepcache import enable_deepcache
