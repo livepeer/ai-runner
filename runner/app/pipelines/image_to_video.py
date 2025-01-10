@@ -1,7 +1,8 @@
 import logging
+import inspect
 import os
 import time
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import PIL
 import torch
@@ -136,14 +137,6 @@ class ImageToVideoPipeline(Pipeline):
         seed = kwargs.pop("seed", None)
         safety_check = kwargs.pop("safety_check", True)
 
-        if self.pipeline_name == "LTXImageToVideoPipeline":
-            del kwargs["fps"]
-            del kwargs["motion_bucket_id"]
-            del kwargs["noise_aug_strength"]
-        elif self.pipeline_name == "StableVideoDiffusionPipeline":
-            del kwargs["prompt"]
-            del kwargs["negative_prompt"]
-
         if "decode_chunk_size" not in kwargs:
             # Decrease decode_chunk_size to reduce memory usage.
             kwargs["decode_chunk_size"] = 4
@@ -163,6 +156,13 @@ class ImageToVideoPipeline(Pipeline):
         ):
             del kwargs["num_inference_steps"]
 
+        if self.pipeline_name == "LTXImageToVideoPipeline":
+            pipeline_class = LTXImageToVideoPipeline
+        elif self.pipeline_name == "StableVideoDiffusionPipeline":
+            pipeline_class = StableVideoDiffusionPipeline            
+
+        kwargs = self._filter_valid_kwargs(pipeline_class, kwargs)
+
         if safety_check:
             _, has_nsfw_concept = self._safety_checker.check_nsfw_images([image])
         else:
@@ -176,6 +176,15 @@ class ImageToVideoPipeline(Pipeline):
             raise InferenceError(original_exception=e)
 
         return outputs.frames, has_nsfw_concept
+
+    @staticmethod
+    def _filter_valid_kwargs(pipeline_class: Type, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Filters the kwargs to just include keys that are necesssary for the pipeline_class.
+        """
+
+        valid_kwargs = inspect.signature(pipeline_class.__call__).parameters.keys()
+        return {k: v for k, v in kwargs.items() if k in valid_kwargs}
 
     def __str__(self) -> str:
         return f"ImageToVideoPipeline model_id={self.model_id}"
