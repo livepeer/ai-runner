@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 
 import PIL
 import torch
-from diffusers import LTXImageToVideoPipeline, StableVideoDiffusionPipeline
+from diffusers import DiffusionPipeline, LTXImageToVideoPipeline, StableVideoDiffusionPipeline
 from huggingface_hub import file_download
 from PIL import ImageFile
 
@@ -44,29 +44,16 @@ class ImageToVideoPipeline(Pipeline):
             kwargs["torch_dtype"] = torch.float16
             kwargs["variant"] = "fp16"
 
-        try:
-            if any(substring in model_id.lower() for substring in ("ltx-video", "ltx")):
-                logger.info("Loading LTXImageToVideoPipeline for model_id: %s", model_id)
-                self.pipeline_name = "LTXImageToVideoPipeline"
-                self.ldm = LTXImageToVideoPipeline.from_pretrained(model_id, **kwargs)
-            else:
-                logger.info("Loading StableVideoDiffusionPipeline for model_id: %s", model_id)
-                self.pipeline_name = "StableVideoDiffusionPipeline"
-                self.ldm = StableVideoDiffusionPipeline.from_pretrained(model_id, **kwargs)
-        except Exception as loading_error:
-            logger.error("Failed to load %s : %s." %(self.pipeline_name,loading_error))
-            # Trying to load the LTXImageToVideoPipeline if the StableVideoDiffusionPipeline fails to load and there is a chance that model name doesn't match the if condition for LTX-Video
-            # (for future extra models support)
-            try:
-                logger.info("Trying LTXImageToVideoPipeline for model_id: %s", model_id)
-                self.pipeline_name = "LTXImageToVideoPipeline"
-                self.ldm = LTXImageToVideoPipeline.from_pretrained(model_id, **kwargs)
-            except Exception as loading_error:
-                logger.error("Failed to load both LTXImageToVideoPipeline and StableVideoDiffusionPipeline: %s. Please ensure the model ID is compatible.", loading_error)
-                raise loading_error
-            
+        logger.info("Loading DiffusionPipeline for model_id: %s", model_id)
+        self.ldm = DiffusionPipeline.from_pretrained(model_id, **kwargs)
+
+        if any(substring in model_id.lower() for substring in ("ltx-video", "ltx")):
+            logger.info("Adjusting to LTXImageToVideoPipeline for model_id: %s", model_id)
+            self.ldm = LTXImageToVideoPipeline.from_pipe(self.ldm)
 
         self.ldm.to(get_torch_device())
+
+        self.pipeline_name = type(self.ldm).__name__
 
         sfast_enabled = os.getenv("SFAST", "").strip().lower() == "true"
         deepcache_enabled = os.getenv("DEEPCACHE", "").strip().lower() == "true"
