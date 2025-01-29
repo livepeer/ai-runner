@@ -1,85 +1,79 @@
-ARG BASE_IMAGE=livepeer/ai-runner:live-base
+ARG BASE_IMAGE=eliteencoder/comfyui-base:latest
 FROM ${BASE_IMAGE}
 
-# Create directory for ComfyUI custom nodes and models
-RUN mkdir -p /comfyui/custom_nodes
+# -----------------------------------------------------------------------------
+# live-base: This section was copied from live-base since we don't use it as base image above
+# -----------------------------------------------------------------------------
 
-# Install required Python version
-ARG PYTHON_VERSION=3.10
-RUN pyenv install $PYTHON_VERSION && \
-    pyenv global $PYTHON_VERSION && \
-    pyenv rehash
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
 
-# Upgrade pip and install required packages
-ARG PIP_VERSION=23.3.2
-ENV PIP_PREFER_BINARY=1
-RUN pip install --no-cache-dir --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0
+# Install prerequisites
+RUN apt-get update && \
+    apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
+    libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
+    xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git runit libzmq3-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install ComfyUI-Depth-Anything-Tensorrt Node (https://github.com/yuvraj108c/ComfyUI-Depth-Anything-Tensorrt)
-RUN cd /comfyui/custom_nodes && \
-    git clone https://github.com/yuvraj108c/ComfyUI-Depth-Anything-Tensorrt.git && \
-    cd ComfyUI-Depth-Anything-Tensorrt && \
-    pip install -r requirements.txt
+# Keep python installation from base image
 
-# Install ComfyUI_RyanOnTheInside (https://github.com/ryanontheinside/ComfyUI_RyanOnTheInside.git)
-RUN cd /comfyui/custom_nodes && \
-    git clone https://github.com/pschroedl/ComfyUI_RyanOnTheInside.git && \
-    cd ComfyUI_RyanOnTheInside && \
-    git checkout c5592719d5188cb6bba81287a8af123637eadf79 && \
-    pip install -r requirements.txt
+# Install ffmpeg
 
-# Install ComfyUI-Misc-Effects ( Starburst ) (https://github.com/ryanontheinside/ComfyUI-Misc-Effects.git)
-RUN cd /comfyui/custom_nodes && \
-    git clone https://github.com/ryanontheinside/ComfyUI-Misc-Effects.git && \
-    cd ComfyUI-Misc-Effects && \
-    git checkout c6b360c78611134c3723388170475eb4898ff6b7
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    autoconf automake build-essential cmake git-core libtool pkg-config wget \
+    nasm yasm zlib1g-dev libpng-dev libx264-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN pip install torch==2.5.1 torchvision torchaudio tqdm nvidia-ml-py==12.560.30
+# Set up environment variables
+ENV NV_CODEC_HEADERS=/usr/local/cuda/include/ffnvcodec/
+RUN git clone -b n12.2.72.0 --depth 1 https://git.videolan.org/git/ffmpeg/nv-codec-headers.git && \
+    cd nv-codec-headers && \
+    make && \
+    make install && \
+    cd .. && rm -rf nv-codec-headers
 
-# Install comfystream (which includes ComfyUI)
-RUN pip install git+https://github.com/yondonfu/comfystream.git
-RUN git clone https://github.com/yondonfu/comfystream.git && \
-    cd comfystream && \
-    pip install -r requirements.txt && \
-    cp -r nodes/tensor_utils /comfyui/custom_nodes/ 
+# Clone the FFmpeg repository and checkout the latest release
+RUN git clone --branch n7.0.2 --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg
 
-# Install ComfyUI-SAM2-Realtime (https://github.com/pschroedl/ComfyUI-SAM2-Realtime.git)
-RUN cd /comfyui/custom_nodes && \
-    git clone https://github.com/pschroedl/ComfyUI-SAM2-Realtime.git && \
-    cd ComfyUI-SAM2-Realtime && \
-    git checkout 4f587443fb2808c4b5b303afcd7ec3ec3e0fbd08 && \
-    pip install -r requirements.txt
+# Build FFmpeg with static linking and the desired hardware-accelerated features
+RUN cd ffmpeg && \
+    ./configure --prefix=/compiled \
+    --pkg-config-flags="--static" \
+    --extra-cflags="-I/ffmpeg_build/include -I/usr/local/cuda/include" \
+    --extra-ldflags="-L/ffmpeg_build/lib -L/usr/local/cuda/lib64" \
+    --extra-libs="-lpthread -lm" \
+    --enable-nonfree \
+    --enable-cuda-nvcc \
+    --enable-cuda \
+    --enable-libnpp \
+    --enable-cuvid \
+    --enable-nvenc \
+    --enable-nvdec \
+    --enable-static \
+    --enable-gpl \
+    --enable-libx264 \
+    --disable-shared \
+    --disable-debug \
+    --disable-doc && \
+    make -j$(nproc) && \
+    make install && \
+    make distclean
 
-# Install ComfyUI-Florence2-Vision (https://github.com/ad-astra-video/ComfyUI-Florence2-Vision.git)
-RUN cd /comfyui/custom_nodes && \
-    git clone https://github.com/ad-astra-video/ComfyUI-Florence2-Vision.git && \
-    cd ComfyUI-Florence2-Vision && \
-    git checkout 0c624e61b6606801751bd41d93a09abe9844bea7 && \
-    pip install -r requirements.txt
+# Copy the compiled FFmpeg binaries to /usr/local
+RUN cp -R /compiled/* /usr/local/
 
-# Install ComfyUI-StreamDiffusion (https://github.com/pschroedl/ComfyUI-StreamDiffusion.git)
-RUN cd /comfyui/custom_nodes && \
-    git clone https://github.com/pschroedl/ComfyUI-StreamDiffusion.git && \
-    cd ComfyUI-StreamDiffusion && \
-    git checkout f93b98aa9f20ab46c23d149ad208d497cd496579 && \
-    pip install -r requirements.txt
+# Clean up APT cache to reduce image size
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install ComfyUI-LivePortraitKJ Node (https://github.com/kijai/ComfyUI-LivePortraitKJ)
-RUN pip install diffusers==0.30.1
-RUN cd /comfyui/custom_nodes && \
-    git clone https://github.com/kijai/ComfyUI-LivePortraitKJ.git && \
-    cd ComfyUI-LivePortraitKJ && \
-    git checkout 4d9dc6205b793ffd0fb319816136d9b8c0dbfdff && \
-    pip install -r requirements.txt
-# Install ComfyUI-load-image-from-url Node (https://github.com/tsogzark/ComfyUI-load-image-from-url.git)
-RUN cd /comfyui/custom_nodes && \
-git clone https://github.com/tsogzark/ComfyUI-load-image-from-url.git
+# -----------------------------------------------------------------------------
+# live-base: End of section
+# -----------------------------------------------------------------------------
 
+# TODO: Delete if not needed
 # Upgrade TensorRT to 10.6.0
-RUN pip uninstall -y tensorrt && \
-    pip install tensorrt==10.6.0
+# RUN pip uninstall -y tensorrt && \
+#     pip install tensorrt==10.6.0
 
 # Set up ComfyUI workspace
-ENV COMFY_UI_WORKSPACE="/comfyui"
-RUN ln -s /models/ComfyUI--models /comfyui/models
-# TODO: Consider linking the custom nodes directory as well and set those up in the host, similar to the models directory
+ENV COMFY_UI_WORKSPACE="/ComfyUI"
