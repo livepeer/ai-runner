@@ -87,35 +87,18 @@ function download_all_models() {
 function download_live_models() {
     huggingface-cli download KBlueLeaf/kohaku-v2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
     huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-    huggingface-cli download yuvraj108c/Depth-Anything-Onnx --include depth_anything_vitl14.onnx --local-dir models/ComfyUI--models/Depth-Anything-Onnx
-    download_sam2_checkpoints
-    download_florence2_checkpoints
-    download_stream_diffusion_checkpoints
-    download_stream_diffusion_loras
-    huggingface-cli download Kijai/LivePortrait_safetensors --local-dir models/ComfyUI--models/livePortrait
-}
 
-function download_sam2_checkpoints() {
-    huggingface-cli download facebook/sam2-hiera-tiny --local-dir models/ComfyUI--models/sam2--checkpoints/facebook--sam2-hiera-tiny
-    huggingface-cli download facebook/sam2-hiera-small --local-dir models/ComfyUI--models/sam2--checkpoints/facebook--sam2-hiera-small
-    huggingface-cli download facebook/sam2-hiera-large --local-dir models/ComfyUI--models/sam2--checkpoints/facebook--sam2-hiera-large
-}
-
-function download_florence2_checkpoints() {
-    huggingface-cli download microsoft/Florence-2-large --local-dir models/ComfyUI--models/LLM/Florence-2-large --include "*.py" "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data"
-    huggingface-cli download microsoft/Florence-2-large-ft --local-dir models/ComfyUI--models/LLM/Florence-2-large-ft --include "*.py" "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data"
-    huggingface-cli download microsoft/Florence-2-base --local-dir models/ComfyUI--models/LLM/Florence-2-base --include "*.py" "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data"
-    huggingface-cli download microsoft/Florence-2-base-ft --local-dir models/ComfyUI--models/LLM/Florence-2-base-ft --include "*.py" "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data"
-}
-
-function download_stream_diffusion_checkpoints() {
-    # ComfyUI_StreamDiffusion is loading single file safetensors from /models/checkpoints
-    huggingface-cli download pschroedl/comfystream_checkpoints --local-dir models/ComfyUI--models/checkpoints --include "*.safetensors"
-}
-
-function download_stream_diffusion_loras() {
-    # ral-dissolve-sd15 LoRA
-    huggingface-cli download pschroedl/comfystream_loras --local-dir models/ComfyUI--models/loras --include "*.safetensors"
+    # ComfyUI
+    AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
+    docker pull $AI_RUNNER_COMFYUI_IMAGE
+    # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
+    docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
+    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+        bash -c "cd /comfystream && \
+                 python src/comfystream/scripts/setup_models.py --workspace /ComfyUI && \
+                 adduser $(id -u -n) && \
+                 chown -R $(id -u -n):$(id -g -n) /models" \
+        || (echo "failed ComfyUI setup_models.py"; return 1)
 }
 
 function build_tensorrt_models() {
@@ -146,20 +129,6 @@ function build_tensorrt_models() {
                 chown -R $(id -u -n):$(id -g -n) /models
                 " \
         || (echo "failed streamdiffusion tensorrt"; return 1)
-
-    # ComfyUI (only DepthAnything for now)
-    AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
-    docker pull $AI_RUNNER_COMFYUI_IMAGE
-    # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
-    docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
-    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
-        bash -c "cd /comfyui/models/Depth-Anything-Onnx && \
-                    python /comfyui/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py && \
-                    mkdir -p /comfyui/models/tensorrt/depth-anything && \
-                    mv *.engine /comfyui/models/tensorrt/depth-anything && \
-                    adduser $(id -u -n) && \
-                    chown -R $(id -u -n):$(id -g -n) /models" \
-        || (echo "failed ComfyUI tensorrt"; return 1)
 }
 
 # Download models with a restrictive license.
@@ -225,7 +194,7 @@ echo "Starting livepeer AI subnet model downloader..."
 echo "Creating 'models' directory in the current working directory..."
 mkdir -p models
 mkdir -p models/checkpoints
-mkdir -p models/StreamDiffusion--engines models/ComfyUI--models models/ComfyUI--models/sam2--checkpoints models/ComfyUI--models/checkpoints
+mkdir -p models/StreamDiffusion--engines models/ComfyUI--models models/ComfyUI--output
 
 # Ensure 'huggingface-cli' is installed.
 echo "Checking if 'huggingface-cli' is installed..."

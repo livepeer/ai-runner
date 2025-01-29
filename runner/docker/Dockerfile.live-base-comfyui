@@ -78,7 +78,7 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 # Set up ComfyUI workspace
 ENV COMFY_UI_WORKSPACE="/ComfyUI"
 RUN ln -s /models/ComfyUI--models /ComfyUI/models
-RUN ln -s /models/ComfyUI--models/output /ComfyUI/output
+RUN ln -s /models/ComfyUI--output /ComfyUI/output
 
 # Ensure all the next RUN commands are run in the comfystream conda environment
 RUN echo "source /miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> ~/.bashrc
