@@ -77,3 +77,5 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up ComfyUI workspace
 ENV COMFY_UI_WORKSPACE="/ComfyUI"
+RUN ln -s /models/ComfyUI--models /ComfyUI/models
+RUN ln -s /models/ComfyUI--models/output /ComfyUI/output
