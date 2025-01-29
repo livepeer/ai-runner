@@ -79,3 +79,9 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 ENV COMFY_UI_WORKSPACE="/ComfyUI"
 RUN ln -s /models/ComfyUI--models /ComfyUI/models
 RUN ln -s /models/ComfyUI--models/output /ComfyUI/output
+
+# Ensure all the next RUN commands are run in the comfystream conda environment
+RUN echo "source /miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> ~/.bashrc
+SHELL ["/bin/bash", "-c"]
+# Ensure the app run from CMD is also in the comfystream conda environment (just wrap in bash and it will run the .bashrc above)
+ENTRYPOINT ["bash", "-c", "exec /opt/nvidia/nvidia_entrypoint.sh \"$@\"", "--"]
