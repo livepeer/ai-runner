@@ -90,7 +90,7 @@ function download_live_models() {
 
     # ComfyUI
     AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
-    docker pull $AI_RUNNER_COMFYUI_IMAGE
+    # docker pull $AI_RUNNER_COMFYUI_IMAGE
     # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
     docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
     docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \

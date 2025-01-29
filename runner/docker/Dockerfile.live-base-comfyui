@@ -80,6 +80,9 @@ ENV COMFY_UI_WORKSPACE="/ComfyUI"
 RUN ln -s /models/ComfyUI--models /ComfyUI/models
 RUN ln -s /models/ComfyUI--output /ComfyUI/output
 
+# TODO: Remove. This should come from the base image.
+RUN git clone https://github.com/yondonfu/comfystream.git /comfystream
+
 # Ensure all the next RUN commands are run in the comfystream conda environment
 RUN echo "source /miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> ~/.bashrc
 SHELL ["/bin/bash", "-c"]
