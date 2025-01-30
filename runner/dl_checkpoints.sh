@@ -99,6 +99,15 @@ function download_live_models() {
                  adduser $(id -u -n) && \
                  chown -R $(id -u -n):$(id -g -n) /models" \
         || (echo "failed ComfyUI setup_models.py"; return 1)
+
+    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines livepeer/ai-runner:live-base-comfyui \
+        bash -c "cd / && \
+                 source /miniconda3/etc/profile.d/conda.sh && conda activate comfystream && \
+                 export PYTHONPATH=\"/ComfyUI:$PYTHONPATH\" && \    
+                 python /workspace/src/comfystream/scripts/build_trt.py \
+                --model /models/ComfyUI--models/checkpoints/SD1.5/dreamshaper-8.safetensors \
+                --out-engine /models/ComfyUI--models/tensorrt/" \
+        || (echo "failed ComfyUI build_trt.py"; return 1)
 }
 
 function build_tensorrt_models() {

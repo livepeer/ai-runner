@@ -84,7 +84,7 @@ RUN ln -s /models/ComfyUI--output /ComfyUI/output
 RUN git clone https://github.com/pschroedl/comfystream.git /workspace && \
     cd /workspace && \
     git fetch origin && \
-    git checkout 3e29033fad4ae893af2ed7b6f8b6082fe88a8460
+    git checkout 5f0d4729311571fce34c121489256b5f8d3d3c1c
 
 
 # Ensure all the next RUN commands are run in the comfystream conda environment
