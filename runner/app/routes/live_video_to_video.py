@@ -65,6 +65,13 @@ class LiveVideoToVideoParams(BaseModel):
             description="Name of the pipeline to run in the live video to video job. Notice that this is named model_id for consistency with other routes, but it does not refer to a Hugging Face model ID. The exact model(s) depends on the pipeline implementation and might be configurable via the `params` argument."
         ),
     ]
+    stream_id: Annotated[
+        str,
+        Field(
+            default="",
+            description="The Livepeer stream ID associated with this video stream."
+        ),
+    ]
     params: Annotated[
         Dict,
         Field(
