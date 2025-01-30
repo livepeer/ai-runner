@@ -81,10 +81,10 @@ RUN ln -s /models/ComfyUI--models /ComfyUI/models
 RUN ln -s /models/ComfyUI--output /ComfyUI/output
 
 # TODO: Remove. This should come from the base image.
-RUN git clone https://github.com/yondonfu/comfystream.git /comfystream && \
+RUN git clone https://github.com/pschroedl/comfystream.git /comfystream && \
     cd /comfystream && \
-    git fetch origin pull/20/head:comfystream-base-image && \
-    git checkout comfystream-base-image
+    git fetch origin && \
+    git checkout 10_29/built_trt
 
 
 # Ensure all the next RUN commands are run in the comfystream conda environment
