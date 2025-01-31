@@ -110,12 +110,12 @@ function download_florence2_checkpoints() {
 
 function download_stream_diffusion_checkpoints() {
     # ComfyUI_StreamDiffusion is loading single file safetensors from /models/checkpoints
-    huggingface-cli download pschroedl/comfystream_checkpoints --local-dir models/ComfyUI--models/checkpoints --include "*.safetensors"
+    huggingface-cli download Livepeer-Studio/comfystream_checkpoints --local-dir models/ComfyUI--models/checkpoints --include "*.safetensors"
 }
 
 function download_stream_diffusion_loras() {
     # ral-dissolve-sd15 LoRA
-    huggingface-cli download pschroedl/comfystream_loras --local-dir models/ComfyUI--models/loras --include "*.safetensors"
+    huggingface-cli download Livepeer-Studio/comfystream_loras --local-dir models/ComfyUI--models/loras --include "*.safetensors"
 }
 
 function build_tensorrt_models() {
