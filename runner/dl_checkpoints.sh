@@ -93,7 +93,7 @@ function download_live_models() {
     # docker pull $AI_RUNNER_COMFYUI_IMAGE
     # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
     docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
-    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+    docker run --rm -v ./models:/models --gpus all -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
         bash -c "cd /comfystream && \
                  python src/comfystream/scripts/setup_models.py --workspace /ComfyUI && \
                  adduser $(id -u -n) && \
@@ -105,8 +105,8 @@ function download_live_models() {
         bash -c "cd /comfystream/src/comfystream/scripts && \
                  curl -O https://raw.githubusercontent.com/pschroedl/comfystream/refs/heads/10_29/build_trt/src/comfystream/scripts/build_trt.py && \
                  python ./build_trt.py \
-                --model /models/ComfyUI--models/unet/dreamshaper-8-dmd-1kstep.safetensors \
-                --out-engine /models/ComfyUI--models/tensorrt/static-dreamshaper8_SD15_$stat-b-1-h-512-w-512_00001_.engine" \
+                --model /ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
+                --out-engine /ComfyUI/models/tensorrt/static-dreamshaper8_SD15_$stat-b-1-h-512-w-512_00001_.engine" \
         || (echo "failed ComfyUI build_trt.py"; return 1)
 }
 
