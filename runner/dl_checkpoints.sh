@@ -99,15 +99,6 @@ function download_live_models() {
                  adduser $(id -u -n) && \
                  chown -R $(id -u -n):$(id -g -n) /models" \
         || (echo "failed ComfyUI setup_models.py"; return 1)
-
-    # TODO: Remove the script download with curl. It should already come in the base image once eliteprox/comfystream#1 is merged.
-    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
-        bash -c "cd /comfystream/src/comfystream/scripts && \
-                 curl -O https://raw.githubusercontent.com/pschroedl/comfystream/refs/heads/10_29/build_trt/src/comfystream/scripts/build_trt.py && \
-                 python ./build_trt.py \
-                --model /ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
-                --out-engine /ComfyUI/output/tensorrt/static-dreamshaper8_SD15_$stat-b-1-h-512-w-512_00001_.engine" \
-        || (echo "failed ComfyUI build_trt.py"; return 1)
 }
 
 function build_tensorrt_models() {
@@ -138,6 +129,15 @@ function build_tensorrt_models() {
                 chown -R $(id -u -n):$(id -g -n) /models
                 " \
         || (echo "failed streamdiffusion tensorrt"; return 1)
+
+    # TODO: Remove the script download with curl. It should already come in the base image once eliteprox/comfystream#1 is merged.
+    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+        bash -c "cd /comfystream/src/comfystream/scripts && \
+                 curl -O https://raw.githubusercontent.com/pschroedl/comfystream/refs/heads/10_29/build_trt/src/comfystream/scripts/build_trt.py && \
+                 python ./build_trt.py \
+                --model /ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
+                --out-engine /ComfyUI/output/tensorrt/static-dreamshaper8_SD15_$stat-b-1-h-512-w-512_00001_.engine" \
+        || (echo "failed ComfyUI build_trt.py"; return 1)
 }
 
 # Download models with a restrictive license.
