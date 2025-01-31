@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=eliteencoder/comfyui-base:latest
+ARG BASE_IMAGE=livepeer/comfyui-base:latest
 FROM ${BASE_IMAGE}
 
 # -----------------------------------------------------------------------------
@@ -77,15 +77,9 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up ComfyUI workspace
 ENV COMFY_UI_WORKSPACE="/ComfyUI"
+ENV PYTHONPATH=/ComfyUI:${PYTHONPATH}
 RUN ln -s /models/ComfyUI--models /ComfyUI/models
 RUN ln -s /models/ComfyUI--output /ComfyUI/output
-
-# TODO: Remove. This should come from the base image.
-RUN git clone https://github.com/pschroedl/comfystream.git /workspace && \
-    cd /workspace && \
-    git fetch origin && \
-    git checkout 10_29/build_trt
-
 
 # Ensure all the next RUN commands are run in the comfystream conda environment
 RUN echo "source /miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> ~/.bashrc

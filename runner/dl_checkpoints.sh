@@ -100,11 +100,11 @@ function download_live_models() {
                  chown -R $(id -u -n):$(id -g -n) /models" \
         || (echo "failed ComfyUI setup_models.py"; return 1)
 
-    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines livepeer/ai-runner:live-base-comfyui \
-        bash -c "cd / && \
-                 source /miniconda3/etc/profile.d/conda.sh && conda activate comfystream && \
-                 export PYTHONPATH=\"/ComfyUI:$PYTHONPATH\" && \    
-                 python /workspace/src/comfystream/scripts/build_trt.py \
+    # TODO: Remove the script download with curl. It should already come in the base image once eliteprox/comfystream#1 is merged.
+    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+        bash -c "cd /comfystream/src/comfystream/scripts && \
+                 curl -O https://raw.githubusercontent.com/pschroedl/comfystream/refs/heads/10_29/build_trt/src/comfystream/scripts/build_trt.py && \
+                 python ./build_trt.py \
                 --model /models/ComfyUI--models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /models/ComfyUI--models/tensorrt/static-dreamshaper8_SD15_$stat-b-1-h-512-w-512_00001_.engine" \
         || (echo "failed ComfyUI build_trt.py"; return 1)
