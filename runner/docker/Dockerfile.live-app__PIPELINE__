@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
 # Install any additional Python packages
 COPY requirements.live-ai.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
+# TODO: Figure out a way to have this in requirements file
+RUN pip install --no-cache-dir triton==3.1.0
 
 # Set environment variables
 ENV MAX_WORKERS=1

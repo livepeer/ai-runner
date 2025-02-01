@@ -132,6 +132,12 @@ function build_tensorrt_models() {
 
     # TODO: Remove the script download with curl. It should already come in the base image once eliteprox/comfystream#1 is merged.
     docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+    bash -c "cd /ComfyUI/models/tensorrt/depth-anything && \
+                python /ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py && \
+                adduser $(id -u -n) && \
+                chown -R $(id -u -n):$(id -g -n) /models" \
+    || (echo "failed ComfyUI Depth-Anything-Tensorrt"; return 1)
+    docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
         bash -c "cd /comfystream/src/comfystream/scripts && \
                  curl -O https://raw.githubusercontent.com/pschroedl/comfystream/refs/heads/10_29/build_trt/src/comfystream/scripts/build_trt.py && \
                  python ./build_trt.py \
