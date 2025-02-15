@@ -1,3 +1,5 @@
+import asyncio
+from functools import partial
 import logging
 import os
 from typing import Annotated, Dict, Tuple, Union
@@ -172,16 +174,16 @@ async def segment_anything_2(
 
     try:
         image = Image.open(image.file).convert("RGB")
-        masks, scores, low_res_mask_logits = pipeline(
-            image,
-            point_coords=point_coords,
-            point_labels=point_labels,
-            box=box,
-            mask_input=mask_input,
-            multimask_output=multimask_output,
-            return_logits=return_logits,
-            normalize_coords=normalize_coords,
-        )
+        pipeline_call = partial(pipeline,
+                                image=image,
+                                point_coords=point_coords,
+                                point_labels=point_labels,
+                                box=box,
+                                mask_input=mask_input,
+                                multimask_output=multimask_output,
+                                return_logits=return_logits,
+                                normalize_coords=normalize_coords)
+        masks, scores, low_res_mask_logits = await asyncio.to_thread(pipeline_call)
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.

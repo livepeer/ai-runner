@@ -1,3 +1,5 @@
+import asyncio
+from functools import partial
 import logging
 import os
 import random
@@ -182,19 +184,21 @@ async def image_to_image(
     has_nsfw_concept = []
     for seed in seeds:
         try:
-            imgs, nsfw_checks = pipeline(
-                prompt=prompt,
-                image=image,
-                strength=strength,
-                loras=loras,
-                guidance_scale=guidance_scale,
-                image_guidance_scale=image_guidance_scale,
-                negative_prompt=negative_prompt,
-                safety_check=safety_check,
-                seed=seed,
-                num_images_per_prompt=1,
-                num_inference_steps=num_inference_steps,
-            )
+            pipeline_call = partial(pipeline, 
+                                    prompt=prompt,
+                                    image=image,
+                                    strength=strength,
+                                    loras=loras,
+                                    guidance_scale=guidance_scale,
+                                    image_guidance_scale=image_guidance_scale,
+                                    negative_prompt=negative_prompt,
+                                    safety_check=safety_check,
+                                    seed=seed,
+                                    num_images_per_prompt=1,
+                                    num_inference_steps=num_inference_steps,
+                                    scheduler=scheduler
+                                )
+            imgs, nsfw_checks = await asyncio.to_thread(pipeline_call)
         except Exception as e:
             if isinstance(e, torch.cuda.OutOfMemoryError):
                 # TODO: Investigate why not all VRAM memory is cleared.
