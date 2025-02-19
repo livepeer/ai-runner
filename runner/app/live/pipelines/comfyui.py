@@ -86,7 +86,7 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
   "7": {
     "inputs": {
       "seed": 945236422600751,
-      "steps": 1,
+      "steps": 3,
       "cfg": 1,
       "sampler_name": "lcm",
       "scheduler": "normal",
