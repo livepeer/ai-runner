@@ -34,6 +34,7 @@ class PipelineStreamer:
         self.emit_event_lock = Lock()
 
         self.main_tasks: list[asyncio.Task] = []
+        self.auxiliary_tasks: list[asyncio.Task] = []
         self.tasks_supervisor_task: asyncio.Task | None = None
         self.request_id = request_id
         self.stream_id = stream_id
