@@ -76,7 +76,7 @@ class LiveVideoToVideoParams(BaseModel):
         str,
         Field(
             default="",
-            description=" The ID of the Gateway request (for logging purposes)."
+            description="The ID of the Gateway request (for logging purposes)."
         ),
     ]
     stream_id: Annotated[
@@ -148,7 +148,6 @@ async def live_video_to_video(
             requestID = params.gateway_request_id
         if streamID is None:
             streamID = params.stream_id
-        logger.error(f"AAA live_video_to_video: {requestID} {streamID}")
         pipeline(**params.model_dump(), request_id=requestID, stream_id=streamID)
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):

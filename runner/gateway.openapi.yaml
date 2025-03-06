@@ -1030,7 +1030,7 @@ components:
         gateway_request_id:
           type: string
           title: Gateway Request Id
-          description: ' The ID of the Gateway request (for logging purposes).'
+          description: The ID of the Gateway request (for logging purposes).
           default: ''
         stream_id:
           type: string

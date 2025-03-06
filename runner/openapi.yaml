@@ -1175,12 +1175,14 @@ components:
           default: {}
         gateway_request_id:
           type: string
-          title: Gateway Request ID
+          title: Gateway Request Id
           description: The ID of the Gateway request (for logging purposes).
+          default: ''
         stream_id:
           type: string
-          title: Stream ID
+          title: Stream Id
           description: The Stream ID (for logging purposes).
+          default: ''
       type: object
       required:
       - subscribe_url
@@ -1208,8 +1210,9 @@ components:
           default: ''
         request_id:
           type: string
-          title: Request ID
-          description: The ID generated for this request.
+          title: Request Id
+          description: The ID generated for this request
+          default: ''
       type: object
       required:
       - subscribe_url
