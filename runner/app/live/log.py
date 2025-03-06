@@ -30,7 +30,7 @@ def config_logging(*, log_level: int = 0, request_id: str = "", stream_id: str =
 
 def config_logging_fields(handler: logging.Handler, request_id: str, stream_id: str):
     formatter = logging.Formatter(
-        "timestamp=%(asctime)s level=%(levelname)s location=%(filename)s:%(lineno)d:%(funcName)s request_id=%(request_id)s stream_id=%(stream_id)s message=%(message)s",
+        "timestamp=%(asctime)s level=%(levelname)s location=%(filename)s:%(lineno)d:%(funcName)s gateway_request_id=%(request_id)s stream_id=%(stream_id)s message=%(message)s",
         defaults={"request_id": request_id, "stream_id": stream_id},
         datefmt="%Y-%m-%d %H:%M:%S",
     )
