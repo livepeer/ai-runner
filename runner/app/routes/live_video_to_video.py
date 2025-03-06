@@ -72,6 +72,20 @@ class LiveVideoToVideoParams(BaseModel):
             description="Initial parameters for the pipeline."
         ),
     ]
+    gateway_request_id: Annotated[
+        str,
+        Field(
+            default="",
+            description=" The ID of the Gateway request (for logging purposes)."
+        ),
+    ]
+    stream_id: Annotated[
+        str,
+        Field(
+            default="",
+            description="The Stream ID (for logging purposes)."
+        ),
+    ]
 
 RESPONSES: dict[int | str, dict[str, Any]]= {
     status.HTTP_200_OK: {

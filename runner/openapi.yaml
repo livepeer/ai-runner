@@ -1173,6 +1173,14 @@ components:
           title: Params
           description: Initial parameters for the pipeline.
           default: {}
+        gateway_request_id:
+          type: string
+          title: Gateway Request ID
+          description: The ID of the Gateway request (for logging purposes).
+        stream_id:
+          type: string
+          title: Stream ID
+          description: The Stream ID (for logging purposes).
       type: object
       required:
       - subscribe_url
@@ -1198,6 +1206,10 @@ components:
           title: Events Url
           description: URL for subscribing to events for pipeline status and logs
           default: ''
+        request_id:
+          type: string
+          title: Request ID
+          description: The ID generated for this request.
       type: object
       required:
       - subscribe_url
