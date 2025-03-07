@@ -267,7 +267,7 @@ class ComfyUI(Pipeline):
         super().__init__(**params)
 
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
-        self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
+        self.client = ComfyStreamClient(cwd=comfy_ui_workspace, verbose="WARNING")
         self.params: ComfyUIParams
 
         self.update_params(**params)
