@@ -111,6 +111,12 @@ class PipelineProcess:
         if torch.cuda.is_available():
             os.environ["CUDA_VISIBLE_DEVICES"] = str(torch.cuda.current_device())
 
+        # ComfystreamClient/embeddedComfyClient is not respecting config parameters
+        # such as verbose='WARNING', logging_level='WARNING'
+        # Setting here to override and supress excessive INFO logging 
+        # ( load_gpu_models is calling logging.info() for every frame )
+        logging.getLogger("comfy").setLevel(logging.WARNING)
+
         def report_error(error_msg: str):
             error_event = {
                 "message": error_msg,
