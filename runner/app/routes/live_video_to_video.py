@@ -146,9 +146,7 @@ async def live_video_to_video(
     try:
         if requestID is None:
             requestID = params.gateway_request_id
-        if streamID is None:
-            streamID = params.stream_id
-        pipeline(**params.model_dump(), request_id=requestID, stream_id=streamID)
+        pipeline(**params.model_dump(), request_id=requestID)
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             torch.cuda.empty_cache()
