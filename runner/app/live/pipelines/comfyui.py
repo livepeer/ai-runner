@@ -15,11 +15,21 @@ import logging
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
 DEFAULT_WORKFLOW_JSON = json.loads("""
 {
+  "1": {
+    "inputs": {
+      "image": "example.png",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
   "2": {
     "inputs": {
       "engine": "depth_anything_vitl14-fp16.engine",
       "images": [
-        "26",
+        "1",
         0
       ]
     },
@@ -40,9 +50,9 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
   },
   "5": {
     "inputs": {
-      "text": "beautiful pencil sketch, masterpiece ",
+      "text": "the hulk",
       "clip": [
-        "18",
+        "23",
         0
       ]
     },
@@ -55,7 +65,7 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
     "inputs": {
       "text": "",
       "clip": [
-        "18",
+        "23",
         0
       ]
     },
@@ -66,8 +76,8 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
   },
   "7": {
     "inputs": {
-      "seed": 708806373158,
-      "steps": 2,
+      "seed": 905056445574169,
+      "steps": 1,
       "cfg": 1,
       "sampler_name": "lcm",
       "scheduler": "normal",
@@ -77,11 +87,11 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
         0
       ],
       "positive": [
-        "19",
+        "9",
         0
       ],
       "negative": [
-        "19",
+        "9",
         1
       ],
       "latent_image": [
@@ -105,7 +115,7 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
   },
   "9": {
     "inputs": {
-      "strength": 0.9,
+      "strength": 1,
       "start_percent": 0,
       "end_percent": 1,
       "positive": [
@@ -210,102 +220,15 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
       "title": "Empty Latent Image"
     }
   },
-  "18": {
+  "23": {
     "inputs": {
-      "stop_at_clip_layer": -2,
-      "clip": [
-        "27",
-        1
-      ]
+      "clip_name": "CLIPText/model.fp16.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
     },
-    "class_type": "CLIPSetLastLayer",
+    "class_type": "CLIPLoader",
     "_meta": {
-      "title": "CLIP Set Last Layer"
-    }
-  },
-  "19": {
-    "inputs": {
-      "strength": 0.9,
-      "start_percent": 0,
-      "end_percent": 1,
-      "positive": [
-        "9",
-        0
-      ],
-      "negative": [
-        "9",
-        1
-      ],
-      "control_net": [
-        "21",
-        0
-      ],
-      "image": [
-        "22",
-        0
-      ]
-    },
-    "class_type": "ControlNetApplyAdvanced",
-    "_meta": {
-      "title": "Apply ControlNet"
-    }
-  },
-  "20": {
-    "inputs": {
-      "control_net_name": "control_v2p_sd15_mediapipe_face.safetensors"
-    },
-    "class_type": "ControlNetLoader",
-    "_meta": {
-      "title": "Load ControlNet Model"
-    }
-  },
-  "21": {
-    "inputs": {
-      "backend": "inductor",
-      "fullgraph": false,
-      "mode": "reduce-overhead",
-      "controlnet": [
-        "20",
-        0
-      ]
-    },
-    "class_type": "TorchCompileLoadControlNet",
-    "_meta": {
-      "title": "TorchCompileLoadControlNet"
-    }
-  },
-  "22": {
-    "inputs": {
-      "max_faces": 1,
-      "min_confidence": 0.5,
-      "resolution": 512,
-      "image": [
-        "26",
-        0
-      ]
-    },
-    "class_type": "MediaPipe-FaceMeshPreprocessor",
-    "_meta": {
-      "title": "MediaPipe Face Mesh"
-    }
-  },
-  "26": {
-    "inputs": {
-      "image": "example.png",
-      "upload": "image"
-    },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "Load Image"
-    }
-  },
-  "27": {
-    "inputs": {
-      "ckpt_name": "SD1.5/dreamshaper-8.safetensors"
-    },
-    "class_type": "CheckpointLoaderSimple",
-    "_meta": {
-      "title": "Load Checkpoint"
+      "title": "Load CLIP"
     }
   }
 }
