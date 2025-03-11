@@ -211,7 +211,7 @@ class ProcessGuardian:
                         {
                             "type": "error",
                             "pipeline": self.pipeline,
-                            "error": error_msg,
+                            "message": error_msg,
                             "time": error_time,
                         }
                     )
