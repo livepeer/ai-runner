@@ -15,21 +15,11 @@ import logging
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
 DEFAULT_WORKFLOW_JSON = json.loads("""
 {
-  "1": {
-    "inputs": {
-      "image": "example.png",
-      "upload": "image"
-    },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "Load Image"
-    }
-  },
   "2": {
     "inputs": {
       "engine": "depth_anything_vitl14-fp16.engine",
       "images": [
-        "1",
+        "26",
         0
       ]
     },
@@ -50,9 +40,9 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
   },
   "5": {
     "inputs": {
-      "text": "the hulk",
+      "text": "beautiful pencil sketch, masterpiece ",
       "clip": [
-        "23",
+        "18",
         0
       ]
     },
@@ -65,7 +55,7 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
     "inputs": {
       "text": "",
       "clip": [
-        "23",
+        "18",
         0
       ]
     },
@@ -76,8 +66,8 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
   },
   "7": {
     "inputs": {
-      "seed": 905056445574169,
-      "steps": 1,
+      "seed": 722042942226989,
+      "steps": 2,
       "cfg": 1,
       "sampler_name": "lcm",
       "scheduler": "normal",
@@ -87,12 +77,12 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
         0
       ],
       "positive": [
-        "9",
+        "38",
         0
       ],
       "negative": [
-        "9",
-        1
+        "37",
+        0
       ],
       "latent_image": [
         "16",
@@ -115,7 +105,7 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
   },
   "9": {
     "inputs": {
-      "strength": 1,
+      "strength": 0.9,
       "start_percent": 0,
       "end_percent": 1,
       "positive": [
@@ -220,7 +210,96 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
       "title": "Empty Latent Image"
     }
   },
-  "23": {
+  "18": {
+    "inputs": {
+      "stop_at_clip_layer": -2,
+      "clip": [
+        "36",
+        0
+      ]
+    },
+    "class_type": "CLIPSetLastLayer",
+    "_meta": {
+      "title": "CLIP Set Last Layer"
+    }
+  },
+  "19": {
+    "inputs": {
+      "strength": 0.9,
+      "start_percent": 0,
+      "end_percent": 1,
+      "positive": [
+        "5",
+        0
+      ],
+      "negative": [
+        "6",
+        0
+      ],
+      "control_net": [
+        "21",
+        0
+      ],
+      "image": [
+        "22",
+        0
+      ]
+    },
+    "class_type": "ControlNetApplyAdvanced",
+    "_meta": {
+      "title": "Apply ControlNet"
+    }
+  },
+  "20": {
+    "inputs": {
+      "control_net_name": "control_v2p_sd15_mediapipe_face.safetensors"
+    },
+    "class_type": "ControlNetLoader",
+    "_meta": {
+      "title": "Load ControlNet Model"
+    }
+  },
+  "21": {
+    "inputs": {
+      "backend": "inductor",
+      "fullgraph": false,
+      "mode": "reduce-overhead",
+      "controlnet": [
+        "20",
+        0
+      ]
+    },
+    "class_type": "TorchCompileLoadControlNet",
+    "_meta": {
+      "title": "TorchCompileLoadControlNet"
+    }
+  },
+  "22": {
+    "inputs": {
+      "max_faces": 1,
+      "min_confidence": 0.5,
+      "resolution": 512,
+      "image": [
+        "26",
+        0
+      ]
+    },
+    "class_type": "MediaPipe-FaceMeshPreprocessor",
+    "_meta": {
+      "title": "MediaPipe Face Mesh"
+    }
+  },
+  "26": {
+    "inputs": {
+      "image": "example.png",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Load Image"
+    }
+  },
+  "36": {
     "inputs": {
       "clip_name": "CLIPText/model.fp16.safetensors",
       "type": "stable_diffusion",
@@ -229,6 +308,38 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
     "class_type": "CLIPLoader",
     "_meta": {
       "title": "Load CLIP"
+    }
+  },
+  "37": {
+    "inputs": {
+      "conditioning_to": [
+        "9",
+        1
+      ],
+      "conditioning_from": [
+        "19",
+        1
+      ]
+    },
+    "class_type": "ConditioningConcat",
+    "_meta": {
+      "title": "Conditioning (Concat)"
+    }
+  },
+  "38": {
+    "inputs": {
+      "conditioning_to": [
+        "9",
+        0
+      ],
+      "conditioning_from": [
+        "19",
+        0
+      ]
+    },
+    "class_type": "ConditioningConcat",
+    "_meta": {
+      "title": "Conditioning (Concat)"
     }
   }
 }
