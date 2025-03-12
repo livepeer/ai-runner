@@ -63,7 +63,7 @@ jobs:
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
       - name: Build and push live-base image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         if: steps.check_build.outputs.should_build == 'true'
         with:
           context: "{{defaultContext}}:runner"
@@ -109,7 +109,7 @@ jobs:
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
       - name: Build and push pipeline base image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         if: |
           github.event_name == 'workflow_dispatch' ||
           github.event_name == 'push' ||
@@ -144,7 +144,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-${{ matrix.pipeline }}-
 
       - name: Build and push pipeline app image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
           platforms: linux/amd64
@@ -216,7 +216,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-noop-
 
       - name: Build and push noop image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         if: steps.check_build.outputs.should_build == 'true'
         with:
           context: "{{defaultContext}}:runner"

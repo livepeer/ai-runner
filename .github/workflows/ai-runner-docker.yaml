@@ -67,7 +67,7 @@ jobs:
             type=raw,value=stable,enable=${{ startsWith(github.event.ref, 'refs/tags/v') }}
 
       - name: Build and push runner docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
           platforms: linux/amd64
