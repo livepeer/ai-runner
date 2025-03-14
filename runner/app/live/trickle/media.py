@@ -12,7 +12,7 @@ from .decoder import decode_av
 from .encoder import encode_av
 
 MAX_ENCODER_RETRIES = 3
-ENCODER_RETRY_RESET_SECONDS = 300  # 5 minutes in seconds
+ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 
 async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback):
     # TODO add some pre-processing parameters, eg image size
@@ -101,9 +101,9 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
             retryCount += 1
             last_retry_time = current_time
             if retryCount < MAX_ENCODER_RETRIES:
-                logging.error(f"Error in encode_av, retrying {retryCount}/{MAX_ENCODER_RETRIES}: {exc}")
+                logging.exception(f"Error in encode_av, retrying {retryCount}/{MAX_ENCODER_RETRIES}", stack_info=True)
             else:
-                logging.error(f"Error in encode_av, maximum retries reached: {exc}")
+                logging.exception("Error in encode_av, maximum retries reached", stack_info=True)
             # close leftover writer ends of any pipes to prevent hanging
             pipe_count = 0
             with task_lock:
@@ -113,7 +113,7 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
                         p.close()
                         pipe_count += 1
                     except Exception as e:
-                        logging.error(f"Error closing pipe on task list: {e}")
+                        logging.exception("Error closing pipe on task list", stack_info=True)
             logging.info(f"Closed pipes - {pipe_count}")
 
 async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback):
