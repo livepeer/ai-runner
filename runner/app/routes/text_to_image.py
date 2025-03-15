@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import random
@@ -196,7 +197,7 @@ async def text_to_image(
         params.seed = seed
         kwargs = {k: v for k, v in params.model_dump().items() if k != "model_id"}
         try:
-            imgs, nsfw_check = pipeline(**kwargs)
+            imgs, nsfw_check = await asyncio.to_thread(pipeline, **kwargs)
         except Exception as e:
             if isinstance(e, torch.cuda.OutOfMemoryError):
                 # TODO: Investigate why not all VRAM memory is cleared.
