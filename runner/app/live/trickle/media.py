@@ -134,7 +134,7 @@ async def run_publish(publish_url: str, image_generator, get_metadata, monitorin
                     live_tasks.remove(t)
             task.add_done_callback(task_done)
 
-        encode_thread = threading.Thread(target=encode_av, args=(image_generator, sync_callback, get_metadata))
+        encode_thread = threading.Thread(target=encode_av, args=(image_generator, sync_callback, get_metadata), kwargs={"audio_codec":"libopus"})
         encode_thread.start()
         logging.debug("run_publish: encoder thread started")
 
