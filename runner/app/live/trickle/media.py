@@ -11,6 +11,9 @@ from .trickle_publisher import TricklePublisher
 from .decoder import decode_av
 from .encoder import encode_av
 
+MAX_ENCODER_RETRIES = 3
+ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
+
 async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback):
     # TODO add some pre-processing parameters, eg image size
     try:
@@ -81,6 +84,40 @@ async def decode_in(in_pipe, frame_callback, put_metadata):
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, decode_runner)
 
+def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadata, **kwargs):
+    # encode_av has a tendency to crash, so restart as necessary
+    retryCount = 0
+    last_retry_time = time.time()
+    while retryCount < MAX_ENCODER_RETRIES:
+        try:
+            encode_av(image_generator, sync_callback, get_metadata, **kwargs)
+            break  # clean exit
+        except Exception as exc:
+            current_time = time.time()
+            # Reset retry counter if enough time has elapsed
+            if current_time - last_retry_time > ENCODER_RETRY_RESET_SECONDS:
+                logging.info("Resetting encoder retry count")
+                retryCount = 0
+            retryCount += 1
+            last_retry_time = current_time
+            if retryCount < MAX_ENCODER_RETRIES:
+                logging.exception(f"Error in encode_av, retrying {retryCount}/{MAX_ENCODER_RETRIES}", stack_info=True)
+            else:
+                logging.exception("Error in encode_av, maximum retries reached", stack_info=True)
+            # close leftover writer ends of any pipes to prevent hanging
+            pipe_count = 0
+            total_pipes = 0
+            with task_lock:
+                pipes = list(task_pipes)
+                total_pipes = len(pipes)
+                for p in pipes:
+                    try:
+                        p.close()
+                        pipe_count += 1
+                    except Exception as e:
+                        logging.exception("Error closing pipe on task list", stack_info=True)
+            logging.info(f"Closed pipes - {pipe_count}/{total_pipes}")
+
 async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback):
     first_segment = True
 
@@ -111,30 +148,36 @@ async def run_publish(publish_url: str, image_generator, get_metadata, monitorin
                         }, queue_event_type="stream_trace")
                 transport.close()
 
-        def sync_callback(pipe_file, pipe_name):
+        def sync_callback(pipe_reader, pipe_writer, pipe_name):
             def do_schedule():
-                schedule_callback(callback(pipe_file, pipe_name), pipe_name)
+                schedule_callback(callback(pipe_reader, pipe_name), pipe_writer, pipe_name)
             loop.call_soon_threadsafe(do_schedule)
 
         # hold tasks since `loop.create_task` is a weak reference that gets GC'd
         # TODO use asyncio.TaskGroup once all pipelines are on Python 3.11+
+        # Also hold pipes in case we need to explicitly close them during exceptions
         live_tasks = set()
+        live_pipes = set()
         live_tasks_lock = threading.Lock()
 
-        def schedule_callback(coro, pipe_name):
+        def schedule_callback(coro, pipe_writer, pipe_name):
             task = loop.create_task(coro)
             with live_tasks_lock:
                 live_tasks.add(task)
-            def task_done(t: asyncio.Task):
+                live_pipes.add(pipe_writer)
+            def task_done2(t: asyncio.Task, p):
                 try:
                     t.result()
                 except Exception as e:
                     logging.error(f"Task {pipe_name} crashed: {e}")
                 with live_tasks_lock:
                     live_tasks.remove(t)
+                    live_pipes.remove(p)
+            def task_done(t2:asyncio.Task):
+                return task_done2(task, pipe_writer)
             task.add_done_callback(task_done)
 
-        encode_thread = threading.Thread(target=encode_av, args=(image_generator, sync_callback, get_metadata), kwargs={"audio_codec":"libopus"})
+        encode_thread = threading.Thread(target=encode_in, args=(live_pipes, live_tasks_lock, image_generator, sync_callback, get_metadata), kwargs={"audio_codec":"libopus"})
         encode_thread.start()
         logging.debug("run_publish: encoder thread started")
 
