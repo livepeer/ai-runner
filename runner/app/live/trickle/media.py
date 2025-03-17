@@ -106,15 +106,17 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
                 logging.exception("Error in encode_av, maximum retries reached", stack_info=True)
             # close leftover writer ends of any pipes to prevent hanging
             pipe_count = 0
+            total_pipes = 0
             with task_lock:
                 pipes = list(task_pipes)
+                total_pipes = len(pipes)
                 for p in pipes:
                     try:
                         p.close()
                         pipe_count += 1
                     except Exception as e:
                         logging.exception("Error closing pipe on task list", stack_info=True)
-            logging.info(f"Closed pipes - {pipe_count}")
+            logging.info(f"Closed pipes - {pipe_count}/{total_pipes}")
 
 async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback):
     first_segment = True
