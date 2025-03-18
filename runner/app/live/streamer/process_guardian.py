@@ -251,8 +251,15 @@ class ProcessGuardian:
                     and time_since_last_output < 60
                 )
                 if stopped_recently or gone_stale:
-                    logging.warning(
-                        "No output received while inputs are being sent. Restarting process."
+                    logging.error(
+                        f"No output received while inputs are being sent. Restarting process. \
+                        stopped_recently={stopped_recently} \
+                        gone_stale={gone_stale} \
+                        time_since_last_input={time_since_last_input} \
+                        time_since_last_output={time_since_last_output} \
+                        time_since_start={time_since_start} \
+                        time_since_last_params={time_since_last_params} \
+                        time_since_reload={time_since_reload}"
                     )
                     await self._restart_process()
         except asyncio.CancelledError:

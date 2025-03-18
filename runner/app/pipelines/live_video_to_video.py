@@ -117,13 +117,16 @@ class LiveVideoToVideoPipeline(Pipeline):
 
         try:
             self.process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env
             )
 
             self.monitor_thread = threading.Thread(target=self.monitor_process)
             self.monitor_thread.start()
-            self.log_thread = threading.Thread(target=log_output, args=(self.process.stdout,))
-            self.log_thread.start()
+            # Create separate threads for stdout and stderr logging
+            self.stdout_log_thread = threading.Thread(target=log_output, args=(self.process.stdout,))
+            self.stdout_log_thread.start()
+            self.stderr_log_thread = threading.Thread(target=log_output, args=(self.process.stderr,))
+            self.stderr_log_thread.start()
 
         except subprocess.CalledProcessError as e:
             raise InferenceError(f"Error starting infer.py: {e}")
@@ -172,9 +175,12 @@ class LiveVideoToVideoPipeline(Pipeline):
         if self.monitor_thread and not is_monitor_thread:
             self.monitor_thread.join()
             self.monitor_thread = None
-        if self.log_thread:
-            self.log_thread.join()
-            self.log_thread = None
+        if hasattr(self, 'stdout_log_thread') and self.stdout_log_thread:
+            self.stdout_log_thread.join()
+            self.stdout_log_thread = None
+        if hasattr(self, 'stderr_log_thread') and self.stderr_log_thread:
+            self.stderr_log_thread.join()
+            self.stderr_log_thread = None
         logging.info("Infer process stopped successfully")
 
     def __str__(self) -> str:
