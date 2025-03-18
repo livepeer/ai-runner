@@ -276,8 +276,12 @@ class ComfyUI(Pipeline):
         self.audio_incoming_frames = asyncio.Queue()
         self.processed_audio_buffer = np.array([], dtype=np.int16)
 
-        # Use asyncio.run to handle update_params since it's now async
-        asyncio.run(self.update_params(**params))
+        self.loop = asyncio.new_event_loop()
+        self.loop.run_until_complete(self._init_async(**params))
+
+    async def _init_async(self, **params):
+        await self.update_params(**params)
+        await self.warm_video()
 
     async def warm_video(self):
         # Comfy will cache nodes that only need to be run once (i.e. a node that loads model weights)
@@ -287,7 +291,9 @@ class ComfyUI(Pipeline):
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)
-            await self.client.get_video_output()
+            _ = await self.client.get_video_output()
+            logging.info("Warmup complete")
+
     
     async def warm_audio(self):
         dummy_frame = av.AudioFrame()
