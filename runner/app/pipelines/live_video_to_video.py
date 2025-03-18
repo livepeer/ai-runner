@@ -122,7 +122,6 @@ class LiveVideoToVideoPipeline(Pipeline):
 
             self.monitor_thread = threading.Thread(target=self.monitor_process)
             self.monitor_thread.start()
-            # Create separate threads for stdout and stderr logging
             self.stdout_log_thread = threading.Thread(target=log_output, args=(self.process.stdout,))
             self.stdout_log_thread.start()
             self.stderr_log_thread = threading.Thread(target=log_output, args=(self.process.stderr,))
