@@ -50,8 +50,9 @@ class ImageToVideoPipeline(Pipeline):
         if any(substring in model_id.lower() for substring in ("ltx-video", "ltx")):
             logger.info("Adjusting to LTXImageToVideoPipeline for model_id: %s", model_id)
             self.ldm = LTXImageToVideoPipeline.from_pipe(self.ldm)
-
-        self.ldm.to(get_torch_device())
+            self.ldm.enable_model_cpu_offload()
+        else:
+            self.ldm.to(get_torch_device())
 
         self.pipeline_name = type(self.ldm).__name__
 
