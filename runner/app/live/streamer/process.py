@@ -168,6 +168,7 @@ class PipelineProcess:
                     raise
 
             while not self.is_done():
+                logging.debug("PipelineProcess: Entering main loop")
                 while not self.param_update_queue.empty():
                     params = self.param_update_queue.get_nowait()
                     try:
@@ -189,7 +190,7 @@ class PipelineProcess:
                 try:
                     if isinstance(input_frame, VideoFrame):
                         input_frame.log_timestamps["pre_process_frame"] = time.time()
-                        output_image = pipeline.process_frame(input_frame.image)
+                        output_image = pipeline.process_frame(input_frame)
                         input_frame.log_timestamps["post_process_frame"] = time.time()
                         output_frame = VideoOutput(input_frame.replace_image(output_image), self.request_id)
                         self.output_queue.put(output_frame)
