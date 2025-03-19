@@ -58,7 +58,7 @@ def encode_av(
         # Add a new stream to the output using the desired audio codec
         output_audio_stream = output_container.add_stream(audio_codec)
         output_audio_stream.time_base = OUT_TIME_BASE
-        output_audio_stream.sample_rate = audio_meta['sample_rate'] # TODO take from inference if not passthru
+        output_audio_stream.sample_rate = 48000
         output_audio_stream.layout = 'mono'
         # Optional: set other encoding parameters, e.g.:
         # output_audio_stream.bit_rate = 128_000
