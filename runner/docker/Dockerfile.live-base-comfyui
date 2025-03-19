@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=livepeer/comfyui-base:ai-runner-9166aa9
+ARG BASE_IMAGE=livepeer/comfyui-base:ai-runner-e746874
 FROM ${BASE_IMAGE}
 
 # -----------------------------------------------------------------------------
