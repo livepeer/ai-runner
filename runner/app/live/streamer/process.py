@@ -183,13 +183,12 @@ class PipelineProcess:
                 try:
                     if isinstance(input_frame, VideoFrame):
                         input_frame.log_timestamps["pre_process_frame"] = time.time()
-                        output_image = pipeline.process_frame(input_frame)
-                        input_frame.log_timestamps["post_process_frame"] = time.time()
-                        output_frame = VideoOutput(input_frame.replace_image(output_image))
+                        output_frame = pipeline.process_frame(input_frame)
+                        output_frame.log_timestamps["post_process_frame"] = time.time()
                         self.output_queue.put(output_frame)
                     elif isinstance(input_frame, AudioFrame):
                         self.output_queue.put(AudioOutput([input_frame]))
-                        # TODO wire in a proper pipeline here
+                        # TODO: wire in a proper pipeline here
                     else:
                         report_error(f"Unsupported input frame type {type(input_frame)}")
                 except Exception as e:
