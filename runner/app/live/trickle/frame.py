@@ -1,7 +1,15 @@
 import av
 from PIL import Image
-from typing import List
+from typing import List, Union
 import numpy as np
+
+class SideData:
+    """
+        Base class for side data, needed to keep it consistent with av frame side_data
+    """
+    skipped: bool = True
+    # TODO: update input to be processed_input in comfystream
+    processed_input: Union[Image.Image, np.ndarray] = None
 
 class InputFrame:
     """
@@ -13,6 +21,7 @@ class InputFrame:
     timestamp: int
     time_base: int
     log_timestamps: dict[str, float] = {}
+    side_data: SideData = SideData()
 
     def __init__(self):
         self.timestamp = av.AV_NOPTS_VALUE
@@ -36,7 +45,9 @@ class VideoFrame(InputFrame):
         self.log_timestamps = log_timestamps
     # Returns a copy of an existing VideoFrame with its image replaced
     def replace_image(self, image: Image.Image):
-        return VideoFrame(image, self.timestamp, self.time_base, self.log_timestamps)
+        new_frame = VideoFrame(image, self.timestamp, self.time_base, self.log_timestamps)
+        new_frame.side_data = self.side_data
+        return new_frame
 
 class AudioFrame(InputFrame):
     samples: np.ndarray

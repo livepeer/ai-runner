@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from StreamDiffusionWrapper import StreamDiffusionWrapper
 
 from .interface import Pipeline
+from trickle import VideoFrame, VideoOutput
 
 
 class StreamDiffusionParams(BaseModel):
@@ -36,8 +37,8 @@ class StreamDiffusion(Pipeline):
         self.first_frame = True
         self.update_params(**params)
 
-    def process_frame(self, image: Image.Image) -> Image.Image:
-        img_tensor = self.pipe.preprocess_image(image)
+    def process_frame(self, frame: VideoFrame) -> VideoOutput:
+        img_tensor = self.pipe.preprocess_image(frame.image)
         img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
 
         if self.first_frame:
@@ -45,7 +46,7 @@ class StreamDiffusion(Pipeline):
             for _ in range(self.pipe.batch_size):
                 self.pipe(image=img_tensor)
 
-        return self.pipe(image=img_tensor)
+        return VideoOutput(frame.replace_image(self.pipe(image=img_tensor)))
 
     def update_params(self, **params):
         new_params = StreamDiffusionParams(**params)

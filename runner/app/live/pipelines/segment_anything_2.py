@@ -9,6 +9,7 @@ from PIL import Image
 from pydantic import BaseModel
 from Sam2Wrapper import Sam2Wrapper
 from .interface import Pipeline
+from trickle import VideoFrame, VideoOutput
 
 logger = logging.getLogger(__name__)
 
@@ -56,15 +57,15 @@ class Sam2Live(Pipeline):
             mask = cv2.resize(mask, (frame_shape[1], frame_shape[0]))
         return mask
 
-    def process_frame(self, frame: Image.Image, **params) -> Image.Image:
+    def process_frame(self, frame: VideoFrame, **params) -> VideoOutput:
         if params:
             self.update_params(**params)
 
         # Convert image formats
-        frame_array = np.array(frame)
+        frame_array = np.array(frame.image)
         frame_bgr = cv2.cvtColor(frame_array, cv2.COLOR_RGBA2BGR)
         if self.first_frame:
-            self.pipe.predictor.load_first_frame(frame)
+            self.pipe.predictor.load_first_frame(frame.image)
             
             for idx, point in enumerate(self.params.point_coords):
                 _, _, mask_logits = self.pipe.predictor.add_new_prompt(
@@ -75,7 +76,7 @@ class Sam2Live(Pipeline):
                 )
             self.first_frame = False
         else:
-            _, mask_logits = self.pipe.predictor.track(frame)
+            _, mask_logits = self.pipe.predictor.track(frame.image)
             
         # Process mask and create overlay
         mask = self._process_mask(mask_logits, frame_bgr.shape)
@@ -93,4 +94,4 @@ class Sam2Live(Pipeline):
         _, buffer = cv2.imencode('.jpg', overlay)
         result = Image.open(io.BytesIO(buffer.tobytes()))
 
-        return result
+        return VideoOutput(frame.replace_image(result))
