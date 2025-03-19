@@ -1,5 +1,6 @@
-from abc import ABC, abstractmethod
 from PIL import Image
+from abc import ABC, abstractmethod
+from trickle import VideoFrame, VideoOutput
 
 class Pipeline(ABC):
     """Abstract base class for image processing pipelines.
@@ -22,16 +23,16 @@ class Pipeline(ABC):
         pass
 
     @abstractmethod
-    def process_frame(self, frame: Image.Image) -> Image.Image:
+    def process_frame(self, frame: VideoFrame) -> VideoOutput:
         """Process a single frame through the pipeline.
 
         Called sequentially with each frame from the stream.
 
         Args:
-            frame: Input PIL Image
+            frame: Input VideoFrame
 
         Returns:
-            Processed PIL Image
+            Processed VideoFrame
         """
         pass
 
