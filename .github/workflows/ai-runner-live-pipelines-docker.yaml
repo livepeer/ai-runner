@@ -157,6 +157,9 @@ jobs:
           cache-from: type=registry,ref=livepeerci/build:cache
           cache-to: type=registry,ref=livepeerci/build:cache,mode=max
 
+      - name: Notify new build upload
+        run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
+
   build-noop:
     name: Build pipeline image (noop)
     needs: build-common-base
