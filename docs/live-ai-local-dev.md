@@ -243,7 +243,7 @@
     [
             {
                     "pipeline": "live-video-to-video",
-                    "model_id": "streamdiffusion",
+                    "model_id": "comfyui",
                     "warm": true
             }
     ]
@@ -263,7 +263,7 @@
     --form 'stream="test"' \
     --form 'source_id="testout"' \
     --form 'source_type="webrtcSession"' \
-    --form 'query="pipeline=streamdiffusion&rtmpOutput=rtmp://rtmp.livepeer.com/live/0974-7x87-ha7l-i2yv"'
+    --form 'query="pipeline=comfyui&rtmpOutput=rtmp://rtmp.livepeer.com/live/0974-7x87-ha7l-i2yv"'
     ```
 
     - Be sure to set the IP, pipeline and rtmpOutput correctly in the above command. Stream name `test` is in URL path
