@@ -1,0 +1,31 @@
+ARG BASE_IMAGE=livepeer/ai-runner:live-base
+FROM ${BASE_IMAGE}
+
+# Install required Python version
+ARG PYTHON_VERSION=3.10
+RUN pyenv install $PYTHON_VERSION && \
+    pyenv global $PYTHON_VERSION && \
+    pyenv rehash
+
+# Upgrade pip and install required packages
+ARG PIP_VERSION=23.3.2
+ENV PIP_PREFER_BINARY=1
+RUN pip install --no-cache-dir --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0
+
+# Install g++ compiler
+RUN apt-get update && apt-get install -y \
+    g++-11 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+ENV CXX=/usr/bin/g++-11
+
+# Install Sam2 dependencies
+RUN pip install --no-cache-dir torch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 xformers==0.0.27.post2 zstd==1.5.5.1
+
+RUN pip install --no-cache-dir huggingface-hub==0.23.2 ninja
+
+# Set TORCH_CUDA_ARCH_LIST environment variable, fixes build error in segment-anything-2-real-time
+ENV TORCH_CUDA_ARCH_LIST="6.0 7.0 7.5 8.0 8.6+PTX"
+
+RUN pip install --no-cache-dir --no-build-isolation \
+    git+https://github.com/pschroedl/segment-anything-2-real-time@main
+

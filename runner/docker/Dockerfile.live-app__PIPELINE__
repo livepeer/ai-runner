@@ -1,4 +1,4 @@
-ARG PIPELINE=comfyui
+ARG PIPELINE=streamdiffusion
 ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
 
