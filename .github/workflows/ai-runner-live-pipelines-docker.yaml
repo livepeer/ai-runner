@@ -137,7 +137,7 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=live-app-${{ matrix.pipeline }}
+            type=raw,value=live-app-${{ matrix.pipeline }},enable={{is_default_branch}}
             type=sha,prefix=live-app-${{ matrix.pipeline }}-
             type=ref,event=pr,prefix=live-app-${{ matrix.pipeline }}-
             type=ref,event=tag,prefix=live-app-${{ matrix.pipeline }}-
@@ -148,7 +148,6 @@ jobs:
         with:
           context: "{{defaultContext}}:runner"
           platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           file: docker/Dockerfile.live-app__PIPELINE__
           build-args: |
@@ -209,7 +208,7 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=live-app-noop
+            type=raw,value=live-app-noop,enable={{is_default_branch}}
             type=sha,prefix=live-app-noop-
             type=ref,event=pr,prefix=live-app-noop-
             type=ref,event=tag,prefix=live-app-noop-
