@@ -125,6 +125,15 @@ class PipelineProcess:
             logging.error(error_msg)
             self._queue_put_fifo(self.error_queue, error_event)
 
+        def _handle_logging_params(params: dict) -> dict:
+            if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
+                logging.info(f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, stream_id={params['stream_id']}")
+                self._reset_logging_fields(
+                    params["request_id"], params["stream_id"]
+                )
+                return {}
+            return params
+
         try:
             params = {}
             try:
@@ -135,6 +144,8 @@ class PipelineProcess:
                 report_error(f"Error getting params: {e}")
 
             try:
+                params = _handle_logging_params(params)
+                logging.info(f"PipelineProcess: Pipeline loading with params: {params}")
                 with log_timing("PipelineProcess: Pipeline loaded successfully"):
                     pipeline = load_pipeline(self.pipeline_name, **params)
             except Exception as e:
@@ -151,12 +162,8 @@ class PipelineProcess:
                     params = self.param_update_queue.get_nowait()
                     try:
                         logging.info(f"PipelineProcess: Processing parameter update from queue: {params}")
-                        if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
-                            logging.info(f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, stream_id={params['stream_id']}")
-                            self._reset_logging_fields(
-                                params["request_id"], params["stream_id"]
-                            )
-                        else:
+                        params = _handle_logging_params(params)
+                        if params:
                             logging.info(f"PipelineProcess: Updating pipeline parameters")
                             pipeline.update_params(**params)
                             logging.info(f"PipelineProcess: Successfully applied params to pipeline: {params}")
