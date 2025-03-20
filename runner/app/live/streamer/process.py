@@ -147,7 +147,10 @@ class PipelineProcess:
                 params = _handle_logging_params(params)
                 logging.info(f"PipelineProcess: Pipeline loading with params: {params}")
                 with log_timing("PipelineProcess: Pipeline loaded successfully"):
-                    pipeline = load_pipeline(self.pipeline_name, **params)
+                    if params:
+                        pipeline = load_pipeline(self.pipeline_name, **params)
+                    else:
+                        raise ValueError("No params provided for pipeline loading")
             except Exception as e:
                 report_error(f"Error loading pipeline: {e}")
                 try:
