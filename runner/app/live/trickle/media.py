@@ -39,18 +39,18 @@ async def subscribe(subscribe_url, out_pipe, monitoring_callback):
                 segment = await subscriber.next()
                 if not segment:
                     break # complete
-                if first_segment:
-                    first_segment = False
-                    await monitoring_callback({
-                        "type": "runner_receive_first_ingest_segment",
-                        "timestamp": int(time.time() * 1000)
-                    }, queue_event_type="stream_trace")
                 while True:
                     chunk = await segment.read()
                     if not chunk:
                         break # end of segment
                     out_pipe.write(chunk)
                     await out_pipe.drain()
+                if first_segment:
+                    first_segment = False
+                    await monitoring_callback({
+                        "type": "runner_receive_first_ingest_segment",
+                        "timestamp": int(time.time() * 1000)
+                    }, queue_event_type="stream_trace")
             except aiohttp.ClientError as e:
                 logging.info(f"Failed to read segment - {e}")
                 break # end of stream?
