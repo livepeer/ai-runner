@@ -53,7 +53,7 @@ async def main(
 
     api = None
     try:
-        with log_timing("ProcessGuardian started successfully"):
+        with log_timing("starting ProcessGuardian"):
             await process.start()
             if streamer:
                 await streamer.start(params)

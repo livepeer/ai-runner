@@ -41,9 +41,10 @@ def config_logging_fields(handler: logging.Handler, request_id: str, stream_id: 
 def log_timing(operation_name: str):
     global logger
     start_time = time.time()
+    status = "failure"
     try:
         yield
+        status = "success"
     finally:
         duration = time.time() - start_time
-        logger.info(f"operation={operation_name} duration_s={duration}s")
-
+        logger.info(f"operation={operation_name} status={status} duration_s={duration}s")
