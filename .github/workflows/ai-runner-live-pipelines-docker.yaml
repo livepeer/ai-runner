@@ -71,8 +71,8 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: livepeer/ai-runner:live-base
           file: docker/Dockerfile.live-base
-          cache-from: type=registry,ref=livepeerci/build:cache
-          cache-to: type=registry,ref=livepeerci/build:cache,mode=max
+          cache-from: type=registry,ref=livepeer/ai-runner:live-base-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-base-dockerbuildcache,mode=max
 
   build-pipeline-images:
     name: Build pipeline images
@@ -128,8 +128,8 @@ jobs:
           file: docker/Dockerfile.live-base-${{ matrix.pipeline }}
           build-args: |
             PIPELINE=${{ matrix.pipeline }}
-          cache-from: type=registry,ref=livepeerci/build:cache
-          cache-to: type=registry,ref=livepeerci/build:cache,mode=max
+          cache-from: type=registry,ref=livepeer/ai-runner:live-base-${{ matrix.pipeline }}-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-base-${{ matrix.pipeline }}-dockerbuildcache,mode=max
 
       - name: Extract metadata for app image
         id: meta
@@ -147,15 +147,17 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
           file: docker/Dockerfile.live-app__PIPELINE__
           build-args: |
             PIPELINE=${{ matrix.pipeline }}
             GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
-          cache-from: type=registry,ref=livepeerci/build:cache
-          cache-to: type=registry,ref=livepeerci/build:cache,mode=max
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-dockerbuildcache,mode=max
 
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
@@ -223,9 +225,11 @@ jobs:
         if: steps.check_build.outputs.should_build == 'true'
         with:
           context: "{{defaultContext}}:runner"
+          file: docker/Dockerfile.live-app-noop
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
-          file: docker/Dockerfile.live-app-noop
-          cache-from: type=registry,ref=livepeerci/build:cache
-          cache-to: type=registry,ref=livepeerci/build:cache,mode=max
+          annotations: ${{ steps.meta.outputs.annotations }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=livepeer/ai-runner:live-app-noop-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-noop-dockerbuildcache,mode=max
