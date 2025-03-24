@@ -98,7 +98,7 @@ if __name__ == "__main__":
         "--http-port", type=int, default=8888, help="Port for the HTTP server"
     )
     parser.add_argument(
-        "--pipeline", type=str, default="streamdiffusion", help="Pipeline to use"
+        "--pipeline", type=str, default="comfyui", help="Pipeline to use"
     )
     parser.add_argument(
         "--initial-params",

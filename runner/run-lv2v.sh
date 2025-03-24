@@ -8,7 +8,7 @@ fi
 
 INPUT_ROOM=$1
 OUTPUT_ROOM=$2
-PIPELINE=${3:-streamdiffusion}
+PIPELINE=${3:-comfyui}
 PORT=${4:-9000}
 
 # Build images, this will be quick if everything is cached
