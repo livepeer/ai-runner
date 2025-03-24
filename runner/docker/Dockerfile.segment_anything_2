@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=livepeer/ai-runner:base
 FROM ${BASE_IMAGE}
 
-RUN pip install --no-cache-dir setuptools>=62.3.0,<75.9 torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 xformers==0.0.27 git+https://github.com/facebookresearch/sam2.git@0f6515ae853c40420ea8e3dd250f8031bbf03023#egg=sam-2
+RUN pip install --no-cache-dir "setuptools>=62.3.0,<75.9" torch==2.3.1 torchvision==0.18.1 torchaudio==2.3.1 xformers==0.0.27 git+https://github.com/facebookresearch/sam2.git@0f6515ae853c40420ea8e3dd250f8031bbf03023#egg=sam-2
 
 # Override base working directory to ensure the correct working directory.
 WORKDIR /app
