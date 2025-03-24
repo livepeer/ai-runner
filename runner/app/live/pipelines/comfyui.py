@@ -305,11 +305,6 @@ class ComfyUI(Pipeline):
         result_image = Image.fromarray(result_image_np.cpu().numpy())
         return VideoOutput(frame.replace_image(result_image))
     
-    def process_frame(self, frame: VideoFrame) -> VideoOutput:
-        #TODO: this is a temporary solution, need to make this async throughout the pipeline
-        self.loop.run_until_complete(self.put_video_frame(frame))
-        return self.loop.run_until_complete(self.get_processed_video_frame())
-    
     def set_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Setting ComfyUI Pipeline Prompt: {new_params.prompt}")
