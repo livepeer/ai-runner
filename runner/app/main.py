@@ -10,7 +10,7 @@ from app.live.log import config_logging
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 
-config_logging()
+config_logging(log_level=logging.DEBUG if os.getenv("VERBOSE_LOGGING")=="1" else logging.INFO)
 logger = logging.getLogger(__name__)
 
 VERSION = Gauge('version', 'Runner version', ['app', 'version'])
