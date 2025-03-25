@@ -136,7 +136,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--input-timeout",
         type=int,
-        default=60,
+        default=10,
         help="Timeout in seconds to wait after input frames stop before shutting down. Set to 0 to disable.",
     )
     parser.add_argument(
