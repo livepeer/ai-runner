@@ -97,7 +97,7 @@ class LiveVideoToVideoPipeline(Pipeline):
                 status="IDLE" if pipe_status.state == "OFFLINE" else "OK"
             )
         except Exception as e:
-            logging.error(f"Failed to get status", exc_info=True)
+            logging.error(f"Failed to get status: {type(e).__name__}: {str(e)}")
             raise ConnectionError(f"Failed to get status: {e}")
 
     def start_process(self, **kwargs):
