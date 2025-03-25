@@ -274,17 +274,15 @@ class ComfyUI(Pipeline):
         
         self.video_incoming_frames = asyncio.Queue()
 
-        self.loop = asyncio.new_event_loop()
-        self.set_params(**params)
-        self.warm_video()
+        asyncio.run(self.set_params(**params))
 
-    def warm_video(self):
+    async def warm_video(self):
         dummy_frame = VideoFrame(None, 0, 0)
         dummy_frame.side_data.processed_input = torch.randn(1, 512, 512, 3)
 
         for _ in range(WARMUP_RUNS):
           self.client.put_video_input(dummy_frame)
-          _ = self.loop.run_until_complete(self.client.get_video_output())
+          _ = await self.client.get_video_output()
         logging.info("Video frame warmup done")
 
     async def put_video_frame(self, frame: VideoFrame):
@@ -305,21 +303,21 @@ class ComfyUI(Pipeline):
         result_image = Image.fromarray(result_image_np.cpu().numpy())
         return VideoOutput(frame.replace_image(result_image))
     
-    def set_params(self, **params):
+    async def set_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Setting ComfyUI Pipeline Prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
-        self.loop.run_until_complete(self.client.set_prompts([new_params.prompt]))
+        await self.client.set_prompts([new_params.prompt])
         self.params = new_params
 
-    def update_params(self, **params):
+    async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
-        self.loop.run_until_complete(self.client.update_prompts([new_params.prompt]))
+        await self.client.update_prompts([new_params.prompt])
         self.params = new_params
 
-    def stop(self):
+    async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
-        self.loop.run_until_complete(self.client.stop())
+        await self.client.stop()
         logging.info("ComfyUI pipeline stopped")

@@ -160,6 +160,7 @@ class PipelineProcess:
             raise
 
     async def _run_pipeline_loops(self, pipeline):
+        await pipeline.warm_video()
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
         param_task = asyncio.create_task(self._param_update_loop(pipeline))
@@ -201,7 +202,7 @@ class PipelineProcess:
                 params = self.param_update_queue.get_nowait()
                 if self._handle_logging_params(params):
                     logging.info(f"PipelineProcess: Updating pipeline parameters: {params}")
-                    pipeline.update_params(**params)
+                    await pipeline.update_params(**params)
             except queue.Empty:
                 await asyncio.sleep(0.1)
             except Exception as e:

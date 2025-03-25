@@ -23,13 +23,17 @@ class Pipeline(ABC):
         pass
 
     @abstractmethod
-    def process_frame(self, frame: VideoFrame) -> VideoOutput:
-        """Process a single frame through the pipeline.
-
-        Called sequentially with each frame from the stream.
+    async def put_video_frame(self, frame: VideoFrame):
+        """Put a frame into the pipeline.
 
         Args:
             frame: Input VideoFrame
+        """
+        pass
+
+    @abstractmethod
+    async def get_processed_video_frame(self) -> VideoOutput:
+        """Get a processed frame from the pipeline.
 
         Returns:
             Processed VideoFrame
@@ -37,7 +41,19 @@ class Pipeline(ABC):
         pass
 
     @abstractmethod
-    def update_params(self, **params):
+    async def set_params(self, **params):
+        """Set pipeline parameters initally.
+
+        Must maintain valid state on success or restore previous state on failure.
+        set_params starts the prompt loops in comfystream.
+
+        Args:
+            **params: Implementation-specific parameters
+        """
+        pass
+
+    @abstractmethod
+    async def update_params(self, **params):
         """Update pipeline parameters.
 
         Must maintain valid state on success or restore previous state on failure.
