@@ -12,7 +12,6 @@ from pipelines import load_pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
 
-#TODO: figure out pro vs con for asyncio.run() vs asyncio.get_event_loop().run_until_complete()
 
 class PipelineProcess:
     @staticmethod
@@ -134,20 +133,22 @@ class PipelineProcess:
             self._reset_logging_fields(
                 params["request_id"], params["stream_id"]
             )
-            return False
-        return True
+            return {}
+        return params
 
     def _initialize_pipeline(self):
         try:
             params = {}
             try:
                 params = self.param_update_queue.get_nowait()
-                if self._handle_logging_params(params):
-                    with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
-                        return load_pipeline(self.pipeline_name, **params)
+                logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
+                params = self._handle_logging_params(params)
             except queue.Empty:
-                with log_timing("PipelineProcess: Pipeline loading with default params"):
-                    return load_pipeline(self.pipeline_name)
+                logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
+            
+            with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
+                return load_pipeline(self.pipeline_name, **params)
+            
         except Exception as e:
             self._report_error(f"Error loading pipeline: {e}")
             raise
@@ -187,7 +188,6 @@ class PipelineProcess:
                 await asyncio.to_thread(self.output_queue.put, output_frame)
             except Exception as e:
                 self._report_error(f"Error processing output frame: {e}")
-                await asyncio.sleep(0.01)
 
     async def _param_update_loop(self, pipeline):
         while not self.is_done():
