@@ -274,7 +274,16 @@ class ComfyUI(Pipeline):
         
         self.video_incoming_frames = asyncio.Queue()
 
-        asyncio.run(self.set_params(**params))
+        # Defer async initialization
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            self._async_init_task = asyncio.create_task(self._async_init(params))
+        else:
+            loop.run_until_complete(self._async_init(params))
+
+    async def _async_init(self, params):
+        """Perform async initialization."""
+        await self.set_params(**params)
 
     async def warm_video(self):
         dummy_frame = VideoFrame(None, 0, 0)
