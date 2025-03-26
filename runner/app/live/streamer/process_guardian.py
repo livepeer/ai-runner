@@ -120,7 +120,7 @@ class ProcessGuardian:
     def _current_state(self) -> str:
         current_time = time.time()
         input = self.status.input_status
-        last_input_time = input.last_input_time or 0
+        last_input_time = input.last_input_time or self.status.start_time
         time_since_last_input = current_time - last_input_time
         if time_since_last_input > 60:
             if time_since_last_input < 90:
