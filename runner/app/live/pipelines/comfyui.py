@@ -265,25 +265,11 @@ class ComfyUIParams(BaseModel):
 
 
 class ComfyUI(Pipeline):
-    def __init__(self, **params):
-        super().__init__(**params)
-
+    def __init__(self):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
-        self.client = ComfyStreamClient(cwd=comfy_ui_workspace, **params)
+        self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
-        
         self.video_incoming_frames = asyncio.Queue()
-
-        # Defer async initialization
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            self._async_init_task = asyncio.create_task(self._async_init(params))
-        else:
-            loop.run_until_complete(self._async_init(params))
-
-    async def _async_init(self, params):
-        """Perform async initialization."""
-        await self.set_params(**params)
 
     async def warm_video(self):
         dummy_frame = VideoFrame(None, 0, 0)
