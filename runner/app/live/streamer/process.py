@@ -125,12 +125,10 @@ class PipelineProcess:
         logging.getLogger("comfy").setLevel(logging.WARNING)
 
         try:
-            pipeline = self._initialize_pipeline()
-            asyncio.run(self._run_pipeline_loops(pipeline))
+            asyncio.run(self._run_pipeline_loops())
         except Exception as e:
             self._report_error(f"Error in process run method: {e}")
-        finally:
-            self._cleanup_pipeline(pipeline)
+    
 
     def _handle_logging_params(self, params: dict) -> dict:
         if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
@@ -142,7 +140,7 @@ class PipelineProcess:
             return {}
         return params
 
-    def _initialize_pipeline(self):
+    async def _initialize_pipeline(self):
         try:
             stream_id = ""
             params = {}
@@ -154,13 +152,23 @@ class PipelineProcess:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
             
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
-                return load_pipeline(self.pipeline_name, **params)
-            
+                pipeline = load_pipeline(self.pipeline_name)
+                await pipeline.set_params(**params)
+                return pipeline
         except Exception as e:
             self._report_error(f"Error loading pipeline: {e}")
-            raise
+            if params:
+                try:
+                    with log_timing(f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"):
+                        pipeline = load_pipeline(self.pipeline_name)
+                        await pipeline.set_params()
+                        return pipeline
+                except Exception as e:
+                    self._report_error(f"Error loading pipeline with default params: {e}")
+                    raise
 
-    async def _run_pipeline_loops(self, pipeline):
+    async def _run_pipeline_loops(self):
+        pipeline = await self._initialize_pipeline()
         await pipeline.warm_video()
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
@@ -170,6 +178,7 @@ class PipelineProcess:
             await asyncio.gather(input_task, output_task, param_task)
         except Exception as e:
             self._report_error(f"Error in pipeline loops: {e}")
+            await self._cleanup_pipeline(pipeline)
             raise
 
     async def _input_loop(self, pipeline):
@@ -216,10 +225,10 @@ class PipelineProcess:
         logging.error(error_msg)
         self._queue_put_fifo(self.error_queue, error_event)
 
-    def _cleanup_pipeline(self, pipeline):
+    async def _cleanup_pipeline(self, pipeline):
         if pipeline is not None:
             try:
-                asyncio.run(pipeline.stop())
+                await pipeline.stop()
             except Exception as e:
                 logging.error(f"Error stopping pipeline: {e}")
 

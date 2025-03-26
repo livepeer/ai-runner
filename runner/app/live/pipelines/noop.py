@@ -7,8 +7,7 @@ from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
 
 class Noop(Pipeline):
-  def __init__(self, **params):
-    super().__init__(**params)
+  def __init__(self):
     self.frame_queue = asyncio.Queue()
 
   async def put_video_frame(self, frame: VideoFrame):
