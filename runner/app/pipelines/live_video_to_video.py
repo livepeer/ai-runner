@@ -9,6 +9,7 @@ import time
 from typing import IO
 from pydantic import BaseModel
 import http.client
+import psutil
 
 from app.pipelines.base import Pipeline, HealthCheck
 from app.pipelines.utils import get_model_dir, get_torch_device
@@ -78,6 +79,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         if not self.process:
             # The infer process is supposed to be always running, so if it's
             # gone it means an ERROR and the worker is allowed to kill us.
+            logging.error("[HEALTHCHECK] Infer process is not running")
             return HealthCheck(status="ERROR")
 
         try:
@@ -98,6 +100,8 @@ class LiveVideoToVideoPipeline(Pipeline):
             )
         except Exception as e:
             logging.error(f"[HEALTHCHECK] Failed to get status: {type(e).__name__}: {str(e)}")
+            # Diagnostics might take a while to collect CPU metrics, so we do it in a background thread
+            threading.Thread(target=self.log_process_diagnostics).start()
             raise ConnectionError(f"Failed to get status: {e}")
 
     def start_process(self, **kwargs):
@@ -136,7 +140,9 @@ class LiveVideoToVideoPipeline(Pipeline):
                 logging.error("No process to monitor")
                 return
 
-            return_code: int
+            if logging.getLogger().isEnabledFor(logging.DEBUG):
+                self.log_process_diagnostics(logging.DEBUG)
+
             try:
                 return_code = self.process.wait(timeout=10)
             except subprocess.TimeoutExpired:
@@ -147,13 +153,8 @@ class LiveVideoToVideoPipeline(Pipeline):
                 time.sleep(5)
                 continue
 
-            logging.info(f"infer.py process exited, cleaning up state... Return code: {return_code}")
-            if return_code != 0:
-                _, stderr = self.process.communicate()
-                logging.error(
-                    f"infer.py process failed with return code {return_code}. Error: {stderr}"
-                )
-
+            logging.info(f"infer.py process exited with return_code={return_code}")
+            self.log_process_diagnostics()
             self.stop_process(is_monitor_thread=True)
             return
 
@@ -182,9 +183,75 @@ class LiveVideoToVideoPipeline(Pipeline):
             self.stderr_log_thread = None
         logging.info("Infer process stopped successfully")
 
+
+    def log_process_diagnostics(self, level: int = logging.INFO):
+        """Collect and log process diagnostics. To be called from a background thread if needed."""
+        try:
+            diagnostics = self.collect_process_diagnostics()
+            logging.log(level, f"infer.py process diagnostics={json.dumps(diagnostics)}")
+        except:
+            logging.exception(f"Error collecting infer.py process diagnostics")
+
+    def collect_process_diagnostics(self):
+        """Collect process diagnostics using different tools and returns a dict with the results"""
+        # Get system info
+        system_info = {}
+        try:
+            system_info = {
+                "memory": psutil.virtual_memory()._asdict(),
+                "cpu": psutil.cpu_percent(interval=0.1, percpu=True),
+                "disk": psutil.disk_usage('/')._asdict()
+            }
+        except:
+            logging.exception("Failed to collect system diagnostics")
+
+        if not self.process:
+            return {"system_info": system_info, "process_info": {"is_running": False}}
+
+        # Get process info
+        pid = self.process.pid
+        process_info = {
+            "pid": pid,
+            "return_code": self.process.poll(),
+        }
+
+        try:
+            if not psutil.pid_exists(pid):
+                logging.error("Process ID doesn't exist in psutil")
+            else:
+                p = psutil.Process(pid)
+                process_info = {
+                    **process_info,
+                    "memory_info": p.memory_info()._asdict(),
+                    "cpu_percent": p.cpu_percent(),
+                    "create_time": p.create_time(),
+                    "status": p.status(),
+                    "is_running": p.is_running()
+                }
+        except:
+            logging.exception("Failed to collect psutil diagnostics")
+
+        # Collect /proc information
+        os_proc_info = {}
+        for proc_file in ["status", "wchan", "io", "stack", "limits", "maps"]:
+            try:
+                path = f"/proc/{pid}/{proc_file}"
+                if os.path.exists(path):
+                    with open(path, "r") as f:
+                        os_proc_info[proc_file] = f.read()
+                else:
+                    os_proc_info[proc_file] = "File does not exist"
+            except:
+                logging.exception(f"Failed to read /proc/{pid}/{proc_file}")
+
+        return {
+            "system_info": system_info,
+            "process_info": process_info,
+            "os_proc_info": os_proc_info,
+        }
+
     def __str__(self) -> str:
         return f"VideoToVideoPipeline model_id={self.model_id}"
-
 
 def log_output(f: IO[str]):
     try:
