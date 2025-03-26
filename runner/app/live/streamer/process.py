@@ -131,30 +131,31 @@ class PipelineProcess:
                 self._reset_logging_fields(
                     params["request_id"], params["stream_id"]
                 )
-                return False
-            return True
+                return {}
+            return params
 
         try:
             params = {}
             try:
                 params = self.param_update_queue.get_nowait()
+                params = _handle_logging_params(params)
             except queue.Empty:
-                pass
+                logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
             except Exception as e:
                 report_error(f"Error getting params: {e}")
 
             try:
-                if _handle_logging_params(params):
-                    with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
-                        pipeline = load_pipeline(self.pipeline_name, **params)
+                with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
+                    pipeline = load_pipeline(self.pipeline_name, **params)
             except Exception as e:
                 report_error(f"Error loading pipeline: {e}")
-                try:
-                    with log_timing("PipelineProcess: Pipeline loading with default params"):
-                        pipeline = load_pipeline(self.pipeline_name)
-                except Exception as e:
-                    report_error(f"Error loading pipeline with default params: {e}")
-                    raise
+                if params:
+                    try:
+                        with log_timing(f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"):
+                            pipeline = load_pipeline(self.pipeline_name)
+                    except Exception as e:
+                        report_error(f"Error loading pipeline with default params: {e}")
+                        raise
 
             while not self.is_done():
                 while not self.param_update_queue.empty():
