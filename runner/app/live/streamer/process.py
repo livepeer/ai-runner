@@ -191,7 +191,6 @@ class PipelineProcess:
                 elif isinstance(input_frame, AudioFrame):
                     self.output_queue.put(AudioOutput([input_frame]))
             except queue.Empty:
-                logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
                 continue
             except Exception as e:
                 self._report_error(f"Error processing input frame: {e}")
