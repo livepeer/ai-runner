@@ -1,5 +1,3 @@
-accelerate==0.30.1
-transformers==4.43.3
 fastapi==0.111.0
 pydantic>=2.7.2
 Pillow==10.3.0

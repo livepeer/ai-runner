@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=livepeer/comfyui-base:v0.0.4-runner
+ARG BASE_IMAGE=livepeer/comfyui-base:feat-runner-integration
 FROM ${BASE_IMAGE}
 
 # -----------------------------------------------------------------------------

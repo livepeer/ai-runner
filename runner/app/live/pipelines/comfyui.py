@@ -273,7 +273,7 @@ class ComfyUI(Pipeline):
 
     async def warm_video(self):
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.processed_input = torch.randn(1, 512, 512, 3)
+        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
 
         for _ in range(WARMUP_RUNS):
           self.client.put_video_input(dummy_frame)
@@ -282,7 +282,7 @@ class ComfyUI(Pipeline):
 
     async def put_video_frame(self, frame: VideoFrame):
         image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
-        frame.side_data.processed_input = torch.tensor(image_np).unsqueeze(0)
+        frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
         frame.side_data.skipped = True
         self.client.put_video_input(frame)
         await self.video_incoming_frames.put(frame)
