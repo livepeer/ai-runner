@@ -51,7 +51,7 @@ class ImageToVideoPipeline(Pipeline):
             logger.info("Adjusting to LTXImageToVideoPipeline for model_id: %s", model_id)
             self.ldm = LTXImageToVideoPipeline.from_pipe(self.ldm)
             self.ldm.enable_model_cpu_offload()
-            self.ldm.vae.enable_tiling()
+            self.ldm.vae.enable_slicing()
             LOW_VRAM = os.getenv("USE_LOW_VRAM", "false")
             if LOW_VRAM == "true":
                 self.ldm.enable_sequential_cpu_offload()
