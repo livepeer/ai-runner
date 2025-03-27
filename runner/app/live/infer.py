@@ -26,11 +26,7 @@ def asyncio_exception_handler(loop, context):
     Handles unhandled exceptions in asyncio tasks, logging the error and terminating the application.
     """
     exception = context.get('exception')
-    logging.error(f"Caught unhandled exception in asyncio task: {exception}")
-    if exception:
-        logging.error(f"Traceback:\n{''.join(traceback.format_tb(exception.__traceback__))}")
-
-    logging.error("Terminating due to unhandled exception in asyncio task")
+    logging.error(f"Terminating process due to unhandled exception in asyncio task", exc_info=exception)
     os._exit(1)
 
 
@@ -39,12 +35,8 @@ def thread_exception_hook(original_hook):
     Creates a custom exception hook for threads that logs the error and terminates the application.
     """
     def custom_hook(args):
-        logging.error(f"Caught unhandled exception in thread {args.thread}: {args.exc_value}")
-        logging.error(f"Traceback:\n{''.join(traceback.format_tb(args.exc_traceback))}")
-
-        original_hook(args)
-
-        logging.error("Terminating due to unhandled exception in thread")
+        logging.error("Terminating process due to unhandled exception in thread", exc_info=args.exc_value)
+        original_hook(args) # this is most likely a noop
         os._exit(1)
     return custom_hook
 
