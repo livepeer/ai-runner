@@ -712,13 +712,14 @@ components:
         prompt:
           type: string
           title: Prompt
-          description: Text prompt(s) to guide video generation for prompt accepting models.
+          description: Text prompt(s) to guide video generation for prompt accepting
+            models.
           default: ''
         negative_prompt:
           type: string
           title: Negative Prompt
-          description: Text prompt(s) to guide what to exclude from video generation for prompt accepting models.
-            Ignored if guidance_scale < 1.
+          description: Text prompt(s) to guide what to exclude from video generation
+            for prompt accepting models. Ignored if guidance_scale < 1.
           default: ''
         model_id:
           type: string
