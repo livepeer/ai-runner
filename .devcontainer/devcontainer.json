@@ -4,6 +4,9 @@
     "name": "ai-runner",
     "initializeCommand": "ls",
     // Image to use for the dev container. More info: https://containers.dev/guide/dockerfile.
+    "containerEnv": {
+        "PIPELINE": "comfyui"
+    },
     "build": {
         "dockerfile": "../runner/docker/Dockerfile.live-app__PIPELINE__",
         "args": {
@@ -20,13 +23,13 @@
     // Configure tool-specific properties.
     "customizations": {
         "vscode": {
-			"settings": {
-				"python.defaultInterpreterPath": "/workspace/miniconda3/envs/comfystream/bin/python",
-				"python.venvPath": "/workspace/miniconda3/envs",
-				"python.terminal.activateEnvInCurrentTerminal": false,
-				"python.terminal.activateEnvironment": true,
-				"terminal.integrated.shellIntegration.enabled": true
-			},
+            "settings": {
+                "python.defaultInterpreterPath": "/workspace/miniconda3/envs/comfystream/bin/python",
+                "python.venvPath": "/workspace/miniconda3/envs",
+                "python.terminal.activateEnvInCurrentTerminal": false,
+                "python.terminal.activateEnvironment": true,
+                "terminal.integrated.shellIntegration.enabled": true
+            },
             "extensions": [
                 "ms-python.python",
                 "ms-python.black-formatter"

@@ -1,9 +1,8 @@
 ARG PIPELINE=comfyui
 ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
-#TODO: Set environment variable from build argument
-# ENV PIPELINE=${PIPELINE}
-ENV PIPELINE=comfyui
+ARG PIPELINE
+ENV PIPELINE=${PIPELINE}
 
 # Install latest stable Go version and system dependencies
 RUN apt-get update && apt-get install -y \
@@ -14,9 +13,12 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install any additional Python packages
-#TODO: Update the other files to use this method to find requirements.txt files, renaming the existing ones to requirements.pipeline.txt
-
 COPY requirements.live.${PIPELINE}.txt /app/requirements.txt
+
+# Install requirements in normal env
+RUN pip install --no-cache-dir -r /app/requirements.txt;
+
+# Also install in conda env if needed
 RUN if [ "$PIPELINE" = "comfyui" ]; then \
     conda run -n comfystream pip install --no-cache-dir -r /app/requirements.txt; \
 else \
