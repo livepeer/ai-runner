@@ -8,8 +8,7 @@ class SideData:
         Base class for side data, needed to keep it consistent with av frame side_data
     """
     skipped: bool = True
-    # TODO: update input to be processed_input in comfystream
-    processed_input: Union[Image.Image, np.ndarray] = None
+    input: Union[Image.Image, np.ndarray] = None
 
 class InputFrame:
     """
