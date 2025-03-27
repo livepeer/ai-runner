@@ -233,7 +233,7 @@ class LiveVideoToVideoPipeline(Pipeline):
 
         # Collect /proc information
         os_proc_info = {}
-        for proc_file in ["status", "wchan", "io", "stack", "limits", "maps"]:
+        for proc_file in ["status", "wchan", "io"]:
             try:
                 path = f"/proc/{pid}/{proc_file}"
                 if os.path.exists(path):
