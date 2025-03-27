@@ -13,17 +13,17 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install any additional Python packages
-COPY requirements.live.${PIPELINE}.txt /app/requirements.txt
+COPY requirements.live-ai.txt /app/requirements.txt
+COPY requirements.live.comfyui.txt /app/requirements.comfyui.txt
 
 # Install requirements in normal env
 RUN pip install --no-cache-dir -r /app/requirements.txt;
 
 # Also install in conda env if needed
 RUN if [ "$PIPELINE" = "comfyui" ]; then \
-    conda run -n comfystream pip install --no-cache-dir -r /app/requirements.txt; \
-else \
-    pip install --no-cache-dir -r /app/requirements.txt; \
+    conda run -n comfystream pip install -r /app/requirements.comfyui.txt; \
 fi
+
 # TODO: Figure out a way to have this in requirements file
 RUN pip install --no-cache-dir triton==3.1.0
 RUN pip uninstall -y onnx onnxruntime onnxruntime-gpu
@@ -45,4 +45,10 @@ WORKDIR /app
 ARG GIT_SHA
 ENV GIT_SHA=$GIT_SHA
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+#TODO if this dockerfile will support other pipelines, we need to not always activate comfystream
+RUN echo "source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> /conda_activate.sh && \
+    chmod +x /conda_activate.sh
+ENV BASH_ENV=/conda_activate.sh
+SHELL ["/bin/bash", "-c"]
+
+CMD ["bash", "-c", "uvicorn app.main:app --log-config app/cfg/uvicorn_logging_config.json --host '' --port 8000"]
