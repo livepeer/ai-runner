@@ -419,27 +419,12 @@ paths:
       description: Apply transformations to a live video streamed to the returned
         endpoints.
       operationId: genLiveVideoToVideo
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: requestID
-        in: header
-        required: false
-        schema:
-          type: string
-          title: Requestid
-      - name: streamID
-        in: header
-        required: false
-        schema:
-          type: string
-          title: Streamid
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/LiveVideoToVideoParams'
+        required: true
       responses:
         '200':
           description: Successful Response
@@ -449,29 +434,31 @@ paths:
                 $ref: '#/components/schemas/LiveVideoToVideoResponse'
                 x-speakeasy-name-override: data
         '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPError'
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
         '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPError'
           description: Unauthorized
-        '500':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPError'
+        '500':
           description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
       x-speakeasy-name-override: liveVideoToVideo
   /text-to-speech:
     post:
