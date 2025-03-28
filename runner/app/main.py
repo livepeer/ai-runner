@@ -36,7 +36,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("HELLO shutdown")
     logger.info("Shutting down")
 
 
