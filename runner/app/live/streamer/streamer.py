@@ -99,6 +99,7 @@ class PipelineStreamer:
         self.main_tasks = []
         self.auxiliary_tasks = []
         self.tasks_supervisor_task = None
+        self.process.stop_stream()
 
     async def wait(self):
         if not self.tasks_supervisor_task:
