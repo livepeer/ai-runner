@@ -24,9 +24,7 @@ class ProcessGuardian:
 
         self.process = None
         self.monitor_task = None
-        self.status = PipelineStatus(
-            pipeline=pipeline, start_time=time.time()
-        ).update_params(params, False)
+        self.status = PipelineStatus(pipeline=pipeline, start_time=0).update_params(params, False)
 
     async def start(self):
         # Start the pipeline process and initialize timing
@@ -66,10 +64,12 @@ class ProcessGuardian:
         if not self.process:
             raise RuntimeError("Process not running")
         iss = self.status.input_status
-        previous_input_time = max(iss.last_input_time or 0, self.process.start_time)
-        (iss.last_input_time, iss.fps) = calculate_rolling_fps(
-            iss.fps, previous_input_time
-        )
+        if not iss.last_input_time:
+            iss.last_input_time = time.time()
+            # can't calculate fps from the first frame
+        else:
+            previous_input_time = max(iss.last_input_time, self.status.start_time)
+            (iss.last_input_time, iss.fps) = calculate_rolling_fps(iss.fps, previous_input_time)
 
         self.process.send_input(frame)
 
@@ -79,10 +79,13 @@ class ProcessGuardian:
         output = await self.process.recv_output()
 
         oss = self.status.inference_status
-        previous_output_time = max(oss.last_output_time or 0, self.process.start_time)
-        (oss.last_output_time, oss.fps) = calculate_rolling_fps(
-            oss.fps, previous_output_time
-        )
+        if not oss.last_output_time:
+            oss.last_output_time = time.time()
+            # can't calculate fps from the first frame
+        else:
+            previous_output_time = max(oss.last_output_time, self.status.start_time)
+            (oss.last_output_time, oss.fps) = calculate_rolling_fps(oss.fps, previous_output_time)
+
         return output
 
     async def update_params(self, params: dict):
@@ -137,9 +140,7 @@ class ProcessGuardian:
             return PipelineState.DEGRADED_INPUT
 
         inference = self.status.inference_status
-        pipeline_load_time = max(
-            self.status.start_time, inference.last_params_update_time or 0
-        )
+        pipeline_load_time = max(self.status.start_time, inference.last_params_update_time or 0)
         if inference.last_output_time and current_time - pipeline_load_time < 30:
             # 30s grace period for the pipeline to start
             return PipelineState.ONLINE
@@ -216,7 +217,7 @@ class ProcessGuardian:
                         }
                     )
 
-                start_time = self.process.start_time
+                start_time = max(self.process.start_time, self.status.start_time)
                 current_time = time.time()
                 last_input_time = max(
                     self.status.input_status.last_input_time or 0, start_time
