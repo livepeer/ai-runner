@@ -88,35 +88,37 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
     # encode_av has a tendency to crash, so restart as necessary
     retryCount = 0
     last_retry_time = time.time()
-    while retryCount < MAX_ENCODER_RETRIES:
-        try:
-            encode_av(image_generator, sync_callback, get_metadata, **kwargs)
-            break  # clean exit
-        except Exception as exc:
-            current_time = time.time()
-            # Reset retry counter if enough time has elapsed
-            if current_time - last_retry_time > ENCODER_RETRY_RESET_SECONDS:
-                logging.info("Resetting encoder retry count")
-                retryCount = 0
-            retryCount += 1
-            last_retry_time = current_time
-            if retryCount < MAX_ENCODER_RETRIES:
-                logging.exception(f"Error in encode_av, retrying {retryCount}/{MAX_ENCODER_RETRIES}", stack_info=True)
-            else:
-                logging.exception("Error in encode_av, maximum retries reached", stack_info=True)
-            # close leftover writer ends of any pipes to prevent hanging
-            pipe_count = 0
-            total_pipes = 0
-            with task_lock:
-                pipes = list(task_pipes)
-                total_pipes = len(pipes)
-                for p in pipes:
-                    try:
-                        p.close()
-                        pipe_count += 1
-                    except Exception as e:
-                        logging.exception("Error closing pipe on task list", stack_info=True)
-            logging.info(f"Closed pipes - {pipe_count}/{total_pipes}")
+    # while retryCount < MAX_ENCODER_RETRIES:
+    try:
+        # raise Exception("AHH NO")
+        encode_av(image_generator, sync_callback, get_metadata, **kwargs)
+        # break  # clean exit
+    except Exception as exc:
+        current_time = time.time()
+        # Reset retry counter if enough time has elapsed
+        if current_time - last_retry_time > ENCODER_RETRY_RESET_SECONDS:
+            logging.info("Resetting encoder retry count")
+            retryCount = 0
+        retryCount += 1
+        last_retry_time = current_time
+        # if retryCount < MAX_ENCODER_RETRIES:
+        #     logging.exception(f"Error in encode_av, retrying {retryCount}/{MAX_ENCODER_RETRIES}", stack_info=True)
+        # else:
+        #     logging.exception("Error in encode_av, maximum retries reached", stack_info=True)
+        logging.exception("Error in encode_av", stack_info=True)
+        # close leftover writer ends of any pipes to prevent hanging
+        pipe_count = 0
+        total_pipes = 0
+        with task_lock:
+            pipes = list(task_pipes)
+            total_pipes = len(pipes)
+            for p in pipes:
+                try:
+                    p.close()
+                    pipe_count += 1
+                except Exception as e:
+                    logging.exception("Error closing pipe on task list", stack_info=True)
+        logging.info(f"Closed pipes - {pipe_count}/{total_pipes}")
 
 async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback):
     first_segment = True

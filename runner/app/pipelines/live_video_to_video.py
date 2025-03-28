@@ -20,6 +20,7 @@ proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntar
 class LiveVideoToVideoPipeline(Pipeline):
     def __init__(self, model_id: str):
         self.model_id = model_id
+        self.checkCount = 0
         self.model_dir = get_model_dir()
         self.torch_device = get_torch_device()
         self.infer_script_path = (
@@ -78,6 +79,12 @@ class LiveVideoToVideoPipeline(Pipeline):
         raise InferenceError(original_exception=thrown_ex)
 
     def get_health(self) -> HealthCheck:
+        # if self.checkCount > 15:
+        #     logging.info("OH  NO shutting down")
+        #     self.stop_process()
+        #     raise ConnectionError(f"TEST A HEALTHCHECK ERROR")
+
+        # self.checkCount += 1
         if not self.process:
             # The infer process is supposed to be always running, so if it's
             # gone it means an ERROR and the worker is allowed to kill us.
