@@ -1,5 +1,5 @@
 ARG PIPELINE=comfyui
-ARG BASE_IMAGE=livepeer/ai-runner:live-base-comfyui-runner
+ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
 ARG PIPELINE
 ENV PIPELINE=${PIPELINE}
