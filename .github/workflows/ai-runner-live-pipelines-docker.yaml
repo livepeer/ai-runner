@@ -39,7 +39,7 @@ jobs:
         uses: tj-actions/changed-files@v45
         with:
           files: |
-            runner/docker/Dockerfile.live-base
+            runner/docker/Dockerfile.live-base*
 
       - name: Check if build needed
         id: check_build
