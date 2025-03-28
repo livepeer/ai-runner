@@ -149,13 +149,16 @@ class PipelineProcess:
                     pipeline = load_pipeline(self.pipeline_name, **params)
             except Exception as e:
                 report_error(f"Error loading pipeline: {e}")
-                if params:
-                    try:
-                        with log_timing(f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"):
-                            pipeline = load_pipeline(self.pipeline_name)
-                    except Exception as e:
-                        report_error(f"Error loading pipeline with default params: {e}")
-                        raise
+                if not params:
+                    report_error(f"Pipeline failed to load with default params")
+                    raise
+
+                try:
+                    with log_timing(f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"):
+                        pipeline = load_pipeline(self.pipeline_name)
+                except Exception as e:
+                    report_error(f"Error loading pipeline with default params: {e}")
+                    raise
 
             while not self.is_done():
                 while not self.param_update_queue.empty():
