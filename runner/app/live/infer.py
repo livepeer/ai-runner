@@ -6,8 +6,8 @@ import signal
 import sys
 import os
 import traceback
+import threading
 from typing import List
-import logging
 
 from streamer import PipelineStreamer, ProcessGuardian
 
@@ -19,6 +19,26 @@ from api import start_http_server
 from log import config_logging, log_timing
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.protocol.zeromq import ZeroMQProtocol
+
+
+def asyncio_exception_handler(loop, context):
+    """
+    Handles unhandled exceptions in asyncio tasks, logging the error and terminating the application.
+    """
+    exception = context.get('exception')
+    logging.error(f"Terminating process due to unhandled exception in asyncio task", exc_info=exception)
+    os._exit(1)
+
+
+def thread_exception_hook(original_hook):
+    """
+    Creates a custom exception hook for threads that logs the error and terminates the application.
+    """
+    def custom_hook(args):
+        logging.error("Terminating process due to unhandled exception in thread", exc_info=args.exc_value)
+        original_hook(args) # this is most likely a noop
+        os._exit(1)
+    return custom_hook
 
 
 async def main(
@@ -35,6 +55,9 @@ async def main(
     request_id: str,
     stream_id: str,
 ):
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(asyncio_exception_handler)
+
     process = ProcessGuardian(pipeline, params or {})
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
@@ -93,6 +116,8 @@ async def block_until_signal(sigs: List[signal.Signals]):
 
 
 if __name__ == "__main__":
+    threading.excepthook = thread_exception_hook(threading.excepthook)
+
     parser = argparse.ArgumentParser(description="Infer process to run the AI pipeline")
     parser.add_argument(
         "--http-port", type=int, default=8888, help="Port for the HTTP server"

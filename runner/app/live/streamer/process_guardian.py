@@ -125,7 +125,7 @@ class ProcessGuardian:
     def _current_state(self) -> str:
         current_time = time.time()
         input = self.status.input_status
-        last_input_time = input.last_input_time or 0
+        last_input_time = input.last_input_time or self.status.start_time
         time_since_last_input = current_time - last_input_time
         # Stream is done and 10s grace period reached
         if not self.stream_alive and time_since_last_input > 10:

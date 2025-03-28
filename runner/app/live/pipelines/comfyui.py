@@ -16,16 +16,19 @@ COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
 DEFAULT_WORKFLOW_JSON = json.loads("""
 {
   "1": {
+    "_meta": {
+      "title": "Load Image"
+    },
     "inputs": {
       "image": "example.png",
       "upload": "image"
     },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "Load Image"
-    }
+    "class_type": "LoadImage"
   },
   "2": {
+    "_meta": {
+      "title": "Depth Anything Tensorrt"
+    },
     "inputs": {
       "engine": "depth_anything_vitl14-fp16.engine",
       "images": [
@@ -33,203 +36,200 @@ DEFAULT_WORKFLOW_JSON = json.loads("""
         0
       ]
     },
-    "class_type": "DepthAnythingTensorrt",
-    "_meta": {
-      "title": "Depth Anything Tensorrt"
-    }
+    "class_type": "DepthAnythingTensorrt"
   },
   "3": {
+    "_meta": {
+      "title": "TensorRT Loader"
+    },
     "inputs": {
       "unet_name": "static-dreamshaper8_SD15_$stat-b-1-h-512-w-512_00001_.engine",
       "model_type": "SD15"
     },
-    "class_type": "TensorRTLoader",
-    "_meta": {
-      "title": "TensorRT Loader"
-    }
+    "class_type": "TensorRTLoader"
   },
   "5": {
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    },
     "inputs": {
-      "text": "the hulk",
       "clip": [
         "23",
         0
-      ]
+      ],
+      "text": "the hulk"
     },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Prompt)"
-    }
+    "class_type": "CLIPTextEncode"
   },
   "6": {
+    "_meta": {
+      "title": "CLIP Text Encode (Prompt)"
+    },
     "inputs": {
-      "text": "",
       "clip": [
         "23",
         0
-      ]
+      ],
+      "text": ""
     },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Prompt)"
-    }
+    "class_type": "CLIPTextEncode"
   },
   "7": {
+    "_meta": {
+      "title": "KSampler"
+    },
     "inputs": {
-      "seed": 905056445574169,
-      "steps": 1,
       "cfg": 1,
-      "sampler_name": "lcm",
-      "scheduler": "normal",
-      "denoise": 1,
+      "seed": 905056445574169,
       "model": [
         "3",
         0
       ],
-      "positive": [
-        "9",
-        0
-      ],
+      "steps": 1,
+      "denoise": 1,
       "negative": [
         "9",
         1
       ],
+      "positive": [
+        "9",
+        0
+      ],
+      "scheduler": "normal",
       "latent_image": [
         "16",
         0
-      ]
+      ],
+      "sampler_name": "lcm"
     },
-    "class_type": "KSampler",
-    "_meta": {
-      "title": "KSampler"
-    }
+    "class_type": "KSampler"
   },
   "8": {
+    "_meta": {
+      "title": "Load ControlNet Model"
+    },
     "inputs": {
       "control_net_name": "control_v11f1p_sd15_depth_fp16.safetensors"
     },
-    "class_type": "ControlNetLoader",
-    "_meta": {
-      "title": "Load ControlNet Model"
-    }
+    "class_type": "ControlNetLoader"
   },
   "9": {
+    "_meta": {
+      "title": "Apply ControlNet"
+    },
     "inputs": {
-      "strength": 1,
-      "start_percent": 0,
-      "end_percent": 1,
-      "positive": [
-        "5",
+      "image": [
+        "2",
         0
       ],
       "negative": [
         "6",
         0
       ],
+      "positive": [
+        "5",
+        0
+      ],
+      "strength": 1,
       "control_net": [
         "10",
         0
       ],
-      "image": [
-        "2",
-        0
-      ]
+      "end_percent": 1,
+      "start_percent": 0
     },
-    "class_type": "ControlNetApplyAdvanced",
-    "_meta": {
-      "title": "Apply ControlNet"
-    }
+    "class_type": "ControlNetApplyAdvanced"
   },
   "10": {
+    "_meta": {
+      "title": "TorchCompileLoadControlNet"
+    },
     "inputs": {
+      "mode": "reduce-overhead",
       "backend": "inductor",
       "fullgraph": false,
-      "mode": "reduce-overhead",
       "controlnet": [
         "8",
         0
       ]
     },
-    "class_type": "TorchCompileLoadControlNet",
-    "_meta": {
-      "title": "TorchCompileLoadControlNet"
-    }
+    "class_type": "TorchCompileLoadControlNet"
   },
   "11": {
+    "_meta": {
+      "title": "Load VAE"
+    },
     "inputs": {
       "vae_name": "taesd"
     },
-    "class_type": "VAELoader",
-    "_meta": {
-      "title": "Load VAE"
-    }
+    "class_type": "VAELoader"
   },
   "13": {
+    "_meta": {
+      "title": "TorchCompileLoadVAE"
+    },
     "inputs": {
-      "backend": "inductor",
-      "fullgraph": true,
-      "mode": "reduce-overhead",
-      "compile_encoder": true,
-      "compile_decoder": true,
       "vae": [
         "11",
         0
-      ]
+      ],
+      "mode": "reduce-overhead",
+      "backend": "inductor",
+      "fullgraph": true,
+      "compile_decoder": true,
+      "compile_encoder": true
     },
-    "class_type": "TorchCompileLoadVAE",
-    "_meta": {
-      "title": "TorchCompileLoadVAE"
-    }
+    "class_type": "TorchCompileLoadVAE"
   },
   "14": {
+    "_meta": {
+      "title": "VAE Decode"
+    },
     "inputs": {
-      "samples": [
-        "7",
-        0
-      ],
       "vae": [
         "13",
         0
+      ],
+      "samples": [
+        "7",
+        0
       ]
     },
-    "class_type": "VAEDecode",
-    "_meta": {
-      "title": "VAE Decode"
-    }
+    "class_type": "VAEDecode"
   },
   "15": {
+    "_meta": {
+      "title": "Preview Image"
+    },
     "inputs": {
       "images": [
         "14",
         0
       ]
     },
-    "class_type": "PreviewImage",
-    "_meta": {
-      "title": "Preview Image"
-    }
+    "class_type": "PreviewImage"
   },
   "16": {
+    "_meta": {
+      "title": "Empty Latent Image"
+    },
     "inputs": {
       "width": 512,
       "height": 512,
       "batch_size": 1
     },
-    "class_type": "EmptyLatentImage",
-    "_meta": {
-      "title": "Empty Latent Image"
-    }
+    "class_type": "EmptyLatentImage"
   },
   "23": {
-    "inputs": {
-      "clip_name": "CLIPText/model.fp16.safetensors",
-      "type": "stable_diffusion",
-      "device": "default"
-    },
-    "class_type": "CLIPLoader",
     "_meta": {
       "title": "Load CLIP"
-    }
+    },
+    "inputs": {
+      "type": "stable_diffusion",
+      "device": "default",
+      "clip_name": "CLIPText/model.fp16.safetensors"
+    },
+    "class_type": "CLIPLoader"
   }
 }
 """)
