@@ -113,7 +113,7 @@ class PipelineProcess:
 
         # ComfystreamClient/embeddedComfyClient is not respecting config parameters
         # such as verbose='WARNING', logging_level='WARNING'
-        # Setting here to override and supress excessive INFO logging 
+        # Setting here to override and supress excessive INFO logging
         # ( load_gpu_models is calling logging.info() for every frame )
         logging.getLogger("comfy").setLevel(logging.WARNING)
 
@@ -125,7 +125,7 @@ class PipelineProcess:
             logging.error(error_msg)
             self._queue_put_fifo(self.error_queue, error_event)
 
-        def _handle_logging_params(params: dict) -> bool:
+        def _handle_logging_params(params: dict) -> dict:
             if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
                 logging.info(f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, stream_id={params['stream_id']}")
                 self._reset_logging_fields(
@@ -149,13 +149,16 @@ class PipelineProcess:
                     pipeline = load_pipeline(self.pipeline_name, **params)
             except Exception as e:
                 report_error(f"Error loading pipeline: {e}")
-                if params:
-                    try:
-                        with log_timing(f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"):
-                            pipeline = load_pipeline(self.pipeline_name)
-                    except Exception as e:
-                        report_error(f"Error loading pipeline with default params: {e}")
-                        raise
+                if not params:
+                    report_error(f"Pipeline failed to load with default params")
+                    raise
+
+                try:
+                    with log_timing(f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"):
+                        pipeline = load_pipeline(self.pipeline_name)
+                except Exception as e:
+                    report_error(f"Error loading pipeline with default params: {e}")
+                    raise
 
             while not self.is_done():
                 while not self.param_update_queue.empty():
