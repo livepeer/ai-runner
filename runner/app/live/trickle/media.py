@@ -11,7 +11,7 @@ from .trickle_publisher import TricklePublisher
 from .decoder import decode_av
 from .encoder import encode_av
 
-MAX_ENCODER_RETRIES = 3
+MAX_ENCODER_RETRIES = 1
 ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 
 async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback):
