@@ -72,7 +72,7 @@ class TrickleSubscriber:
         async with self.lock:
 
             if self.errored:
-                logging.info("Trickle subscription closed or errored for {url}")
+                logging.info(f"Trickle subscription closed or errored for {self.base_url}")
                 return None
 
             # If we don't have a pending GET request, preconnect
@@ -105,7 +105,6 @@ class TrickleSubscriber:
 
     async def _preconnect_next_segment(self):
         """Preconnect to the next segment in the background."""
-        logging.info(f"Trickle sub setting up next connection for index {self.idx}")
         async with self.lock:
             if self.pending_get is not None:
                 return
@@ -159,5 +158,5 @@ class Segment:
         if self.response is None:
             return
         if not self.response.closed:
-            await self.response.release()
-            await self.response.close()
+            self.response.release()
+            self.response.close()
