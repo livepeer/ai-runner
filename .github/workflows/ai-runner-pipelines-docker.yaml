@@ -69,7 +69,7 @@ jobs:
           images: |
             livepeer/ai-runner
           tags: |
-            type=raw,value=${{ steps.docker-tag.outputs.suffix }}
+            type=raw,value=${{ steps.docker-tag.outputs.suffix }},enable={{is_default_branch}}
             type=sha,prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=ref,event=pr,prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=ref,event=tag,prefix=${{ steps.docker-tag.outputs.suffix }}-
