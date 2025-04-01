@@ -24,11 +24,6 @@ RUN if [ "$PIPELINE" = "comfyui" ]; then \
     conda run -n comfystream pip install -r /app/requirements.comfyui.txt; \
 fi
 
-# TODO: Figure out a way to have this in requirements file
-RUN pip install --no-cache-dir triton==3.1.0
-RUN pip uninstall -y onnx onnxruntime onnxruntime-gpu
-RUN pip install onnx==1.17.0 onnxruntime-gpu==1.17.0
-
 # Set environment variables
 ENV MAX_WORKERS=1
 ENV HUGGINGFACE_HUB_CACHE=/models
@@ -45,9 +40,5 @@ WORKDIR /app
 ARG GIT_SHA
 ENV GIT_SHA=$GIT_SHA
 
-#TODO if this dockerfile will support other pipelines, we need to not always activate comfystream
-RUN echo "source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> /conda_activate.sh && \
-    chmod +x /conda_activate.sh
-ENV BASH_ENV=/conda_activate.sh
-
-CMD ["bash", "-c", "uvicorn app.main:app --log-config app/cfg/uvicorn_logging_config.json --host '' --port 8000"]
+RUN echo "source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> ~/.bashrc
+CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

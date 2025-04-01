@@ -76,4 +76,6 @@ ENV COMFY_UI_WORKSPACE="/workspace/ComfyUI"
 RUN mkdir -p /workspace/ComfyUI
 RUN rm -rf /workspace/ComfyUI/models && ln -s /models/ComfyUI--models /workspace/ComfyUI/models
 RUN rm -rf /workspace/ComfyUI/output && ln -s /models/ComfyUI--output /workspace/ComfyUI/output
+
+ENV BASH_ENV=/conda_activate.sh
 ENTRYPOINT ["bash", "-c", "exec /opt/nvidia/nvidia_entrypoint.sh \"$@\"", "--"]
