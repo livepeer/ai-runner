@@ -17,6 +17,7 @@ CONTAINER_NAME=live-video-to-video-${PIPELINE}
 docker run -it --rm --name ${CONTAINER_NAME} \
   -e PIPELINE=live-video-to-video \
   -e MODEL_ID=${PIPELINE} \
+  --gpus all \
   -p ${PORT}:8000 \
   -v ./models:/models \
   livepeer/ai-runner:live-app-${PIPELINE} 2>&1 | tee ./run-lv2v.log &
