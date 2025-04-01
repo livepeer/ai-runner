@@ -95,7 +95,7 @@ function download_live_models() {
   # ComfyUI models
   if ! docker image inspect $AI_RUNNER_COMFYUI_IMAGE >/dev/null 2>&1; then
     echo "ERROR: ComfyUI base image $AI_RUNNER_COMFYUI_IMAGE not found"
-    return 1
+    exit 1
   fi
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
@@ -106,7 +106,7 @@ function download_live_models() {
                  chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI setup_models.py"
-      return 1
+      exit 1
     )
 }
 
@@ -128,7 +128,7 @@ function build_tensorrt_models() {
                 chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI Depth-Anything-Tensorrt"
-      return 1
+      exit 1
     )
 
   # Dreamshaper-8-Dmd-1kstep
@@ -143,7 +143,7 @@ function build_tensorrt_models() {
                  chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI build_trt.py"
-      return 1
+      exit 1
     )
 }
 
