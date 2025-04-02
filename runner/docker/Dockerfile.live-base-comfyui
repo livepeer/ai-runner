@@ -10,11 +10,10 @@ ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
 
 # Install prerequisites
-RUN apt-get update && \
-    apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
+RUN apt-get update && apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
     libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
-    xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git runit libzmq3-dev && \
-    rm -rf /var/lib/apt/lists/*
+    xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git runit libzmq3-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Keep python installation from base image
 
@@ -22,8 +21,8 @@ RUN apt-get update && \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf automake build-essential cmake git-core libtool pkg-config wget \
-    nasm yasm zlib1g-dev libpng-dev libx264-dev libopus-dev libfdk-aac-dev && \
-    rm -rf /var/lib/apt/lists/*
+    nasm yasm zlib1g-dev libpng-dev libx264-dev libopus-dev libfdk-aac-dev \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up environment variables
 ENV NV_CODEC_HEADERS=/usr/local/cuda/include/ffnvcodec/
@@ -34,10 +33,9 @@ RUN git clone -b n12.2.72.0 --depth 1 https://git.videolan.org/git/ffmpeg/nv-cod
     cd .. && rm -rf nv-codec-headers
 
 # Clone the FFmpeg repository and checkout the latest release
-RUN git clone --branch n7.1 --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg
-
-# Build FFmpeg with shared libraries and hardware acceleration
-RUN cd ffmpeg && \
+RUN git clone --branch n7.1 --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg && \
+    # Build FFmpeg with shared libraries and hardware acceleration
+    cd ffmpeg && \
     ./configure --prefix=/compiled \
                 --extra-cflags="-I/ffmpeg_build/include -I/usr/local/cuda/include" \
                 --extra-ldflags="-L/ffmpeg_build/lib -L/usr/local/cuda/lib64" \
@@ -58,13 +56,11 @@ RUN cd ffmpeg && \
                 --disable-doc && \
     make -j$(nproc) && \
     make install && \
-    make distclean
-
-# Copy the compiled FFmpeg binaries to /usr/local
-RUN cp -R /compiled/* /usr/local/
-
-# Clean up APT cache to reduce image size
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+    make distclean && \
+    # Copy the compiled FFmpeg binaries to /usr/local
+    cp -R /compiled/* /usr/local/ && \
+    cd .. && \
+    rm -rf ffmpeg /compiled
 
 # -----------------------------------------------------------------------------
 # live-base: End of section
