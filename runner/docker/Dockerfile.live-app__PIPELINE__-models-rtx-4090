@@ -1,0 +1,4 @@
+ARG BASE
+FROM ${BASE}
+
+COPY --from=livepeer/ai-runner-models:latest-tensorrt-rtx-4090 /models /models
