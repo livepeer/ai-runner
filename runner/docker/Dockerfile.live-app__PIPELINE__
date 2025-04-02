@@ -40,5 +40,4 @@ WORKDIR /app
 ARG GIT_SHA
 ENV GIT_SHA=$GIT_SHA
 
-RUN echo "source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> ~/.bashrc
 CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
