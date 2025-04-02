@@ -5,8 +5,6 @@
 # ComfyUI image configuration
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
 
-docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
-
 # Checks HF_TOKEN and huggingface-cli login status and throw warning if not authenticated.
 check_hf_auth() {
   if [ -z "$HF_TOKEN" ] && [ "$(huggingface-cli whoami)" = "Not logged in" ]; then
@@ -92,6 +90,8 @@ function download_all_models() {
 
 # Download models only for the live-video-to-video pipeline.
 function download_live_models() {
+  docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
+
   # ComfyUI models
   if ! docker image inspect $AI_RUNNER_COMFYUI_IMAGE >/dev/null 2>&1; then
     echo "ERROR: ComfyUI base image $AI_RUNNER_COMFYUI_IMAGE not found"
