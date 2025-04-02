@@ -132,10 +132,8 @@ function build_tensorrt_models() {
     )
 
   # Dreamshaper-8-Dmd-1kstep
-  # TODO: Remove the script download with curl. It should already come in the base image once eliteprox/comfystream#1 is merged.
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
-                 curl -O https://raw.githubusercontent.com/yondonfu/comfystream/535c71a6f665bc1169d07cddd4e2b3cf4edd5a82/src/comfystream/scripts/build_trt.py && \
                  python ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
