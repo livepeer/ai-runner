@@ -211,32 +211,31 @@ class PipelineStreamer:
             frame_count = 0
             start_time = 0.0
             while not self.stop_event.is_set():
-                output_frame = await self.process.recv_output()
-                if not output_frame:
+                output = await self.process.recv_output()
+                if not output:
                     continue
 
                 # TODO accounting for audio output
-                if isinstance(output_frame, AudioOutput):
-                    yield output_frame
+                if isinstance(output, AudioOutput):
+                    yield output
                     continue
 
-                if not isinstance(output_frame, VideoOutput):
+                if not isinstance(output, VideoOutput):
                     logging.warning(
-                        f"Unknown output frame type {type(output_frame)}, dropping"
+                        f"Unknown output frame type {type(output)}, dropping"
                     )
                     continue
 
-                output_image = output_frame.frame.image
+                logging.debug(
+                    f"Output image received ts={output.timestamp} time_base={output.time_base} resolution={output.image.width}x{output.image.height} mode={output.image.mode}"
+                )
+
 
                 if not start_time:
                     # only start measuring output FPS after the first frame
                     start_time = time.time()
 
-                logging.debug(
-                    f"Output image received out_width: {output_image.width}, out_height: {output_image.height}"
-                )
-
-                yield output_frame
+                yield output
 
                 # Increment frame count and measure FPS
                 frame_count += 1
