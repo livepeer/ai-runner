@@ -71,7 +71,11 @@ class PipelineProcess:
         self.param_update_queue.put(params)
 
     def reset_stream(self, request_id: str, stream_id: str):
-        # We internally use the param update queue to reset the logging configs
+        clear_queue(self.input_queue)
+        clear_queue(self.output_queue)
+        clear_queue(self.param_update_queue)
+        clear_queue(self.error_queue)
+        clear_queue(self.log_queue)
         self.param_update_queue.put({"request_id": request_id, "stream_id": stream_id})
 
     def send_input(self, frame: InputFrame):
@@ -270,3 +274,11 @@ class LogQueueHandler(logging.Handler):
     def emit(self, record):
         msg = self.format(record)
         self.process._queue_put_fifo(self.process.log_queue, msg)
+
+# Function to clear the queue
+def clear_queue(queue):
+    while not queue.empty():
+        try:
+            queue.get_nowait()  # Remove items without blocking
+        except Exception as e:
+            print(f"Error while clearing queue: {e}")
