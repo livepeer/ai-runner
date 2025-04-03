@@ -1,13 +1,22 @@
-name: Check OpenAPI spec and Golang bindings
+name: Check OpenAPI spec changes
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "runner/**/*.py"
+      - "runner/requirements.txt"
+      - ".github/workflows/validate-openapi-on-pr.yaml"
   pull_request:
+    paths:
+      - "runner/**/*.py"
+      - "runner/requirements.txt"
+      - ".github/workflows/validate-openapi-on-pr.yaml"
+  workflow_dispatch:
 
 jobs:
-  check-openapi-and-bindings:
+  check-openapi:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

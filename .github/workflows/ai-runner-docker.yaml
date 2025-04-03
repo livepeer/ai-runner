@@ -28,14 +28,6 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          # Check https://github.com/livepeer/go-livepeer/pull/1891
-          # for ref value discussion
-          ref: ${{ github.event.pull_request.head.sha }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
