@@ -281,4 +281,4 @@ def clear_queue(queue):
         try:
             queue.get_nowait()  # Remove items without blocking
         except Exception as e:
-            print(f"Error while clearing queue: {e}")
+            logging.error(f"Error while clearing queue: {e}")
