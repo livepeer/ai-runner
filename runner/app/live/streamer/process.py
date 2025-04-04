@@ -36,6 +36,7 @@ class PipelineProcess:
         self.done = self.ctx.Event()
         self.process = self.ctx.Process(target=self.process_loop, args=())
         self.start_time = 0.0
+        self.stream_id = ""
 
     async def stop(self):
         self._stop_sync()
@@ -129,20 +130,22 @@ class PipelineProcess:
             logging.error(error_msg)
             self._queue_put_fifo(self.error_queue, error_event)
 
-        def _handle_logging_params(params: dict) -> dict:
+        def _handle_logging_params(params: dict) -> bool:
             if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
                 logging.info(f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, stream_id={params['stream_id']}")
+                self.stream_id = params["stream_id"]
                 self._reset_logging_fields(
                     params["request_id"], params["stream_id"]
                 )
-                return {}
-            return params
+                return True
+            return False
 
         try:
+            stream_id = ""
             params = {}
             try:
                 params = self.param_update_queue.get_nowait()
-                params = _handle_logging_params(params)
+                params = {} if _handle_logging_params(params) else params
             except queue.Empty:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
             except Exception as e:
@@ -169,7 +172,7 @@ class PipelineProcess:
                     params = self.param_update_queue.get_nowait()
                     try:
                         logging.info(f"PipelineProcess: Processing parameter update from queue: {params}")
-                        if _handle_logging_params(params):
+                        if not _handle_logging_params(params):
                             logging.info(f"PipelineProcess: Updating pipeline parameters")
                             pipeline.update_params(**params)
                             logging.info(f"PipelineProcess: Successfully applied params to pipeline: {params}")
@@ -188,10 +191,10 @@ class PipelineProcess:
                         input_frame.log_timestamps["pre_process_frame"] = time.time()
                         output_image = pipeline.process_frame(input_frame.image)
                         input_frame.log_timestamps["post_process_frame"] = time.time()
-                        output_frame = VideoOutput(input_frame.replace_image(output_image))
+                        output_frame = VideoOutput(input_frame.replace_image(output_image), self.stream_id)
                         self.output_queue.put(output_frame)
                     elif isinstance(input_frame, AudioFrame):
-                        self.output_queue.put(AudioOutput([input_frame]))
+                        self.output_queue.put(AudioOutput([input_frame], self.stream_id))
                         # TODO wire in a proper pipeline here
                     else:
                         report_error(f"Unsupported input frame type {type(input_frame)}")
