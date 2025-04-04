@@ -36,7 +36,7 @@ class PipelineProcess:
         self.done = self.ctx.Event()
         self.process = self.ctx.Process(target=self.process_loop, args=())
         self.start_time = 0.0
-        self.stream_id = ""
+        self.request_id = ""
 
     async def stop(self):
         self._stop_sync()
@@ -133,7 +133,7 @@ class PipelineProcess:
         def _handle_logging_params(params: dict) -> bool:
             if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
                 logging.info(f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, stream_id={params['stream_id']}")
-                self.stream_id = params["stream_id"]
+                self.request_id = params["request_id"]
                 self._reset_logging_fields(
                     params["request_id"], params["stream_id"]
                 )
@@ -191,10 +191,10 @@ class PipelineProcess:
                         input_frame.log_timestamps["pre_process_frame"] = time.time()
                         output_image = pipeline.process_frame(input_frame.image)
                         input_frame.log_timestamps["post_process_frame"] = time.time()
-                        output_frame = VideoOutput(input_frame.replace_image(output_image), self.stream_id)
+                        output_frame = VideoOutput(input_frame.replace_image(output_image), self.request_id)
                         self.output_queue.put(output_frame)
                     elif isinstance(input_frame, AudioFrame):
-                        self.output_queue.put(AudioOutput([input_frame], self.stream_id))
+                        self.output_queue.put(AudioOutput([input_frame], self.request_id))
                         # TODO wire in a proper pipeline here
                     else:
                         report_error(f"Unsupported input frame type {type(input_frame)}")
