@@ -217,6 +217,9 @@ class PipelineStreamer:
 
                 # TODO accounting for audio output
                 if isinstance(output, AudioOutput):
+                    logging.debug(
+                        f"Output audio received outputStreamId={output.stream_id} numFrames={len(output.frames)}"
+                    )
                     yield output
                     continue
 
@@ -227,7 +230,7 @@ class PipelineStreamer:
                     continue
 
                 logging.debug(
-                    f"Output image received ts={output.timestamp} time_base={output.time_base} resolution={output.image.width}x{output.image.height} mode={output.image.mode}"
+                    f"Output image received outputStreamId={output.stream_id} ts={output.timestamp} time_base={output.time_base} resolution={output.image.width}x{output.image.height} mode={output.image.mode}"
                 )
 
 
