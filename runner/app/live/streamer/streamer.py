@@ -236,7 +236,7 @@ class PipelineStreamer:
                     continue
                 if output.request_id != request_id:
                     logging.warning(
-                        f"Output video request ID mismatch: expected {request_id}, got {output.request_id}, skipping frame"
+                        f"Output video request ID mismatch: expected {request_id}, got {output.request_id}, dropping frame"
                     )
                     continue
                 logging.debug(
