@@ -1,5 +1,6 @@
 import threading
-from typing import Optional, TypeVar, Generic, Callable
+import logging
+from typing import Optional, TypeVar, Generic, Callable, cast
 
 T = TypeVar('T')
 
@@ -41,6 +42,7 @@ class LastValueCache(Generic[T]):
                     logging.warning(f"Timed out waiting for value (timeout={timeout}s)")
                     return None
 
-            return self._value
+            # we know the value is set, so we can cast it to T
+            return cast(T, self._value)
 
 
