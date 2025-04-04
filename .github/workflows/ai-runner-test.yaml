@@ -29,6 +29,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r runner/requirements-dev.txt
           pip install -r runner/requirements.txt
+          pip install -r runner/requirements.live-ai.txt
+
+      - name: Run mypy type checking
+        working-directory: runner
+        run: mypy runner/
 
       - name: Run tests
         working-directory: runner
