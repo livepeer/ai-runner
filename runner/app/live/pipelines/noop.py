@@ -13,11 +13,11 @@ class Noop(Pipeline):
   async def put_video_frame(self, frame: VideoFrame):
     await self.frame_queue.put(frame)
 
-  async def get_processed_video_frame(self) -> VideoOutput:
+  async def get_processed_video_frame(self) -> VideoFrame:
     frame = await self.frame_queue.get()
     processed_frame = frame.image.convert("RGB")
-    return VideoOutput(frame.replace_image(processed_frame))
-  
+    return frame.replace_image(processed_frame)
+
   async def warm_video(self):
     logging.info("Warming video")
 

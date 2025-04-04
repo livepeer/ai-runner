@@ -1,0 +1,132 @@
+name: Pull and dockerize huggingface models
+
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "runner/dl_checkpoints.sh"
+      - ".github/workflows/ai-runner-models.yaml"
+  pull_request:
+    paths:
+      - "runner/dl_checkpoints.sh"
+      - ".github/workflows/ai-runner-models.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ !((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag') }}
+
+jobs:
+  download_batch_models:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Check https://github.com/livepeer/go-livepeer/pull/1891
+          # for ref value discussion
+          ref: ${{ github.event.pull_request.head.sha || '' }}
+
+      - name: dl_checkpoints.sh
+        env:
+          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui"
+        run: |
+          set -e
+          pip install 'huggingface_hub[cli,hf_transfer]' hf_transfer
+          runner/dl_checkpoints.sh --batch
+          du -hs ./models/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            livepeer/ai-runner-models
+          tags: |
+            type=sha,prefix=batch-
+            type=ref,event=pr,prefix=batch-
+            type=ref,event=tag,prefix=batch-
+            type=sha,format=long,prefix=batch-
+            type=ref,event=branch,prefix=batch-
+            type=raw,value=latest-batch,enable={{is_default_branch}}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          file: runner/docker/Dockerfile.models
+          cache-from: type=registry,ref=livepeerci/ai-runner-models:dockerbuildcache-batch
+          cache-to: type=registry,ref=livepeerci/ai-runner-models:dockerbuildcache-batch,mode=max
+
+  download_build_tensorrt_models:
+    strategy:
+      fail-fast: false
+      matrix:
+        gpu: [rtx-4090]
+    runs-on: ${{ matrix.gpu }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Check https://github.com/livepeer/go-livepeer/pull/1891
+          # for ref value discussion
+          ref: ${{ github.event.pull_request.head.sha || '' }}
+
+      - name: dl_checkpoints.sh
+        env:
+          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui"
+        run: |
+          set -e
+          pip install 'huggingface_hub[cli,hf_transfer]' hf_transfer
+          rm -rf ./models/*
+          runner/dl_checkpoints.sh --tensorrt
+          du -hs ./models/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            livepeer/ai-runner-models
+          tags: |
+            type=sha,prefix=tensorrt-${{ matrix.gpu }}-
+            type=ref,event=pr,prefix=tensorrt-${{ matrix.gpu }}-
+            type=ref,event=tag,prefix=tensorrt-${{ matrix.gpu }}-
+            type=sha,format=long,prefix=tensorrt-${{ matrix.gpu }}-
+            type=ref,event=branch,prefix=tensorrt-${{ matrix.gpu }}-
+            type=raw,value=latest-tensorrt-${{ matrix.gpu }},enable={{is_default_branch}}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          file: runner/docker/Dockerfile.models
+          cache-from: type=registry,ref=livepeerci/ai-runner-models:dockerbuildcache-tensorrt-${{ matrix.gpu }}
+          cache-to: type=registry,ref=livepeerci/ai-runner-models:dockerbuildcache-tensorrt-${{ matrix.gpu }},mode=max

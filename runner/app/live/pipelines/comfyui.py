@@ -296,8 +296,8 @@ class ComfyUI(Pipeline):
         result_tensor = result_tensor.squeeze(0)
         result_image_np = (result_tensor * 255).byte()
         result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return VideoOutput(frame.replace_image(result_image))
-    
+        return frame.replace_image(result_image)
+
     async def set_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Setting ComfyUI Pipeline Prompt: {new_params.prompt}")

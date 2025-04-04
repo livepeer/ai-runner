@@ -24,6 +24,7 @@ class ProcessGuardian:
 
         self.process = None
         self.monitor_task = None
+        self.stream_running = False
         self.status = PipelineStatus(pipeline=pipeline, start_time=0).update_params(params, False)
 
     async def start(self):
@@ -45,6 +46,9 @@ class ProcessGuardian:
         if self.process:
             await self.process.stop()
             self.process = None
+    
+    def stop_stream(self):
+        self.stream_running = False
 
     async def reset_stream(
         self,
@@ -53,6 +57,7 @@ class ProcessGuardian:
         params: dict,
         monitoring_callback: Callable[[dict], Awaitable[None]],
     ):
+        self.stream_running = True
         if not self.process:
             raise RuntimeError("Process not running")
         self.status = PipelineStatus(pipeline=self.pipeline, start_time=time.time())
@@ -125,6 +130,9 @@ class ProcessGuardian:
         input = self.status.input_status
         last_input_time = input.last_input_time or self.status.start_time
         time_since_last_input = current_time - last_input_time
+        # Stream is done and 3s grace period reached
+        if not self.stream_running and time_since_last_input > 3:
+            return PipelineState.OFFLINE
         if time_since_last_input > 60:
             if time_since_last_input < 90:
                 # streamer should stop automatically after 60s, so give ourselves a 30s grace period to shutdown

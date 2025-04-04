@@ -25,6 +25,8 @@ class TrickleProtocol(StreamProtocol):
         self.publish_task = None
 
     async def start(self):
+        self.subscribe_queue = queue.Queue[InputFrame]()
+        self.publish_queue = queue.Queue[OutputFrame]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
             media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event)
@@ -64,8 +66,10 @@ class TrickleProtocol(StreamProtocol):
         self.publish_task = None
 
     async def ingress_loop(self, done: asyncio.Event) -> AsyncGenerator[InputFrame, None]:
+        subscribe_queue = self.subscribe_queue
+        publish_queue = self.publish_queue
         def dequeue_frame():
-            frame = self.subscribe_queue.get()
+            frame = subscribe_queue.get()
             if not frame:
                 return None
 
@@ -78,13 +82,14 @@ class TrickleProtocol(StreamProtocol):
             # TEMP: Put audio immediately into the publish queue
             # TODO: Remove once there is ComfyUI audio support
             if isinstance(image, AudioFrame):
-                self.publish_queue.put(AudioOutput([image]))
+                publish_queue.put(AudioOutput([image]))
                 continue
             yield image
 
     async def egress_loop(self, output_frames: AsyncGenerator[OutputFrame, None]):
+        publish_queue = self.publish_queue
         def enqueue_bytes(frame: OutputFrame):
-            self.publish_queue.put(frame)
+            publish_queue.put(frame)
 
         async for frame in output_frames:
             await asyncio.to_thread(enqueue_bytes, frame)
