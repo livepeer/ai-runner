@@ -1,18 +1,20 @@
 import os
 import json
 import torch
-from PIL import Image
 import asyncio
 import numpy as np
+from PIL import Image
 from typing import Union
 from pydantic import BaseModel, field_validator
 
 from .interface import Pipeline
 from comfystream.client import ComfyStreamClient
+from trickle import VideoFrame, VideoOutput
 
 import logging
 
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
+WARMUP_RUNS = 1
 DEFAULT_WORKFLOW_JSON = json.loads("""
 {
   "1": {
@@ -263,46 +265,54 @@ class ComfyUIParams(BaseModel):
 
 
 class ComfyUI(Pipeline):
-    def __init__(self, **params):
-        super().__init__(**params)
-
+    def __init__(self):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
         self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
+        self.video_incoming_frames = asyncio.Queue()
 
-        self.update_params(**params)
+    async def warm_video(self):
+        dummy_frame = VideoFrame(None, 0, 0)
+        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
 
-        # Comfy will cache nodes that only need to be run once (i.e. a node that loads model weights)
-        # We can run the prompt once before actual inputs come in to "warmup"
-        warmup_input = torch.randn(1, 512, 512, 3)
-        asyncio.get_event_loop().run_until_complete(self.client.queue_prompt(warmup_input))
+        for _ in range(WARMUP_RUNS):
+          self.client.put_video_input(dummy_frame)
+          _ = await self.client.get_video_output()
+        logging.info("Video frame warmup done")
 
-    def process_frame(self, image: Image.Image) -> Image.Image:
-        # Normalize by dividing by 255 to ensure the tensor values are between 0 and 1
-        image_np = np.array(image.convert("RGB")).astype(np.float32) / 255.0
-        # Convert from numpy to torch.Tensor
-        # Initially, the torch.Tensor will have shape HWC but we want BHWC
-        # unsqueeze(0) will add a batch dimension at the beginning of 1 which means we just have 1 image
-        image_tensor = torch.tensor(image_np).unsqueeze(0)
+    async def put_video_frame(self, frame: VideoFrame):
+        image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
+        frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
+        frame.side_data.skipped = True
+        self.client.put_video_input(frame)
+        await self.video_incoming_frames.put(frame)
 
-        # Process using ComfyUI pipeline
-        result_tensor = asyncio.get_event_loop().run_until_complete(self.client.queue_prompt(image_tensor))
+    async def get_processed_video_frame(self):
+        result_tensor = await self.client.get_video_output()
+        frame = await self.video_incoming_frames.get()
+        while frame.side_data.skipped:
+            frame = await self.video_incoming_frames.get()
 
-        # Convert back from Tensor to PIL.Image
         result_tensor = result_tensor.squeeze(0)
         result_image_np = (result_tensor * 255).byte()
         result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return result_image
+        return frame.replace_image(result_image)
 
-    def update_params(self, **params):
+    async def set_params(self, **params):
         new_params = ComfyUIParams(**params)
-        logging.info(f"ComfyUI Pipeline Prompt: {new_params.prompt}")
-        self.client.set_prompt(new_params.prompt)
+        logging.info(f"Setting ComfyUI Pipeline Prompt: {new_params.prompt}")
+        # TODO: currently its a single prompt, but need to support multiple prompts
+        await self.client.set_prompts([new_params.prompt])
         self.params = new_params
 
-    #TODO: This is a hack to stop the ComfyStreamClient. Use the comfystream api to stop the client in 0.0.2
+    async def update_params(self, **params):
+        new_params = ComfyUIParams(**params)
+        logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
+        # TODO: currently its a single prompt, but need to support multiple prompts
+        await self.client.update_prompts([new_params.prompt])
+        self.params = new_params
+
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
-        if self.client.comfy_client.is_running:
-            await self.client.comfy_client.__aexit__(None, None, None)
+        await self.client.stop()
         logging.info("ComfyUI pipeline stopped")

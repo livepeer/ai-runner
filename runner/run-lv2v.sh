@@ -1,15 +1,8 @@
 #!/bin/bash
 set -ex
 
-if [ $# -lt 2 ]; then
-    echo "Usage: $0 <input_room> <output_room>"
-    exit 1
-fi
-
-INPUT_ROOM=$1
-OUTPUT_ROOM=$2
-PIPELINE=${3:-comfyui}
-PORT=${4:-9000}
+PIPELINE=noop
+PORT=8900
 
 # Build images, this will be quick if everything is cached
 docker build -t livepeer/ai-runner:live-base -f docker/Dockerfile.live-base .
@@ -39,14 +32,16 @@ echo "Waiting for server to start..."
 while ! grep -aq "Uvicorn running" ./run-lv2v.log; do
   sleep 1
 done
-sleep 2
-echo "Starting pipeline from ${INPUT_ROOM} to ${OUTPUT_ROOM}..."
+sleep 5
 
 set -x
 
-curl -vvv http://localhost:${PORT}/live-video-to-video/ \
-  -H 'Content-Type: application/json' \
-  -d "{\"publish_url\":\"https://wwgcyxykwg9dys.transfix.ai/trickle/${OUTPUT_ROOM}\",\"subscribe_url\":\"https://wwgcyxykwg9dys.transfix.ai/trickle/${INPUT_ROOM}\"}"
+curl --location 'http://127.0.0.1:8900/live-video-to-video/' \
+--header 'Content-Type: application/json' \
+--data '{
+  "subscribe_url": "http://172.17.0.1:3389/sample",
+  "publish_url": "http://172.17.0.1:3389/sample-out"
+}'
 
 # let docker container take over
 wait $DOCKER_PID
