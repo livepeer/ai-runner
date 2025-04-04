@@ -207,6 +207,7 @@ class PipelineStreamer:
         logging.info("Ingress loop ended")
 
     async def run_egress_loop(self):
+        request_id = self.request_id
         async def gen_output_frames() -> AsyncGenerator[OutputFrame, None]:
             frame_count = 0
             start_time = 0.0
@@ -220,6 +221,11 @@ class PipelineStreamer:
                     logging.debug(
                         f"Output audio received outputRequestId={output.request_id} numFrames={len(output.frames)}"
                     )
+                    if output.request_id != request_id:
+                        logging.warning(
+                            f"Output audio request ID mismatch: expected {request_id}, got {output.request_id}, skipping frame"
+                        )
+                        continue
                     yield output
                     continue
 
@@ -228,7 +234,11 @@ class PipelineStreamer:
                         f"Unknown output frame type {type(output)}, dropping"
                     )
                     continue
-
+                if output.request_id != request_id:
+                    logging.warning(
+                        f"Output video request ID mismatch: expected {request_id}, got {output.request_id}, skipping frame"
+                    )
+                    continue
                 logging.debug(
                     f"Output image received outputRequestId={output.request_id} ts={output.timestamp} time_base={output.time_base} resolution={output.image.width}x{output.image.height} mode={output.image.mode}"
                 )
