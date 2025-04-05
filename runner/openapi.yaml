@@ -696,6 +696,18 @@ components:
           format: binary
           title: Image
           description: Uploaded image to generate a video from.
+        prompt:
+          type: string
+          title: Prompt
+          description: Text prompt(s) to guide video generation for prompt accepting
+            models.
+          default: ''
+        negative_prompt:
+          type: string
+          title: Negative Prompt
+          description: Text prompt(s) to guide what to exclude from video generation
+            for prompt accepting models. Ignored if guidance_scale < 1.
+          default: ''
         model_id:
           type: string
           title: Model Id
@@ -743,6 +755,11 @@ components:
           title: Num Inference Steps
           description: Number of denoising steps. More steps usually lead to higher
             quality images but slower inference. Modulated by strength.
+          default: 25
+        num_frames:
+          type: integer
+          title: Num Frames
+          description: The number of video frames to generate.
           default: 25
       type: object
       required:
