@@ -172,7 +172,7 @@ class LLMPipeline(Pipeline):
         self,
         messages: List[Dict[str, str]],
         generation_config: Optional[GenerationConfig] = None,
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[LLMResponse, None]:
         """Internal generation method"""
         start_time = time.time()
         config = generation_config or GenerationConfig()
@@ -248,7 +248,7 @@ class LLMPipeline(Pipeline):
             duration = end_time - start_time
             logger.info(f"Generation completed in {duration:.2f}s")
             logger.info(
-                f"  Time to first token: {(first_token_time - start_time):.2f} seconds")
+                f"  Time to first token: {((first_token_time or 0) - start_time):.2f} seconds")
             logger.info(f"  Total tokens: {total_tokens}")
             logger.info(f"  Prompt tokens: {input_tokens}")
             logger.info(f"  Generated tokens: {total_tokens}")
@@ -288,9 +288,9 @@ class LLMPipeline(Pipeline):
 
     async def __call__(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, str]] = [],
         **kwargs
-    ) -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
+    ) -> AsyncGenerator[LLMResponse, None]:
         """
         Generate responses for messages.
 

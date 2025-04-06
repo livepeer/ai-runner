@@ -252,7 +252,7 @@ class LiveVideoToVideoPipeline(Pipeline):
                 with open(path, "r") as f:
                     return f.read()
 
-        os_proc_info = {}
+        os_proc_info: dict[str, dict | str] = {}
         for proc_file in ["status", "wchan", "io"]:
             try:
                 path = f"/proc/{pid}/{proc_file}"
