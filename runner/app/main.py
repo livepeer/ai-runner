@@ -3,12 +3,17 @@ import os
 from contextlib import asynccontextmanager
 
 from app.routes import health, hardware
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.routing import APIRoute
 from app.utils.hardware import HardwareInfo
+from app.pipelines.base import Pipeline
 from app.live.log import config_logging
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
+
+class RunnerFastAPI(FastAPI):
+    hardware_info_service: HardwareInfo
+    pipeline: Pipeline
 
 config_logging(log_level=logging.DEBUG if os.getenv("VERBOSE_LOGGING")=="1" else logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,7 +21,7 @@ logger = logging.getLogger(__name__)
 VERSION = Gauge('version', 'Runner version', ['app', 'version'])
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: RunnerFastAPI):
     # Create application wide hardware info service.
     app.hardware_info_service = HardwareInfo()
 
@@ -39,7 +44,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down")
 
 
-def load_pipeline(pipeline: str, model_id: str) -> any:
+def load_pipeline(pipeline: str, model_id: str) -> Pipeline:
     match pipeline:
         case "text-to-image":
             from app.pipelines.text_to_image import TextToImagePipeline
@@ -89,7 +94,7 @@ def load_pipeline(pipeline: str, model_id: str) -> any:
             )
 
 
-def load_route(pipeline: str) -> any:
+def load_route(pipeline: str) -> APIRouter:
     match pipeline:
         case "text-to-image":
             from app.routes import text_to_image
@@ -143,7 +148,7 @@ def use_route_names_as_operation_ids(app: FastAPI) -> None:
             route.operation_id = route.name
 
 
-app = FastAPI(lifespan=lifespan)
+app = RunnerFastAPI(lifespan=lifespan)
 
 @app.get("/metrics", include_in_schema=False)
 async def metrics():
