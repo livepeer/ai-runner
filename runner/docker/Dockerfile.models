@@ -1,3 +1,5 @@
-FROM scratch
+FROM busybox
 
 COPY ./models/ /models/
+
+CMD ["sleep", "infinity"]
