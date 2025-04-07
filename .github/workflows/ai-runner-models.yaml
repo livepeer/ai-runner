@@ -6,10 +6,12 @@ on:
       - "main"
     paths:
       - "runner/dl_checkpoints.sh"
+      - "runner/docker/Dockerfile.models"
       - ".github/workflows/ai-runner-models.yaml"
   pull_request:
     paths:
       - "runner/dl_checkpoints.sh"
+      - "runner/docker/Dockerfile.models"
       - ".github/workflows/ai-runner-models.yaml"
   workflow_dispatch:
 
