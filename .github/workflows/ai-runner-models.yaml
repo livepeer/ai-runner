@@ -80,6 +80,9 @@ jobs:
       matrix:
         gpu: [rtx-4090]
     runs-on: ${{ matrix.gpu }}
+    concurrency:
+      group: download-build-tensorrt-models-${{ matrix.gpu }}
+      cancel-in-progress: false
     steps:
       - name: Check out code
         uses: actions/checkout@v4
