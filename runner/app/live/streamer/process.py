@@ -175,9 +175,13 @@ class PipelineProcess:
         param_task = asyncio.create_task(self._param_update_loop(pipeline))
 
         try:
-            await asyncio.gather(input_task, output_task, param_task)
+            await asyncio.gather(input_task, output_task, param_task, return_exceptions=False)
         except Exception as e:
             self._report_error(f"Error in pipeline loops: {e}")
+            input_task.cancel()
+            output_task.cancel()
+            param_task.cancel()
+            await asyncio.gather(input_task, output_task, param_task, return_exceptions=True)
             await self._cleanup_pipeline(pipeline)
             raise
 
