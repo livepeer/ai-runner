@@ -72,7 +72,7 @@ class OutputFrame:
 class VideoOutput(OutputFrame):
     frame: VideoFrame
     request_id: str
-    def __init__(self, frame: VideoFrame, request_id: str):
+    def __init__(self, frame: VideoFrame, request_id: str = ''):
         self.frame = frame
         self.request_id = request_id
 
@@ -94,7 +94,7 @@ class VideoOutput(OutputFrame):
 
 class AudioOutput(OutputFrame):
     frames: List[AudioFrame]
-    stream_id: str
-    def __init__(self, frames: List[AudioFrame], request_id: str):
+    request_id: str
+    def __init__(self, frames: List[AudioFrame], request_id: str = ''):
         self.frames = frames
         self.request_id = request_id
