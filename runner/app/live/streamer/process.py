@@ -193,7 +193,7 @@ class PipelineProcess:
                     input_frame.log_timestamps["pre_process_frame"] = time.time()
                     await pipeline.put_video_frame(input_frame)
                 elif isinstance(input_frame, AudioFrame):
-                    self.output_queue.put(AudioOutput([input_frame]))
+                    self.output_queue.put(AudioOutput([input_frame], self.request_id))
             except queue.Empty:
                 continue
             except Exception as e:
@@ -202,7 +202,7 @@ class PipelineProcess:
     async def _output_loop(self, pipeline):
         while not self.is_done():
             try:
-                output_frame = await pipeline.get_processed_video_frame()
+                output_frame = await pipeline.get_processed_video_frame(self.request_id)
                 output_frame.log_timestamps["post_process_frame"] = time.time()
                 await asyncio.to_thread(self.output_queue.put, output_frame)
             except Exception as e:

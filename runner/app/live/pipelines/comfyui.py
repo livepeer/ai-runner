@@ -287,7 +287,7 @@ class ComfyUI(Pipeline):
         self.client.put_video_input(frame)
         await self.video_incoming_frames.put(frame)
 
-    async def get_processed_video_frame(self):
+    async def get_processed_video_frame(self, request_id):
         result_tensor = await self.client.get_video_output()
         frame = await self.video_incoming_frames.get()
         while frame.side_data.skipped:
@@ -296,7 +296,7 @@ class ComfyUI(Pipeline):
         result_tensor = result_tensor.squeeze(0)
         result_image_np = (result_tensor * 255).byte()
         result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return VideoOutput(frame.replace_image(result_image))
+        return VideoOutput(frame.replace_image(result_image), request_id)
     
     async def set_params(self, **params):
         new_params = ComfyUIParams(**params)
