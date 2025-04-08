@@ -193,12 +193,12 @@ class PipelineProcess:
     async def _input_loop(self, pipeline):
         while not self.is_done():
             try:
-                input_frame = await asyncio.to_thread(self.input_queue.get, timeout=0.1)
+                input_frame = await asyncio.to_thread(self.input_queue.get)
                 if isinstance(input_frame, VideoFrame):
                     input_frame.log_timestamps["pre_process_frame"] = time.time()
                     await pipeline.put_video_frame(input_frame)
                 elif isinstance(input_frame, AudioFrame):
-                    self.output_queue.put(AudioOutput([input_frame], self.request_id))
+                    await asyncio.to_thread(self.output_queue.put, AudioOutput([input_frame], self.request_id))
             except queue.Empty:
                 continue
             except Exception as e:
@@ -216,7 +216,7 @@ class PipelineProcess:
     async def _param_update_loop(self, pipeline):
         while not self.is_done():
             try:
-                params = self.param_update_queue.get_nowait()
+                params = await asyncio.to_thread(self.param_update_queue.get)
                 if self._handle_logging_params(params):
                     logging.info(f"PipelineProcess: Updating pipeline parameters: {params}")
                     await pipeline.update_params(**params)
