@@ -271,14 +271,21 @@ class ComfyUI(Pipeline):
         self.params: ComfyUIParams
         self.video_incoming_frames = asyncio.Queue()
 
-    async def warm_video(self):
+    async def initialize(self, **params):
+        new_params = ComfyUIParams(**params)
+        logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
+        # TODO: currently its a single prompt, but need to support multiple prompts
+        await self.client.set_prompts([new_params.prompt])
+        self.params = new_params
+
+        # Warm up the pipeline
         dummy_frame = VideoFrame(None, 0, 0)
         dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
 
         for _ in range(WARMUP_RUNS):
-          self.client.put_video_input(dummy_frame)
-          _ = await self.client.get_video_output()
-        logging.info("Video frame warmup done")
+            self.client.put_video_input(dummy_frame)
+            _ = await self.client.get_video_output()
+        logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame):
         image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
@@ -298,13 +305,6 @@ class ComfyUI(Pipeline):
         result_image = Image.fromarray(result_image_np.cpu().numpy())
         return VideoOutput(frame.replace_image(result_image), request_id)
     
-    async def set_params(self, **params):
-        new_params = ComfyUIParams(**params)
-        logging.info(f"Setting ComfyUI Pipeline Prompt: {new_params.prompt}")
-        # TODO: currently its a single prompt, but need to support multiple prompts
-        await self.client.set_prompts([new_params.prompt])
-        self.params = new_params
-
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")

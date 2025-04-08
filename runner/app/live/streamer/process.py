@@ -153,7 +153,7 @@ class PipelineProcess:
             
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
-                await pipeline.set_params(**params)
+                await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:
             self._report_error(f"Error loading pipeline: {e}")
@@ -161,7 +161,7 @@ class PipelineProcess:
                 try:
                     with log_timing(f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"):
                         pipeline = load_pipeline(self.pipeline_name)
-                        await pipeline.set_params()
+                        await pipeline.initialize()
                         return pipeline
                 except Exception as e:
                     self._report_error(f"Error loading pipeline with default params: {e}")
@@ -169,7 +169,6 @@ class PipelineProcess:
 
     async def _run_pipeline_loops(self):
         pipeline = await self._initialize_pipeline()
-        await pipeline.warm_video()
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
         param_task = asyncio.create_task(self._param_update_loop(pipeline))

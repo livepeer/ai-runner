@@ -18,11 +18,9 @@ class Noop(Pipeline):
     processed_frame = frame.image.convert("RGB")
     return VideoOutput(frame.replace_image(processed_frame))
   
-  async def warm_video(self):
-    logging.info("Warming video")
-
-  async def set_params(self, **params):
-    logging.info(f"Setting params: {params}")
+  async def initialize(self, **params):
+    logging.info(f"Initializing Noop pipeline with params: {params}")
+    logging.info("Pipeline initialization complete")
 
   async def update_params(self, **params):
     logging.info(f"Updating params: {params}")
