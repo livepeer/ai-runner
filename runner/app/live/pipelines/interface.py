@@ -64,6 +64,14 @@ class Pipeline(ABC):
         """
         pass
 
+    async def warm_video(self):
+        """Warm up the pipeline by processing dummy frames.
+        
+        This method should be called before processing real frames to ensure
+        the pipeline is properly initialized and warmed up.
+        """
+        pass
+
     async def stop(self):
         """Stop the pipeline.
 
