@@ -23,7 +23,7 @@ class Pipeline(ABC):
         pass
 
     @abstractmethod
-    async def put_video_frame(self, frame: VideoFrame):
+    async def put_video_frame(self, frame: VideoFrame, request_id: str):
         """Put a frame into the pipeline.
 
         Args:
@@ -32,7 +32,7 @@ class Pipeline(ABC):
         pass
 
     @abstractmethod
-    async def get_processed_video_frame(self, request_id: str = '') -> VideoOutput:
+    async def get_processed_video_frame(self) -> VideoOutput:
         """Get a processed frame from the pipeline.
 
         Returns:
@@ -44,7 +44,7 @@ class Pipeline(ABC):
     async def initialize(self, **params):
         """Initialize the pipeline with parameters and warm up the processing.
 
-        This method sets up the initial pipeline state and performs warmup operations. 
+        This method sets up the initial pipeline state and performs warmup operations.
         Must maintain valid state on success or restore previous state on failure.
         Starts the pipeline loops in comfystream.
 

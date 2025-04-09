@@ -8,7 +8,7 @@ import time
 from typing import Any
 import torch
 
-from pipelines import load_pipeline
+from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
 
@@ -128,7 +128,7 @@ class PipelineProcess:
             asyncio.run(self._run_pipeline_loops())
         except Exception as e:
             self._report_error(f"Error in process run method: {e}")
-    
+
 
     def _handle_logging_params(self, params: dict) -> dict:
         if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
@@ -150,7 +150,7 @@ class PipelineProcess:
                 params = self._handle_logging_params(params)
             except queue.Empty:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
-            
+
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
                 await pipeline.initialize(**params)
@@ -189,13 +189,13 @@ class PipelineProcess:
             await asyncio.gather(*tasks, return_exceptions=True)
             await self._cleanup_pipeline(pipeline)
 
-    async def _input_loop(self, pipeline):
+    async def _input_loop(self, pipeline: Pipeline):
         while not self.is_done():
             try:
                 input_frame = await asyncio.to_thread(self.input_queue.get)
                 if isinstance(input_frame, VideoFrame):
                     input_frame.log_timestamps["pre_process_frame"] = time.time()
-                    await pipeline.put_video_frame(input_frame)
+                    await pipeline.put_video_frame(input_frame, self.request_id)
                 elif isinstance(input_frame, AudioFrame):
                     await asyncio.to_thread(self.output_queue.put, AudioOutput([input_frame], self.request_id))
             except queue.Empty:
@@ -203,16 +203,16 @@ class PipelineProcess:
             except Exception as e:
                 self._report_error(f"Error processing input frame: {e}")
 
-    async def _output_loop(self, pipeline):
+    async def _output_loop(self, pipeline: Pipeline):
         while not self.is_done():
             try:
-                output_frame = await pipeline.get_processed_video_frame(self.request_id)
+                output_frame = await pipeline.get_processed_video_frame()
                 output_frame.log_timestamps["post_process_frame"] = time.time()
                 await asyncio.to_thread(self.output_queue.put, output_frame)
             except Exception as e:
                 self._report_error(f"Error processing output frame: {e}")
 
-    async def _param_update_loop(self, pipeline):
+    async def _param_update_loop(self, pipeline: Pipeline):
         while not self.is_done():
             try:
                 params = await asyncio.to_thread(self.param_update_queue.get)

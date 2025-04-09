@@ -8,15 +8,15 @@ from trickle import VideoFrame, VideoOutput
 
 class Noop(Pipeline):
   def __init__(self):
-    self.frame_queue = asyncio.Queue()
+    self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
 
-  async def put_video_frame(self, frame: VideoFrame):
-    await self.frame_queue.put(frame)
+  async def put_video_frame(self, frame: VideoFrame, request_id: str):
+    await self.frame_queue.put(VideoOutput(frame, request_id))
 
-  async def get_processed_video_frame(self, request_id: str = '') -> VideoOutput:
-    frame = await self.frame_queue.get()
-    processed_frame = frame.image.convert("RGB")
-    return VideoOutput(frame.replace_image(processed_frame), request_id)
+  async def get_processed_video_frame(self) -> VideoOutput:
+    out = await self.frame_queue.get()
+    processed_frame = out.image.convert("RGB")
+    return VideoOutput(out.frame.replace_image(processed_frame), out.request_id)
 
   async def initialize(self, **params):
     logging.info(f"Initializing Noop pipeline with params: {params}")

@@ -54,7 +54,7 @@ class ComfyUI(Pipeline):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
         self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
-        self.video_incoming_frames = asyncio.Queue()
+        self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
 
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
@@ -72,23 +72,23 @@ class ComfyUI(Pipeline):
             _ = await self.client.get_video_output()
         logging.info("Pipeline initialization and warmup complete")
 
-    async def put_video_frame(self, frame: VideoFrame):
+    async def put_video_frame(self, frame: VideoFrame, request_id: str):
         image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
         frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
         frame.side_data.skipped = True
         self.client.put_video_input(frame)
-        await self.video_incoming_frames.put(frame)
+        await self.video_incoming_frames.put(VideoOutput(frame, request_id))
 
-    async def get_processed_video_frame(self, request_id):
+    async def get_processed_video_frame(self):
         result_tensor = await self.client.get_video_output()
-        frame = await self.video_incoming_frames.get()
-        while frame.side_data.skipped:
-            frame = await self.video_incoming_frames.get()
+        out = await self.video_incoming_frames.get()
+        while out.frame.side_data.skipped:
+            out = await self.video_incoming_frames.get()
 
         result_tensor = result_tensor.squeeze(0)
         result_image_np = (result_tensor * 255).byte()
         result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return VideoOutput(frame.replace_image(result_image), request_id)
+        return VideoOutput(out.frame.replace_image(result_image), out.request_id)
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
