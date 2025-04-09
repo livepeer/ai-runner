@@ -13,11 +13,11 @@ class Noop(Pipeline):
   async def put_video_frame(self, frame: VideoFrame):
     await self.frame_queue.put(frame)
 
-  async def get_processed_video_frame(self) -> VideoOutput:
+  async def get_processed_video_frame(self, request_id: str = '') -> VideoOutput:
     frame = await self.frame_queue.get()
     processed_frame = frame.image.convert("RGB")
-    return VideoOutput(frame.replace_image(processed_frame))
-  
+    return VideoOutput(frame.replace_image(processed_frame), request_id)
+
   async def initialize(self, **params):
     logging.info(f"Initializing Noop pipeline with params: {params}")
     logging.info("Pipeline initialization complete")
