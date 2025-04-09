@@ -33,12 +33,27 @@ jobs:
 
       - name: dl_checkpoints.sh
         env:
-          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui"
+          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui-89570ca"
+          # If models are smaller than this size, the build will fail
+          MIN_MODELS_SIZE_MB: 500
         run: |
           set -e
           pip install 'huggingface_hub[cli,hf_transfer]' hf_transfer
           runner/dl_checkpoints.sh --batch
           du -hs ./models/
+
+          MODELS_DIR="./models"
+
+          # Get the size of the model directory in bytes
+          dir_size_bytes=$(du -sb "$MODELS_DIR" | awk '{print $1}')
+          # Convert bytes to MB (1 MB = 1048576 bytes)
+          dir_size_mb=$(echo "$dir_size_bytes / 1048576" | bc)
+
+          if [ "$dir_size_mb" -lt "$MIN_MODELS_SIZE_MB" ]; then
+            echo "Error: $MODELS_DIR size is ${dir_size_mb}MB, which is less than required ${MIN_MODELS_SIZE_MB}MB."
+            exit 1
+          fi
+
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -94,13 +109,27 @@ jobs:
 
       - name: dl_checkpoints.sh
         env:
-          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui"
+          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui-89570ca"
+          # If models are smaller than this size, the build will fail
+          MIN_MODELS_SIZE_MB: 500
         run: |
           set -e
           pip install 'huggingface_hub[cli,hf_transfer]' hf_transfer
           rm -rf ./models/*
           runner/dl_checkpoints.sh --tensorrt
           du -hs ./models/
+
+          MODELS_DIR="./models"
+
+          # Get the size of the model directory in bytes
+          dir_size_bytes=$(du -sb "$MODELS_DIR" | awk '{print $1}')
+          # Convert bytes to MB (1 MB = 1048576 bytes)
+          dir_size_mb=$(echo "$dir_size_bytes / 1048576" | bc)
+
+          if [ "$dir_size_mb" -lt "$MIN_MODELS_SIZE_MB" ]; then
+            echo "Error: $MODELS_DIR size is ${dir_size_mb}MB, which is less than required ${MIN_MODELS_SIZE_MB}MB."
+            exit 1
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
