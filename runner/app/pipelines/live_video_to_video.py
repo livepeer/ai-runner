@@ -107,10 +107,7 @@ class LiveVideoToVideoPipeline(Pipeline):
             raise ConnectionError(f"Failed to get status: {e}")
 
     def start_process(self, **kwargs):
-        if kwargs.get("pipeline") == "comfyui":
-            cmd = ["conda", "run", "--no-capture-output", "-n", "comfystream", "python", str(self.infer_script_path)]
-        else:
-            cmd = ["python", str(self.infer_script_path)]
+        cmd = [sys.executable, str(self.infer_script_path)]
 
         # Add any additional kwargs as command-line arguments
         for key, value in kwargs.items():
