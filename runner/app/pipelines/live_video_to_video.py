@@ -123,6 +123,10 @@ class LiveVideoToVideoPipeline(Pipeline):
             raise InferenceError(f"Error starting infer.py: {e}")
 
     def monitor_process(self):
+        # Wait 1 sec before starting to monitor the process. This gives it some
+        # time to start and also ensures we won't restart the process too often.
+        time.sleep(1)
+
         while True:
             if not self.process:
                 logging.error("No process to monitor")
