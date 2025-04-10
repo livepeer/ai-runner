@@ -110,7 +110,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         if kwargs.get("pipeline") == "comfyui":
             cmd = ["conda", "run", "--no-capture-output", "-n", "comfystream", "python", str(self.infer_script_path)]
         else:
-            cmd = [str(self.infer_script_path)]
+            cmd = ["python", str(self.infer_script_path)]
 
         # Add any additional kwargs as command-line arguments
         for key, value in kwargs.items():
