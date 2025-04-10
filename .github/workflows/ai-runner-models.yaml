@@ -33,7 +33,7 @@ jobs:
 
       - name: dl_checkpoints.sh
         env:
-          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui-89570ca"
+          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui"
           # If models are smaller than this size, the build will fail
           MIN_MODELS_SIZE_MB: 500
         run: |
@@ -109,7 +109,7 @@ jobs:
 
       - name: dl_checkpoints.sh
         env:
-          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui-89570ca"
+          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui"
           # If models are smaller than this size, the build will fail
           MIN_MODELS_SIZE_MB: 500
         run: |
