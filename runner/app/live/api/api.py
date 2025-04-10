@@ -7,7 +7,7 @@ import tempfile
 import time
 from typing import Optional, cast
 
-from aiohttp import BodyPartReader, web
+from aiohttp import web
 from pydantic import BaseModel, Field
 from typing import Annotated, Dict
 
@@ -17,9 +17,6 @@ from streamer.process import config_logging
 
 MAX_FILE_AGE = 86400  # 1 day
 STREAMER_INPUT_TIMEOUT = 60  # 60s
-
-# Temporary directory to store files received on multipart requests
-multipart_files_temp_dir = os.path.join(tempfile.gettempdir(), "infer_multipart_files")
 
 # File to store the last params that a stream was started with. Used to cleanup
 # left over resources (e.g. trickle channels) left by a crashed process.
@@ -68,46 +65,9 @@ class StartStreamParams(BaseModel):
     ]
 
 
-def cleanup_old_files(temp_dir):
-    current_time = time.time()
-    for filename in os.listdir(temp_dir):
-        file_path = os.path.join(temp_dir, filename)
-        if os.path.isfile(file_path):
-            file_age = current_time - os.path.getmtime(file_path)
-            if file_age > MAX_FILE_AGE:
-                os.remove(file_path)
-                logging.info(f"Removed old file: {file_path}")
-
-
 async def parse_request_data(request: web.Request) -> Dict:
-    os.makedirs(multipart_files_temp_dir, exist_ok=True)
-    cleanup_old_files(multipart_files_temp_dir)
-
     if request.content_type.startswith("application/json"):
         return await request.json()
-    elif request.content_type.startswith("multipart/"):
-        params_data = {}
-        reader = await request.multipart()
-        async for part in reader:
-            if not isinstance(part, BodyPartReader):
-                continue
-            elif part.name == "params":
-                part_data = await part.json()
-                if part_data:
-                    params_data.update(part_data)
-            else:
-                content = await part.read()
-                file_hash = hashlib.md5(content).hexdigest()
-                content_type = part.headers.get(
-                    "Content-Type", "application/octet-stream"
-                )
-                ext = mimetypes.guess_extension(content_type) or ""
-                new_filename = f"{file_hash}{ext}"
-                file_path = os.path.join(multipart_files_temp_dir, new_filename)
-                with open(file_path, "wb") as f:
-                    f.write(content)
-                params_data[part.name or ""] = file_path
-        return params_data
     else:
         raise ValueError(f"Unknown content type: {request.content_type}")
 
