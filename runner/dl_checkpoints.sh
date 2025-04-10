@@ -101,6 +101,7 @@ function download_live_models() {
   docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
   docker run --rm -v ./models:/models --gpus all -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream && \
+                 source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream && \
                  python src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
                  adduser $(id -u -n) && \
                  chown -R $(id -u -n):$(id -g -n) /models" ||
@@ -123,6 +124,7 @@ function build_tensorrt_models() {
   # Depth-Anything-Tensorrt
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
+                source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream && \
                 python /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py && \
                 adduser $(id -u -n) && \
                 chown -R $(id -u -n):$(id -g -n) /models" ||
@@ -134,6 +136,7 @@ function build_tensorrt_models() {
   # Dreamshaper-8-Dmd-1kstep
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
+                 source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream && \
                  python ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
