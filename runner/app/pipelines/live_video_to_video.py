@@ -25,6 +25,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         self.infer_script_path = (
             Path(__file__).parent.parent / "live" / "infer.py"
         )
+        self.restart_count = 0
         self.start_process()
 
     def __call__(  # type: ignore
@@ -109,15 +110,13 @@ class LiveVideoToVideoPipeline(Pipeline):
 
         try:
             self.process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env
             )
 
             self.monitor_thread = threading.Thread(target=self.monitor_process)
             self.monitor_thread.start()
-            self.stdout_log_thread = threading.Thread(target=log_output, args=(self.process.stdout,))
-            self.stdout_log_thread.start()
-            self.stderr_log_thread = threading.Thread(target=log_output, args=(self.process.stderr,))
-            self.stderr_log_thread.start()
+            self.log_thread = threading.Thread(target=log_output, daemon=True, args=(self.process.stdout,))
+            self.log_thread.start()
 
         except subprocess.CalledProcessError as e:
             raise InferenceError(f"Error starting infer.py: {e}")
@@ -147,20 +146,33 @@ class LiveVideoToVideoPipeline(Pipeline):
 
             logging.info(f"infer.py process exited with return_code={return_code}")
             self.log_process_diagnostics(full=True)
+            break
 
-            # Start a separate thread to restart the process since it will
-            # restart the monitor thread itself (the current thread).
-            def restart_process():
-                try:
-                    self.stop_process()
-                    self.start_process()
-                except Exception as e:
-                    logging.error(f"Error restarting infer.py process: {e}")
-                    os._exit(1)
-            threading.Thread(target=restart_process).start()
+        self.restart_count += 1
+        if self.restart_count > 10:
+            logging.error("infer.py process has restarted more than 10 times. Exiting.")
+            os._exit(1)
+
+        # Start a separate thread to restart the process since it will
+        # restart the monitor thread itself (the current thread).
+        def restart_process():
+            try:
+                logging.info(f"Restarting infer.py process restart_count={self.restart_count}")
+                self.stop_process()
+                self.start_process()
+            except Exception as e:
+                logging.error(f"Error restarting infer.py process: {e}")
+                os._exit(1)
+        threading.Thread(target=restart_process).start()
 
     def stop_process(self):
         if self.process:
+            if self.process.stdout:
+                # Closing the output stream sometimes hangs, so we do it in a separate daemon thread
+                # and join the log_thread below with a timeout. If it does hang there might be a thread
+                # leak which is why we limit to up to 10 restarts.
+                stdout = self.process.stdout
+                threading.Thread(target=lambda: stdout.close(), daemon=True).start()
             self.process.terminate()
             try:
                 self.process.wait(timeout=10)
@@ -176,12 +188,11 @@ class LiveVideoToVideoPipeline(Pipeline):
         if self.monitor_thread:
             self.monitor_thread.join()
             self.monitor_thread = None
-        if hasattr(self, 'stdout_log_thread') and self.stdout_log_thread:
-            self.stdout_log_thread.join()
-            self.stdout_log_thread = None
-        if hasattr(self, 'stderr_log_thread') and self.stderr_log_thread:
-            self.stderr_log_thread.join()
-            self.stderr_log_thread = None
+        if self.log_thread:
+            self.log_thread.join(timeout=1)
+            if self.log_thread.is_alive():
+                logging.warning("Log thread did not finish")
+            self.log_thread = None
         logging.info("Infer process stopped successfully")
 
 

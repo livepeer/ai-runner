@@ -73,6 +73,7 @@ async def cleanup_last_stream():
             params = StartStreamParams(**json.load(f))
         os.remove(last_params_file)
 
+        logging.info(f"Cleaning up last stream trickle channels for request_id={params.request_id} subscribe_url={params.subscribe_url} publish_url={params.publish_url} control_url={params.control_url} events_url={params.events_url}")
         protocol = TrickleProtocol(
             params.subscribe_url,
             params.publish_url,
@@ -166,7 +167,7 @@ async def handle_get_status(request: web.Request):
 async def start_http_server(
     port: int, process: ProcessGuardian, streamer: Optional[PipelineStreamer] = None
 ):
-    await cleanup_last_stream()
+    asyncio.create_task(cleanup_last_stream())
 
     app = web.Application()
     app["process"] = process
