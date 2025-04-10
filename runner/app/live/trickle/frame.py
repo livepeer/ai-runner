@@ -76,6 +76,10 @@ class VideoOutput(OutputFrame):
         self.frame = frame
         self.request_id = request_id
 
+    def replace_image(self, image: Image.Image):
+        new_frame = self.frame.replace_image(image)
+        return VideoOutput(new_frame, self.request_id)
+
     @property
     def image(self):
         return self.frame.image
