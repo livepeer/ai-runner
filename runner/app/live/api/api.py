@@ -1,7 +1,6 @@
 import asyncio
-import hashlib
 import logging
-import mimetypes
+import json
 import os
 import tempfile
 import time
@@ -64,6 +63,27 @@ class StartStreamParams(BaseModel):
         Field(default="", description="Unique identifier for the stream."),
     ]
 
+async def cleanup_last_stream():
+    if not os.path.exists(last_params_file):
+        logging.debug("No last stream params found to cleanup")
+        return
+
+    try:
+        with open(last_params_file, "r") as f:
+            params = StartStreamParams(**json.load(f))
+        os.remove(last_params_file)
+
+        protocol = TrickleProtocol(
+            params.subscribe_url,
+            params.publish_url,
+            params.control_url,
+            params.events_url,
+        )
+        # Start and stop the protocol to immediately to make sure trickle channels are closed.
+        await protocol.start()
+        await protocol.stop()
+    except:
+        logging.exception(f"Error cleaning up last stream trickle channels")
 
 async def parse_request_data(request: web.Request) -> Dict:
     if request.content_type.startswith("application/json"):
@@ -88,6 +108,12 @@ async def handle_start_stream(request: web.Request):
 
         params_data = await parse_request_data(request)
         params = StartStreamParams(**params_data)
+
+        try:
+            with open(last_params_file, "w") as f:
+                json.dump(params.model_dump(), f)
+        except Exception as e:
+            logging.error(f"Error saving last params to file: {e}")
 
         config_logging(request_id=params.request_id, stream_id=params.stream_id)
 
@@ -140,6 +166,8 @@ async def handle_get_status(request: web.Request):
 async def start_http_server(
     port: int, process: ProcessGuardian, streamer: Optional[PipelineStreamer] = None
 ):
+    await cleanup_last_stream()
+
     app = web.Application()
     app["process"] = process
     app["streamer"] = streamer
