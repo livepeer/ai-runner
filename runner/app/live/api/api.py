@@ -15,10 +15,15 @@ from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
 
-TEMP_SUBDIR = "infer_temp"
 MAX_FILE_AGE = 86400  # 1 day
 STREAMER_INPUT_TIMEOUT = 60  # 60s
 
+# Temporary directory to store files received on multipart requests
+multipart_files_temp_dir = os.path.join(tempfile.gettempdir(), "infer_multipart_files")
+
+# File to store the last params that a stream was started with. Used to cleanup
+# left over resources (e.g. trickle channels) left by a crashed process.
+last_params_file = os.path.join(tempfile.gettempdir(), "ai_runner_last_params.json")
 
 class StartStreamParams(BaseModel):
     subscribe_url: Annotated[
@@ -74,7 +79,10 @@ def cleanup_old_files(temp_dir):
                 logging.info(f"Removed old file: {file_path}")
 
 
-async def parse_request_data(request: web.Request, temp_dir: str) -> Dict:
+async def parse_request_data(request: web.Request) -> Dict:
+    os.makedirs(multipart_files_temp_dir, exist_ok=True)
+    cleanup_old_files(multipart_files_temp_dir)
+
     if request.content_type.startswith("application/json"):
         return await request.json()
     elif request.content_type.startswith("multipart/"):
@@ -95,10 +103,10 @@ async def parse_request_data(request: web.Request, temp_dir: str) -> Dict:
                 )
                 ext = mimetypes.guess_extension(content_type) or ""
                 new_filename = f"{file_hash}{ext}"
-                file_path = os.path.join(temp_dir, new_filename)
+                file_path = os.path.join(multipart_files_temp_dir, new_filename)
                 with open(file_path, "wb") as f:
                     f.write(content)
-                params_data[part.name] = file_path
+                params_data[part.name or ""] = file_path
         return params_data
     else:
         raise ValueError(f"Unknown content type: {request.content_type}")
@@ -118,11 +126,7 @@ async def handle_start_stream(request: web.Request):
                 logging.error(f"Timeout stopping streamer: {e}")
                 raise web.HTTPBadRequest(text="Timeout stopping previous streamer")
 
-        temp_dir = os.path.join(tempfile.gettempdir(), TEMP_SUBDIR)
-        os.makedirs(temp_dir, exist_ok=True)
-        cleanup_old_files(temp_dir)
-
-        params_data = await parse_request_data(request, temp_dir)
+        params_data = await parse_request_data(request)
         params = StartStreamParams(**params_data)
 
         config_logging(request_id=params.request_id, stream_id=params.stream_id)
@@ -156,11 +160,7 @@ async def handle_start_stream(request: web.Request):
 
 async def handle_params_update(request: web.Request):
     try:
-        temp_dir = os.path.join(tempfile.gettempdir(), TEMP_SUBDIR)
-        os.makedirs(temp_dir, exist_ok=True)
-        cleanup_old_files(temp_dir)
-
-        params = await parse_request_data(request, temp_dir)
+        params = await parse_request_data(request)
 
         process = cast(ProcessGuardian, request.app["process"])
         await process.update_params(params)
