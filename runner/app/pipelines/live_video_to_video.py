@@ -25,16 +25,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         self.infer_script_path = (
             Path(__file__).parent.parent / "live" / "infer.py"
         )
-        try:
-            logging.info("Starting pipeline process")
-            self.start_process(
-                pipeline=self.model_id,  # we use the model_id as the pipeline name for now
-                http_port=8888,
-                # TODO: set torch device from self.torch_device
-            )
-        except Exception as e:
-            raise InferenceError(original_exception=e)
-
+        self.start_process()
 
     def __call__(  # type: ignore
         self, *, subscribe_url: str, publish_url: str, control_url: str, events_url: str, params: dict, request_id: str, stream_id: str, **kwargs
@@ -106,17 +97,12 @@ class LiveVideoToVideoPipeline(Pipeline):
             threading.Thread(target=lambda: self.log_process_diagnostics(full=True)).start()
             raise ConnectionError(f"Failed to get status: {e}")
 
-    def start_process(self, **kwargs):
+    def start_process(self):
+        logging.info("Starting pipeline process")
         cmd = [sys.executable, str(self.infer_script_path)]
-
-        # Add any additional kwargs as command-line arguments
-        for key, value in kwargs.items():
-            kebab_key = key.replace("_", "-")
-            if isinstance(value, str):
-                escaped_value = str(value).replace("'", "'\\''")
-                cmd.extend([f"--{kebab_key}", f"{escaped_value}"])
-            else:
-                cmd.extend([f"--{kebab_key}", f"{value}"])
+        cmd.extend(["--pipeline", self.model_id]) # we use the model_id as the pipeline name for now
+        cmd.extend(["--http-port", "8888"])
+        # TODO: set torch device from self.torch_device
 
         env = os.environ.copy()
         env["HUGGINGFACE_HUB_CACHE"] = str(self.model_dir)
@@ -157,10 +143,19 @@ class LiveVideoToVideoPipeline(Pipeline):
 
             logging.info(f"infer.py process exited with return_code={return_code}")
             self.log_process_diagnostics(full=True)
-            self.stop_process(is_monitor_thread=True)
-            return
 
-    def stop_process(self, is_monitor_thread: bool = False):
+            # Start a separate thread to restart the process since it will
+            # restart the monitor thread itself (the current thread).
+            def restart_process():
+                try:
+                    self.stop_process()
+                    self.start_process()
+                except Exception as e:
+                    logging.error(f"Error restarting infer.py process: {e}")
+                    os._exit(1)
+            threading.Thread(target=restart_process).start()
+
+    def stop_process(self):
         if self.process:
             self.process.terminate()
             try:
@@ -174,7 +169,7 @@ class LiveVideoToVideoPipeline(Pipeline):
                     logging.error(f"Error while force killing process: {e}")
                     os._exit(1)
             self.process = None
-        if self.monitor_thread and not is_monitor_thread:
+        if self.monitor_thread:
             self.monitor_thread.join()
             self.monitor_thread = None
         if hasattr(self, 'stdout_log_thread') and self.stdout_log_thread:
@@ -252,7 +247,7 @@ class LiveVideoToVideoPipeline(Pipeline):
                 with open(path, "r") as f:
                     return f.read()
 
-        os_proc_info = {}
+        os_proc_info: dict[str, str | dict] = {}
         for proc_file in ["status", "wchan", "io"]:
             try:
                 path = f"/proc/{pid}/{proc_file}"
