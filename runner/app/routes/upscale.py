@@ -1,3 +1,5 @@
+import asyncio
+from functools import partial
 import logging
 import os
 import random
@@ -126,13 +128,13 @@ async def upscale(
     image = Image.open(image.file).convert("RGB")
 
     try:
-        images, has_nsfw_concept = pipeline(
-            prompt=prompt,
-            image=image,
-            num_inference_steps=num_inference_steps,
-            safety_check=safety_check,
-            seed=seed,
-        )
+        pipeline_call = partial(pipeline,
+                                prompt=prompt,
+                                image=image,
+                                num_inference_steps=num_inference_steps,
+                                safety_check=safety_check,
+                                seed=seed)
+        images, has_nsfw_concept = await asyncio.to_thread(pipeline_call)
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.

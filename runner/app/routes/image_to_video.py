@@ -1,3 +1,5 @@
+import asyncio
+from functools import partial
 import logging
 import os
 import random
@@ -157,17 +159,19 @@ async def image_to_video(
         seed = random.randint(0, 2**32 - 1)
 
     try:
-        batch_frames, has_nsfw_concept = pipeline(
-            image=Image.open(image.file).convert("RGB"),
-            height=height,
-            width=width,
-            fps=fps,
-            motion_bucket_id=motion_bucket_id,
-            noise_aug_strength=noise_aug_strength,
-            num_inference_steps=num_inference_steps,
-            safety_check=safety_check,
-            seed=seed,
-        )
+        pipeline_call = partial(pipeline,
+                                image=Image.open(image.file).convert("RGB"),
+                                height=height,
+                                width=width,
+                                fps=fps,
+                                motion_bucket_id=motion_bucket_id,
+                                noise_aug_strength=noise_aug_strength,
+                                num_inference_steps=num_inference_steps,
+                                safety_check=safety_check,
+                                seed=seed,
+                        )
+        
+        batch_frames, has_nsfw_concept = await asyncio.to_thread(pipeline_call)
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.

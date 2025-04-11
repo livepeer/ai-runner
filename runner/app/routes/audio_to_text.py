@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from typing import Annotated, Dict, Tuple, Union
@@ -155,9 +156,9 @@ async def audio_to_text(
         )
 
     try:
-        return pipeline(
-            audio=audio, return_timestamps=return_timestamps, duration=duration
-        )
+
+        return await asyncio.to_thread(pipeline, audio=audio, return_timestamps=return_timestamps, duration=duration)
+        
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.
