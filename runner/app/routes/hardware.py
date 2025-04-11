@@ -1,3 +1,4 @@
+import asyncio
 import os
 from typing import Dict
 
@@ -38,10 +39,11 @@ class HardwareStats(BaseModel):
     include_in_schema=False,
 )
 async def hardware_info(request: Request):
+    gpu_info = await asyncio.to_thread(request.app.hardware_info_service.get_gpu_compute_info)
     return HardwareInformation(
         pipeline=os.environ["PIPELINE"],
         model_id=os.environ["MODEL_ID"],
-        gpu_info=request.app.hardware_info_service.get_gpu_compute_info(),
+        gpu_info=gpu_info,
     )
 
 
@@ -56,8 +58,9 @@ async def hardware_info(request: Request):
     include_in_schema=False,
 )
 async def hardware_stats(request: Request):
+    gpu_stats = await asyncio.to_thread(request.app.hardware_info_service.get_gpu_utilization_stats)
     return HardwareStats(
         pipeline=os.environ["PIPELINE"],
         model_id=os.environ["MODEL_ID"],
-        gpu_stats=request.app.hardware_info_service.get_gpu_utilization_stats(),
+        gpu_stats=gpu_stats,
     )
