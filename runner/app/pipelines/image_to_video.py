@@ -1,11 +1,12 @@
 import logging
+import inspect
 import os
 import time
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import PIL
 import torch
-from diffusers import StableVideoDiffusionPipeline
+from diffusers import DiffusionPipeline, LTXImageToVideoPipeline, StableVideoDiffusionPipeline
 from huggingface_hub import file_download
 from PIL import ImageFile
 
@@ -22,6 +23,8 @@ SFAST_WARMUP_ITERATIONS = 2  # Model warm-up iterations when SFAST is enabled.
 
 class ImageToVideoPipeline(Pipeline):
     def __init__(self, model_id: str):
+        self.pipeline_name = ""
+
         self.model_id = model_id
         kwargs = {"cache_dir": get_model_dir()}
 
@@ -41,8 +44,21 @@ class ImageToVideoPipeline(Pipeline):
             kwargs["torch_dtype"] = torch.float16
             kwargs["variant"] = "fp16"
 
-        self.ldm = StableVideoDiffusionPipeline.from_pretrained(model_id, **kwargs)
-        self.ldm.to(get_torch_device())
+        logger.info("Loading DiffusionPipeline for model_id: %s", model_id)
+        self.ldm = DiffusionPipeline.from_pretrained(model_id, **kwargs)
+
+        if any(substring in model_id.lower() for substring in ("ltx-video", "ltx")):
+            logger.info("Adjusting to LTXImageToVideoPipeline for model_id: %s", model_id)
+            self.ldm = LTXImageToVideoPipeline.from_pipe(self.ldm)
+            self.ldm.enable_model_cpu_offload()
+            self.ldm.vae.enable_slicing()
+            LOW_VRAM = os.getenv("USE_LOW_VRAM", "false")
+            if LOW_VRAM == "true":
+                self.ldm.enable_sequential_cpu_offload()
+        else:
+            self.ldm.to(get_torch_device())
+
+        self.pipeline_name = type(self.ldm).__name__
 
         sfast_enabled = os.getenv("SFAST", "").strip().lower() == "true"
         deepcache_enabled = os.getenv("DEEPCACHE", "").strip().lower() == "true"
@@ -52,7 +68,9 @@ class ImageToVideoPipeline(Pipeline):
                 "as it may lead to suboptimal performance. Please disable one of them."
             )
 
-        if sfast_enabled:
+        if sfast_enabled and self.pipeline_name == "LTXImageToVideoPipeline":
+            logger.warning("StableFast optimization is not compatible with LTXImageToVideoPipeline so,skipping.")
+        elif sfast_enabled:
             logger.info(
                 "ImageToVideoPipeline will be dynamically compiled with stable-fast "
                 "for %s",
@@ -95,9 +113,11 @@ class ImageToVideoPipeline(Pipeline):
                     )
                 logger.info("Total warmup time: %s seconds", total_time)
 
-        if deepcache_enabled:
+        if deepcache_enabled and self.pipeline_name == "LTXImageToVideoPipeline":
+            logger.warning("DeepCache optimization is not compatible with LTXImageToVideoPipeline so,skipping.")
+        elif deepcache_enabled:
             logger.info(
-                "TextToImagePipeline will be optimized with DeepCache for %s",
+                "ImageToVideoPipeline will be optimized with DeepCache for %s",
                 model_id,
             )
             from app.pipelines.optim.deepcache import enable_deepcache
@@ -132,6 +152,13 @@ class ImageToVideoPipeline(Pipeline):
         ):
             del kwargs["num_inference_steps"]
 
+        if self.pipeline_name == "LTXImageToVideoPipeline":
+            pipeline_class = LTXImageToVideoPipeline
+        elif self.pipeline_name == "StableVideoDiffusionPipeline":
+            pipeline_class = StableVideoDiffusionPipeline            
+
+        kwargs = self._filter_valid_kwargs(pipeline_class, kwargs)
+
         if safety_check:
             _, has_nsfw_concept = self._safety_checker.check_nsfw_images([image])
         else:
@@ -145,6 +172,15 @@ class ImageToVideoPipeline(Pipeline):
             raise InferenceError(original_exception=e)
 
         return outputs.frames, has_nsfw_concept
+
+    @staticmethod
+    def _filter_valid_kwargs(pipeline_class: Type, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Filters the kwargs to just include keys that are necesssary for the pipeline_class.
+        """
+
+        valid_kwargs = inspect.signature(pipeline_class.__call__).parameters.keys()
+        return {k: v for k, v in kwargs.items() if k in valid_kwargs}
 
     def __str__(self) -> str:
         return f"ImageToVideoPipeline model_id={self.model_id}"
