@@ -24,7 +24,9 @@ async def lifespan(app: FastAPI):
     app.include_router(hardware.router)
 
     pipeline = os.environ["PIPELINE"]
-    model_id = os.environ["MODEL_ID"]
+    model_id = os.environ.get("MODEL_ID", "")
+    if pipeline != "transformers" and not model_id:
+        raise EnvironmentError(f"MODEL_ID must be set when using pipeline {pipeline}")
 
     app.pipeline = load_pipeline(pipeline, model_id)
     app.include_router(load_route(pipeline))
@@ -83,6 +85,8 @@ def load_pipeline(pipeline: str, model_id: str) -> any:
             from app.pipelines.text_to_speech import TextToSpeechPipeline
 
             return TextToSpeechPipeline(model_id)
+        case "transformers":
+            return None
         case _:
             raise EnvironmentError(
                 f"{pipeline} is not a valid pipeline for model {model_id}"
@@ -133,6 +137,10 @@ def load_route(pipeline: str) -> any:
             from app.routes import text_to_speech
 
             return text_to_speech.router
+        case "transformers":
+            from app.routes import transformers
+
+            return transformers.router
         case _:
             raise EnvironmentError(f"{pipeline} is not a valid pipeline")
 
