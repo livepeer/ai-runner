@@ -1397,12 +1397,20 @@ components:
       title: ValidationError
     Version:
       properties:
+        pipeline:
+          type: string
+          title: Pipeline
+        model_id:
+          type: string
+          title: Model Id
         version:
           type: string
           title: Version
           description: The version of the Runner
       type: object
       required:
+      - pipeline
+      - model_id
       - version
       title: Version
     VideoResponse:
