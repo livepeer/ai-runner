@@ -11,6 +11,7 @@ from app.routes import (
     audio_to_text,
     hardware,
     health,
+    version,
     image_to_image,
     image_to_text,
     image_to_video,
@@ -104,6 +105,7 @@ def write_openapi(fname: str, entrypoint: str = "runner"):
     if entrypoint != "gateway":
         app.include_router(health.router)
         app.include_router(hardware.router)
+        app.include_router(version.router)
     app.include_router(text_to_image.router)
     app.include_router(image_to_image.router)
     app.include_router(image_to_video.router)

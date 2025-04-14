@@ -542,6 +542,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HardwareStats'
+  /version:
+    get:
+      summary: Version
+      operationId: version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionCheck'
 components:
   schemas:
     APIError:
@@ -986,14 +997,9 @@ components:
           - IDLE
           title: Status
           description: The health status of the pipeline
-        version:
-          type: string
-          title: Version
-          description: The version of the Runner
       type: object
       required:
       - status
-      - version
       title: HealthCheck
     ImageResponse:
       properties:
@@ -1389,6 +1395,16 @@ components:
       - msg
       - type
       title: ValidationError
+    VersionCheck:
+      properties:
+        version:
+          type: string
+          title: Version
+          description: The version of the Runner
+      type: object
+      required:
+      - version
+      title: VersionCheck
     VideoResponse:
       properties:
         frames:
