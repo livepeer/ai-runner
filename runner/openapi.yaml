@@ -988,11 +988,12 @@ components:
           description: The health status of the pipeline
         version:
           type: string
-          title: Runner version
+          title: Version
           description: The version of the Runner
       type: object
       required:
       - status
+      - version
       title: HealthCheck
     ImageResponse:
       properties:
