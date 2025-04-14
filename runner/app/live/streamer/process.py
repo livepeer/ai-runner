@@ -113,7 +113,7 @@ class PipelineProcess:
 
     def process_loop(self):
         self._setup_logging()
-        pipeline = None
+#        pipeline = None
 
         # Ensure CUDA environment is available inside the subprocess.
         # Multiprocessing (spawn mode) does not inherit environment variables by default,
@@ -150,7 +150,7 @@ class PipelineProcess:
             params = {}
             try:
                 params = self.param_update_queue.get_nowait()
-                logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
+                logging.info(f"PipelineProcess: Got params from param_update_queue {params}") 
                 params = self._handle_logging_params(params)
             except queue.Empty:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
@@ -210,8 +210,8 @@ class PipelineProcess:
     async def _output_loop(self, pipeline: Pipeline):
         while not self.is_done():
             try:
-                output_frame = await pipeline.get_processed_video_frame()
-                output_frame.log_timestamps["post_process_frame"] = time.time()
+                output_frame = await pipeline.get_processed_video_frame(self.request_id)
+                #output_frame.log_timestamps["post_process_frame"] = time.time()
                 await asyncio.to_thread(self.output_queue.put, output_frame)
             except Exception as e:
                 self._report_error(f"Error processing output frame: {e}")
