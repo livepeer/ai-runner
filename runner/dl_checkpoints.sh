@@ -146,12 +146,9 @@ function build_tensorrt_models() {
     )
   
   # Dreamshaper-8-Dmd-1kstep static dynamic 488x704
-  # TODO(pschroedl): Remove the script download with curl. 
-  # It will be present in the base image once https://github.com/livepeer/comfystream/pull/107 is merged
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
-                curl -O https://raw.githubusercontent.com/yondonfu/comfystream/535c71a6f665bc1169d07cddd4e2b3cf4edd5a82/src/comfystream/scripts/build_trt.py
-                python ./build_trt.py \
+                $CONDA_PYTHON ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/dynamic-dreamshaper8_SD15_\$dyn-b-1-4-2-h-448-704-512-w-448-704-512_00001_.engine \
                 --width 512 \
@@ -159,7 +156,7 @@ function build_tensorrt_models() {
                 --min-width 448 \
                 --min-height 448 \
                 --max-width 704 \
-                --max-height 704 \
+                --max-height 704 && \
                 adduser $(id -u -n) && \
                 chown -R $(id -u -n):$(id -g -n) /models" ||
     (
