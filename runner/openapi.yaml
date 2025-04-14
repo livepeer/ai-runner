@@ -552,7 +552,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VersionCheck'
+                $ref: '#/components/schemas/Version'
 components:
   schemas:
     APIError:
@@ -1395,7 +1395,7 @@ components:
       - msg
       - type
       title: ValidationError
-    VersionCheck:
+    Version:
       properties:
         version:
           type: string
@@ -1404,7 +1404,7 @@ components:
       type: object
       required:
       - version
-      title: VersionCheck
+      title: Version
     VideoResponse:
       properties:
         frames:
