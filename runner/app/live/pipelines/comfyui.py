@@ -1,7 +1,6 @@
 import os
 import json
 import torch
-import asyncio
 import numpy as np
 from PIL import Image
 from typing import Union
@@ -9,7 +8,7 @@ from pydantic import BaseModel, field_validator
 import pathlib
 
 from .interface import Pipeline
-from comfystream.client import ComfyStreamClient
+from comfystream.pipeline import Pipeline as ComfyStreamPipeline
 from trickle import VideoFrame, VideoOutput
 
 import logging
@@ -52,52 +51,43 @@ class ComfyUIParams(BaseModel):
 class ComfyUI(Pipeline):
     def __init__(self):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
-        self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
+        self.pipeline = ComfyStreamPipeline(width=512, height=512, cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
-        self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
 
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
-        # TODO: currently its a single prompt, but need to support multiple prompts
-        await self.client.set_prompts([new_params.prompt])
+        await self.pipeline.set_prompts([new_params.prompt])
         self.params = new_params
 
         # Warm up the pipeline
-        dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
-
-        for _ in range(WARMUP_RUNS):
-            self.client.put_video_input(dummy_frame)
-            _ = await self.client.get_video_output()
+        await self.pipeline.warm_video()
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        # Convert VideoFrame to format expected by comfystream
         image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
         frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
         frame.side_data.skipped = True
-        self.client.put_video_input(frame)
-        await self.video_incoming_frames.put(VideoOutput(frame, request_id))
+        frame.side_data.request_id = request_id
+        await self.pipeline.put_video_frame(frame)
 
-    async def get_processed_video_frame(self):
-        result_tensor = await self.client.get_video_output()
-        out = await self.video_incoming_frames.get()
-        while out.frame.side_data.skipped:
-            out = await self.video_incoming_frames.get()
-
+    async def get_processed_video_frame(self) -> VideoOutput:
+        processed_frame = await self.pipeline.get_processed_video_frame()
+        # Convert back to VideoOutput format
+        result_tensor = processed_frame.side_data.input
         result_tensor = result_tensor.squeeze(0)
         result_image_np = (result_tensor * 255).byte()
         result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return out.replace_image(result_image)
+        return VideoOutput(processed_frame, processed_frame.side_data.request_id).replace_image(result_image)
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
-        # TODO: currently its a single prompt, but need to support multiple prompts
-        await self.client.update_prompts([new_params.prompt])
+        await self.pipeline.update_prompts([new_params.prompt])
         self.params = new_params
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
-        await self.client.cleanup()
+        await self.pipeline.cleanup()
         logging.info("ComfyUI pipeline stopped")
