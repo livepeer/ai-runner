@@ -19,6 +19,7 @@ proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntar
 
 class LiveVideoToVideoPipeline(Pipeline):
     def __init__(self, model_id: str):
+        self.version = os.getenv("VERSION", "undefined")
         self.model_id = model_id
         self.model_dir = get_model_dir()
         self.torch_device = get_torch_device()
@@ -74,7 +75,7 @@ class LiveVideoToVideoPipeline(Pipeline):
             # The infer process is supposed to be always running, so if it's
             # gone it means an ERROR and the worker is allowed to kill us.
             logging.error("[HEALTHCHECK] Infer process is not running")
-            return HealthCheck(status="ERROR")
+            return HealthCheck(status="ERROR", version=self.version)
 
         try:
             conn = http.client.HTTPConnection("localhost", 8888)
@@ -90,7 +91,8 @@ class LiveVideoToVideoPipeline(Pipeline):
 
             pipe_status = PipelineStatus(**json.loads(response.read().decode()))
             return HealthCheck(
-                status="IDLE" if pipe_status.state == "OFFLINE" else "OK"
+                status="IDLE" if pipe_status.state == "OFFLINE" else "OK",
+                version=self.version,
             )
         except Exception as e:
             logging.error(f"[HEALTHCHECK] Failed to get status: {type(e).__name__}: {str(e)}")

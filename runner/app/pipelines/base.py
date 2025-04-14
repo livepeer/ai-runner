@@ -20,4 +20,4 @@ class Pipeline(ABC):
         """
         Returns a health check object for the pipeline.
         """
-        return HealthCheck(status="OK")
+        return HealthCheck(status="OK", version="undefined")

@@ -3,6 +3,9 @@ ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
 ARG PIPELINE
 ENV PIPELINE=${PIPELINE}
+ARG VERSION="undefined"
+ENV VERSION=${VERSION}
+
 
 # Install latest stable Go version and system dependencies
 RUN apt-get update && apt-get install -y \
