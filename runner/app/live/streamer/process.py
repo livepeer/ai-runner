@@ -113,7 +113,6 @@ class PipelineProcess:
 
     def process_loop(self):
         self._setup_logging()
-#        pipeline = None
 
         # Ensure CUDA environment is available inside the subprocess.
         # Multiprocessing (spawn mode) does not inherit environment variables by default,
@@ -146,6 +145,7 @@ class PipelineProcess:
 
     async def _initialize_pipeline(self):
         try:
+            pipeline = None
             stream_id = ""
             params = {}
             try:
@@ -176,6 +176,7 @@ class PipelineProcess:
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
         param_task = asyncio.create_task(self._param_update_loop(pipeline))
+
 
         async def wait_for_stop():
             while not self.is_done():
