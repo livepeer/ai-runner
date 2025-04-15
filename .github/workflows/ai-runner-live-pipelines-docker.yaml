@@ -88,7 +88,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 50
+          fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Get changed files
@@ -178,7 +178,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 50
+          fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Get changed files
