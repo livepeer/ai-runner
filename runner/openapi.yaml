@@ -3,7 +3,7 @@ openapi: 3.1.0
 info:
   title: Livepeer AI Runner
   description: An application to run AI pipelines
-  version: 0.1.0
+  version: 0.0.0
 servers:
 - url: https://dream-gateway.livepeer.cloud
   description: Livepeer Cloud Community Gateway
@@ -569,7 +569,8 @@ components:
     AudioResponse:
       properties:
         audio:
-          $ref: '#/components/schemas/MediaURL'
+          allOf:
+          - $ref: '#/components/schemas/MediaURL'
           description: The generated audio.
       type: object
       required:
@@ -929,7 +930,8 @@ components:
     HTTPError:
       properties:
         detail:
-          $ref: '#/components/schemas/APIError'
+          allOf:
+          - $ref: '#/components/schemas/APIError'
           description: Detailed error information.
       type: object
       required:
@@ -1033,9 +1035,11 @@ components:
           title: Finish Reason
           default: ''
         delta:
-          $ref: '#/components/schemas/LLMMessage'
+          allOf:
+          - $ref: '#/components/schemas/LLMMessage'
         message:
-          $ref: '#/components/schemas/LLMMessage'
+          allOf:
+          - $ref: '#/components/schemas/LLMMessage'
       type: object
       required:
       - index
