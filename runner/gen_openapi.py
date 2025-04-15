@@ -2,6 +2,8 @@ import argparse
 import copy
 import json
 import logging
+import os
+import pathlib
 
 import yaml
 from fastapi.openapi.utils import get_openapi
@@ -24,7 +26,12 @@ from app.routes import (
 )
 
 logging.basicConfig(
-    level=logging.INFO,
+    # Making the script futureproof, where we generate the spec in workflows
+    level=(
+        logging.DEBUG
+        if any([x in os.environ for x in ("CI", "DEBUG")])
+        else logging.INFO
+    ),
     format="%(asctime)s - %(levelname)s - %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
@@ -120,12 +127,12 @@ def write_openapi(fname: str, entrypoint: str = "runner"):
     logger.info(f"Generating OpenAPI schema for '{entrypoint}' entrypoint...")
     openapi = get_openapi(
         title="Livepeer AI Runner",
-        version="0.0.0",
+        version=os.getenv("VERSION", pathlib.Path("VERSION").open().read().strip()),
         openapi_version=app.openapi_version,
         description="An application to run AI pipelines",
         routes=app.routes,
         servers=SERVERS,
-        separate_input_output_schemas=False
+        separate_input_output_schemas=False,
     )
 
     # Translate OpenAPI schema to 'gateway' side entrypoint if requested.
@@ -167,8 +174,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--entrypoint",
         type=str,
-        choices=["gateway","runner"],
-        default=["gateway","runner"],
+        choices=["gateway", "runner"],
+        default=["gateway", "runner"],
         nargs="+",
         help=(
             "The entrypoint to generate the OpenAPI schema for, options are 'runner' "
