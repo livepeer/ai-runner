@@ -123,7 +123,7 @@ infer_params:
   source_video_eye_retargeting_threshold: 0.18 # threshold for eyes retargeting if the input is a source video
   driving_smooth_observation_variance: 1e-7 # smooth strength scalar for the animated video when the input is a source video, the larger the number, the smoother the animated video; too much smoothness would result in loss of motion accuracy
   anchor_frame: 0 # TO IMPLEMENT
-  mask_crop_path: "./assets/mask_template.png"
+  mask_crop_path: "/home/user/FasterLivePortrait/assets/mask_template.png"
   driving_multiplier: 1.0
   animation_region: "lip"
 
@@ -328,7 +328,9 @@ class PipelineProcess:
                 output_frame = await pipeline.get_processed_video_frame()
                 output_frame.log_timestamps["post_process_frame"] = time.time()
                 try:
-                    output_frame.replace_image(self.live_portrait_process.animate_image(np.array(output_frame.image.convert("RGB")), np.array(output_frame.side_data.original_image.convert("RGB"))))
+                    src_image = np.array(output_frame.image.convert("RGB"))
+                    dri_image = np.array(output_frame.side_data.original_image.convert("RGB"))
+                    output_frame.replace_image(self.live_portrait_process.animate_image(src_image, dri_image))
                 except Exception as e:
                     logging.info(f"Error animating image: {e}")
                 await asyncio.to_thread(self._queue_put_fifo, self.output_queue, output_frame)
