@@ -149,6 +149,7 @@ jobs:
           echo "version=$(bash runner/print_version.sh)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push pipeline app image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
@@ -162,7 +163,38 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-dockerbuildcache
+          cache-from: |
+            type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-dockerbuildcache
+            livepeer/ai-runner:latest
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-dockerbuildcache,mode=max
+
+      - name: Extract metadata for app image with /models directory
+        id: meta-models
+        uses: docker/metadata-action@v5
+        with:
+          images: livepeer/ai-runner
+          tags: |
+            type=raw,value=live-app-${{ matrix.pipeline }}-with-models,enable={{is_default_branch}}
+            type=sha,prefix=live-app-${{ matrix.pipeline }}-with-models-
+            type=ref,event=pr,prefix=live-app-${{ matrix.pipeline }}-with-models-
+            type=ref,event=tag,prefix=live-app-${{ matrix.pipeline }}-with-models-
+            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-${{ matrix.pipeline }}-with-models-
+
+      - name: Build and push pipeline app image with /models directory
+        uses: docker/build-push-action@v6
+        with:
+          context: "{{defaultContext}}:runner"
+          file: docker/Dockerfile.live-app__PIPELINE__-models-rtx-4090
+          build-args: |
+            BASE=livepeer/ai-runner@${{ steps.build.outputs.Digest }}
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta-models.outputs.tags }}
+          annotations: ${{ steps.meta-models.outputs.annotations }}
+          labels: ${{ steps.meta.outputs-models.labels }}
+          cache-from: |
+            livepeer/ai-runner@${{ steps.build.outputs.Digest }}
+            type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-with-models-dockerbuildcache
           cache-to: type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-dockerbuildcache,mode=max
 
       - name: Notify new build upload
