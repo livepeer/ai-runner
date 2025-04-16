@@ -9,141 +9,129 @@ from typing import Any
 import torch
 import numpy as np
 from PIL import Image
+from omegaconf import OmegaConf
 from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
 
-LIVE_PORTRAIT_INFER_CFG = """{
-   "grid_sample_plugin_path":"/home/user/grid-sample3d-trt-plugin/build/libgrid_sample_3d_plugin.so",
-   "models":{
-      "warping_spade":{
-         "name":"WarpingSpadeModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/warping_spade-fix.trt"
-      },
-      "motion_extractor":{
-         "name":"MotionExtractorModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/motion_extractor.trt"
-      },
-      "landmark":{
-         "name":"LandmarkModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/landmark.trt"
-      },
-      "face_analysis":{
-         "name":"FaceAnalysisModel",
-         "predict_type":"trt",
-         "model_path":[
-            "/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/retinaface_det_static.trt",
-            "/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/face_2dpose_106_static.trt"
-         ]
-      },
-      "app_feat_extractor":{
-         "name":"AppearanceFeatureExtractorModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/appearance_feature_extractor.trt"
-      },
-      "stitching":{
-         "name":"StitchingModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/stitching.trt"
-      },
-      "stitching_eye_retarget":{
-         "name":"StitchingModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/stitching_eye.trt"
-      },
-      "stitching_lip_retarget":{
-         "name":"StitchingModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/stitching_lip.trt"
-      }
-   },
-   "animal_models":{
-      "warping_spade":{
-         "name":"WarpingSpadeModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_animal_onnx/warping_spade-fix-v1.1.trt"
-      },
-      "motion_extractor":{
-         "name":"MotionExtractorModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_animal_onnx/motion_extractor-v1.1.trt"
-      },
-      "app_feat_extractor":{
-         "name":"AppearanceFeatureExtractorModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_animal_onnx/appearance_feature_extractor-v1.1.trt"
-      },
-      "stitching":{
-         "name":"StitchingModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_animal_onnx/stitching-v1.1.trt"
-      },
-      "stitching_eye_retarget":{
-         "name":"StitchingModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_animal_onnx/stitching_eye-v1.1.trt"
-      },
-      "stitching_lip_retarget":{
-         "name":"StitchingModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_animal_onnx/stitching_lip-v1.1.trt"
-      },
-      "landmark":{
-         "name":"LandmarkModel",
-         "predict_type":"trt",
-         "model_path":"/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/landmark.trt"
-      },
-      "face_analysis":{
-         "name":"FaceAnalysisModel",
-         "predict_type":"trt",
-         "model_path":[
-            "/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/retinaface_det_static.trt",
-            "/home/user/FastLivePortrait/checkpoints/liveportrait_onnx/face_2dpose_106_static.trt"
-         ]
-      }
-   },
-   "joyvasa_models":{
-      "motion_model_path":"checkpoints/JoyVASA/motion_generator/motion_generator_hubert_chinese.pt",
-      "audio_model_path":"checkpoints/chinese-hubert-base",
-      "motion_template_path":"checkpoints/JoyVASA/motion_template/motion_template.pkl"
-   },
-   "crop_params":{
-      "src_dsize":512,
-      "src_scale":2.3,
-      "src_vx_ratio":0.0,
-      "src_vy_ratio":-0.125,
-      "dri_scale":2.2,
-      "dri_vx_ratio":0.0,
-      "dri_vy_ratio":-0.1
-   },
-   "infer_params":{
-      "flag_crop_driving_video":false,
-      "flag_normalize_lip":false,
-      "flag_source_video_eye_retargeting":false,
-      "flag_video_editing_head_rotation":false,
-      "flag_eye_retargeting":false,
-      "flag_lip_retargeting":false,
-      "flag_stitching":true,
-      "flag_relative_motion":false,
-      "flag_pasteback":true,
-      "flag_do_crop":true,
-      "flag_do_rot":true,
-      "lip_normalize_threshold":0.1,
-      "source_video_eye_retargeting_threshold":0.18,
-      "driving_smooth_observation_variance":1e-07,
-      "anchor_frame":0,
-      "mask_crop_path":"./assets/mask_template.png",
-      "driving_multiplier":1.0,
-      "animation_region":"lip",
-      "cfg_mode":"incremental",
-      "cfg_scale":1.2,
-      "source_max_dim":1280,
-      "source_division":2
-   }
-}"""
+from faster_live_portrait import FasterLivePortraitPipeline
+
+LIVE_PORTRAIT_INFER_CFG = """grid_sample_plugin_path: "/home/user/grid-sample3d-trt-plugin/build/libgrid_sample_3d_plugin.so"
+
+models:
+  warping_spade:
+    name: "WarpingSpadeModel"
+    predict_type: "trt"
+    model_path: "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/warping_spade-fix.trt"
+  motion_extractor:
+    name: "MotionExtractorModel"
+    predict_type: "trt"
+    model_path: "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/motion_extractor.trt"
+  landmark:
+    name: "LandmarkModel"
+    predict_type: "trt"
+    model_path: "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/landmark.trt"
+  face_analysis:
+    name: "FaceAnalysisModel"
+    predict_type: "trt"
+    model_path:
+      - "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/retinaface_det_static.trt"
+      - "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/face_2dpose_106_static.trt"
+  app_feat_extractor:
+    name: "AppearanceFeatureExtractorModel"
+    predict_type: "trt"
+    model_path: "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/appearance_feature_extractor.trt"
+  stitching:
+    name: "StitchingModel"
+    predict_type: "trt"
+    model_path: "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/stitching.trt"
+  stitching_eye_retarget:
+    name: "StitchingModel"
+    predict_type: "trt"
+    model_path: "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/stitching_eye.trt"
+  stitching_lip_retarget:
+    name: "StitchingModel"
+    predict_type: "trt"
+    model_path: "/home/user/FasterLivePortrait/checkpoints/liveportrait_onnx/stitching_lip.trt"
+
+animal_models:
+  warping_spade:
+    name: "WarpingSpadeModel"
+    predict_type: "trt"
+    model_path: "./checkpoints/liveportrait_animal_onnx/warping_spade-fix-v1.1.trt"
+  motion_extractor:
+    name: "MotionExtractorModel"
+    predict_type: "trt"
+    model_path: "./checkpoints/liveportrait_animal_onnx/motion_extractor-v1.1.trt"
+  app_feat_extractor:
+    name: "AppearanceFeatureExtractorModel"
+    predict_type: "trt"
+    model_path: "./checkpoints/liveportrait_animal_onnx/appearance_feature_extractor-v1.1.trt"
+  stitching:
+    name: "StitchingModel"
+    predict_type: "trt"
+    model_path: "./checkpoints/liveportrait_animal_onnx/stitching-v1.1.trt"
+  stitching_eye_retarget:
+    name: "StitchingModel"
+    predict_type: "trt"
+    model_path: "./checkpoints/liveportrait_animal_onnx/stitching_eye-v1.1.trt"
+  stitching_lip_retarget:
+    name: "StitchingModel"
+    predict_type: "trt"
+    model_path: "./checkpoints/liveportrait_animal_onnx/stitching_lip-v1.1.trt"
+  landmark:
+    name: "LandmarkModel"
+    predict_type: "trt"
+    model_path: "./checkpoints/liveportrait_onnx/landmark.trt"
+  face_analysis:
+    name: "FaceAnalysisModel"
+    predict_type: "trt"
+    model_path:
+      - "./checkpoints/liveportrait_onnx/retinaface_det_static.trt"
+      - "./checkpoints/liveportrait_onnx/face_2dpose_106_static.trt"
+
+joyvasa_models:
+  motion_model_path: "checkpoints/JoyVASA/motion_generator/motion_generator_hubert_chinese.pt"
+  audio_model_path: "checkpoints/chinese-hubert-base"
+  motion_template_path: "checkpoints/JoyVASA/motion_template/motion_template.pkl"
+
+crop_params:
+  src_dsize: 512
+  src_scale: 2.3
+  src_vx_ratio: 0.0
+  src_vy_ratio: -0.125
+  dri_scale: 2.2
+  dri_vx_ratio: 0.0
+  dri_vy_ratio: -0.1
+
+
+infer_params:
+  flag_crop_driving_video: False
+  flag_normalize_lip: False
+  flag_source_video_eye_retargeting: False
+  flag_video_editing_head_rotation: False
+  flag_eye_retargeting: False
+  flag_lip_retargeting: False
+  flag_stitching: True
+  flag_relative_motion: False
+  flag_pasteback: True
+  flag_do_crop: True
+  flag_do_rot: True
+
+  # NOT EXPOERTED PARAMS
+  lip_normalize_threshold: 0.1 # threshold for flag_normalize_lip
+  source_video_eye_retargeting_threshold: 0.18 # threshold for eyes retargeting if the input is a source video
+  driving_smooth_observation_variance: 1e-7 # smooth strength scalar for the animated video when the input is a source video, the larger the number, the smoother the animated video; too much smoothness would result in loss of motion accuracy
+  anchor_frame: 0 # TO IMPLEMENT
+  mask_crop_path: "./assets/mask_template.png"
+  driving_multiplier: 1.0
+  animation_region: "lip"
+
+  cfg_mode: "incremental"
+  cfg_scale: 1.2
+
+  source_max_dim: 1280 # the max dim of height and width of source image
+  source_division: 2 # make sure the height and width of source image can be divided by this number"""
 
 
 class PipelineProcess:
@@ -161,15 +149,13 @@ class PipelineProcess:
         self.ctx = mp.get_context("spawn")
 
         self.input_queue = self.ctx.Queue(maxsize=5)
-        self.mid_queue = self.ctx.Queue(maxsize=5)
         self.output_queue = self.ctx.Queue()
         self.param_update_queue = self.ctx.Queue()
         self.error_queue = self.ctx.Queue()
         self.log_queue = self.ctx.Queue(maxsize=100)  # Keep last 100 log lines
 
         self.done = self.ctx.Event()
-        self.process = self.ctx.Process(target=self.process_loop, args=())
-        self.live_portrait_process = self.ctx.Process(target=self.live_portrait_pipeline, args=())
+        self.process = self.ctx.Process(target=self.process_loop, args=(LIVE_PORTRAIT_INFER_CFG,))
         self.start_time = 0.0
         self.request_id = ""
 
@@ -182,32 +168,21 @@ class PipelineProcess:
         if not self.process.is_alive():
             logging.info("Process already not alive")
             return
-        
-        if not self.live_portrait_process.is_alive():
-            logging.info("Live portrait process already not alive")
-            return
-
-        self.live_portrait_process.terminate()
-        self.live_portrait_process.join()
 
         logging.info("Terminating pipeline process")
 
         stopped = False
         try:
             self.process.join(timeout=10)
-            self.live_portrait_process.join(timeout=10)
             stopped = True
         except Exception as e:
             logging.error(f"Process join error: {e}")
         if not stopped or self.process.is_alive():
             logging.error("Failed to terminate process, killing")
             self.process.kill()
-        if not stopped or self.live_portrait_process.is_alive():
-            logging.error("Failed to terminate live portrait process, killing")
-            self.live_portrait_process.kill()
 
         for q in [self.input_queue, self.output_queue, self.param_update_queue,
-                  self.error_queue, self.log_queue, self.mid_queue]:
+                  self.error_queue, self.log_queue]:
             q.cancel_join_thread()
             q.close()
 
@@ -223,7 +198,6 @@ class PipelineProcess:
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
         clear_queue(self.log_queue)
-        clear_queue(self.mid_queue)
         self.param_update_queue.put({"request_id": request_id, "stream_id": stream_id})
 
     # TODO: Once audio is implemented, combined send_input with input_loop
@@ -254,10 +228,9 @@ class PipelineProcess:
                 break
         return logs[-n:] if n is not None else logs  # Only limit if n is specified
 
-    def process_loop(self):
+    def process_loop(self, live_portrait_cfg: str):
         self._setup_logging()
-        pipeline = None
-
+        self.live_portrait_process = FasterLivePortraitPipeline(cfg=OmegaConf.create(live_portrait_cfg), is_animal=False)
         # Ensure CUDA environment is available inside the subprocess.
         # Multiprocessing (spawn mode) does not inherit environment variables by default,
         # causing `torch.cuda.current_device()` checks in ComfyUI's model_management.py to fail.
@@ -275,24 +248,6 @@ class PipelineProcess:
             asyncio.run(self._run_pipeline_loops())
         except Exception as e:
             self._report_error(f"Error in process run method: {e}")
-
-    def live_portrait_pipeline(self):
-        self._setup_logging()
-        from faster_live_portrait import FasterLivePortraitPipeline
-        pipeline = FasterLivePortraitPipeline(cfg=LIVE_PORTRAIT_INFER_CFG, is_animal=False)
-        logging.info("Live portrait pipeline initialized")
-        
-        while not self.is_done():
-            try:
-                logging.info("Live portrait pipeline waiting for mid frame")
-                mid_frame = self.mid_queue.get()
-                logging.info("Live portrait pipeline got mid frame")
-                animated_image_np = pipeline.animate_image(np.array(mid_frame.image.convert("RGB")), mid_frame.side_data.original_image.convert("RGB"))
-                mid_frame.replace_image(Image.fromarray(animated_image_np))
-                self.output_queue.put(mid_frame)
-            except Exception as e:
-                self._report_error(f"Error in live portrait pipeline: {e}")
-                raise e
 
     def _handle_logging_params(self, params: dict) -> dict:
         if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
@@ -372,9 +327,11 @@ class PipelineProcess:
             try:
                 output_frame = await pipeline.get_processed_video_frame()
                 output_frame.log_timestamps["post_process_frame"] = time.time()
-                logging.info("Output loop got output frame")
-                await asyncio.to_thread(self._queue_put_fifo, self.mid_queue, output_frame)
-                logging.info("Output loop put output frame in mid queue")
+                try:
+                    output_frame.replace_image(self.live_portrait_process.animate_image(np.array(output_frame.image.convert("RGB")), np.array(output_frame.side_data.original_image.convert("RGB"))))
+                except Exception as e:
+                    logging.info(f"Error animating image: {e}")
+                await asyncio.to_thread(self._queue_put_fifo, self.output_queue, output_frame)
             except Exception as e:
                 self._report_error(f"Error processing output frame: {e}")
 
