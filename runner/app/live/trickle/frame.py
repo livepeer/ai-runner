@@ -9,6 +9,7 @@ class SideData:
     """
     skipped: bool = True
     input: Union[Image.Image, np.ndarray] = None
+    original_image: Image.Image = None
 
 class InputFrame:
     """
@@ -95,6 +96,10 @@ class VideoOutput(OutputFrame):
     @property
     def log_timestamps(self):
         return self.frame.log_timestamps
+
+    @property
+    def side_data(self):
+        return self.frame.side_data
 
 class AudioOutput(OutputFrame):
     frames: List[AudioFrame]

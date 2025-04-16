@@ -15,6 +15,7 @@ class Noop(Pipeline):
 
   async def get_processed_video_frame(self) -> VideoOutput:
     out = await self.frame_queue.get()
+    out.side_data.original_image = out.image
     processed_frame = out.image.convert("RGB")
     return out.replace_image(processed_frame)
 

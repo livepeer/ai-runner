@@ -73,6 +73,7 @@ class ComfyUI(Pipeline):
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        frame.side_data.original_image = frame.image
         image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
         frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
         frame.side_data.skipped = True
