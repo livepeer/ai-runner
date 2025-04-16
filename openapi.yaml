@@ -986,10 +986,6 @@ components:
           - IDLE
           title: Status
           description: The health status of the pipeline
-        version:
-          type: string
-          title: Runner version
-          description: The version of the Runner
       type: object
       required:
       - status

@@ -33,7 +33,9 @@ async def lifespan(app: FastAPI):
     app.hardware_info_service.log_gpu_compute_info()
     logger.info(f"Started up with pipeline {app.pipeline}")
 
-    VERSION.labels(app="ai-runner", version=os.getenv("VERSION", "undefined")).set(1)
+    version=os.getenv("VERSION", "undefined")
+    VERSION.labels(app="ai-runner", version=version).set(1)
+    logger.info("Runner version: %s", version)
 
     yield
 
