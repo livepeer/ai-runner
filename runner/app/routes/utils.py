@@ -145,6 +145,10 @@ class LiveVideoToVideoResponse(BaseModel):
         default='',
         description="URL for subscribing to events for pipeline status and logs",
     )
+    request_id: str = Field(
+        default='',
+        description="The ID generated for this request",
+    )
 
 
 class APIError(BaseModel):

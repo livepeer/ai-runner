@@ -9,6 +9,7 @@ from PIL import Image
 from trickle import media, TricklePublisher, TrickleSubscriber, InputFrame, OutputFrame, AudioFrame, AudioOutput
 
 from .protocol import StreamProtocol
+from .last_value_cache import LastValueCache
 
 class TrickleProtocol(StreamProtocol):
     def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None):
@@ -24,12 +25,14 @@ class TrickleProtocol(StreamProtocol):
         self.publish_task = None
 
     async def start(self):
-        metadata_queue = queue.Queue[dict]() # to pass video metadata from decoder to encoder
+        self.subscribe_queue = queue.Queue[InputFrame]()
+        self.publish_queue = queue.Queue[OutputFrame]()
+        metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
-            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_queue.put)
+            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_queue.get)
+            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)
@@ -63,8 +66,10 @@ class TrickleProtocol(StreamProtocol):
         self.publish_task = None
 
     async def ingress_loop(self, done: asyncio.Event) -> AsyncGenerator[InputFrame, None]:
+        subscribe_queue = self.subscribe_queue
+        publish_queue = self.publish_queue
         def dequeue_frame():
-            frame = self.subscribe_queue.get()
+            frame = subscribe_queue.get()
             if not frame:
                 return None
 
@@ -77,25 +82,23 @@ class TrickleProtocol(StreamProtocol):
             # TEMP: Put audio immediately into the publish queue
             # TODO: Remove once there is ComfyUI audio support
             if isinstance(image, AudioFrame):
-                self.publish_queue.put(AudioOutput([image]))
+                publish_queue.put(AudioOutput([image]))
                 continue
             yield image
 
     async def egress_loop(self, output_frames: AsyncGenerator[OutputFrame, None]):
+        publish_queue = self.publish_queue
         def enqueue_bytes(frame: OutputFrame):
-            if frame:
-                self.publish_queue.put(frame)
-            else:
-                self.publish_queue.put(None)
+            publish_queue.put(frame)
 
         async for frame in output_frames:
             await asyncio.to_thread(enqueue_bytes, frame)
 
-    async def emit_monitoring_event(self, event: dict):
+    async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         if not self.events_publisher:
             return
         try:
-            event_json = json.dumps(event)
+            event_json = json.dumps({"event": event, "queue_event_type": queue_event_type})
             async with await self.events_publisher.next() as event:
                 await event.write(event_json.encode())
         except Exception as e:

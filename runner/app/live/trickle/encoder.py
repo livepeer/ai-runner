@@ -1,12 +1,13 @@
 import asyncio
 import av
+import time
 import datetime
 import logging
 import os
 from typing import Optional
 from fractions import Fraction
 
-from .frame import VideoOutput, AudioOutput
+from .frame import VideoOutput, AudioOutput, InputFrame
 
 # use mpegts default time base
 OUT_TIME_BASE=Fraction(1, 90_000)
@@ -35,7 +36,7 @@ def encode_av(
         read_fd, write_fd = os.pipe()
         read_file  = os.fdopen(read_fd,  'rb', buffering=0)
         write_file = os.fdopen(write_fd, 'wb', buffering=0)
-        output_callback(read_file, url)
+        output_callback(read_file, write_file, url)
         return write_file
 
     # Open the output container in write mode
@@ -57,7 +58,7 @@ def encode_av(
         # Add a new stream to the output using the desired audio codec
         output_audio_stream = output_container.add_stream(audio_codec)
         output_audio_stream.time_base = OUT_TIME_BASE
-        output_audio_stream.sample_rate = audio_meta['sample_rate'] # TODO take from inference if not passthru
+        output_audio_stream.sample_rate = 48000
         output_audio_stream.layout = 'mono'
         # Optional: set other encoding parameters, e.g.:
         # output_audio_stream.bit_rate = 128_000
@@ -75,6 +76,8 @@ def encode_av(
             if not output_video_stream:
                 # received video but no video output, so drop
                 continue
+            avframe.log_timestamps["frame_end"] = time.time()
+            log_frame_timestamps("Video", avframe.frame)
             frame = av.video.frame.VideoFrame.from_image(avframe.image)
             frame.pts = rescale_ts(avframe.timestamp, avframe.time_base, output_video_stream.codec_context.time_base)
             frame.time_base = output_video_stream.codec_context.time_base
@@ -99,6 +102,8 @@ def encode_av(
                 # downstream tools
                 continue
             for af in avframe.frames:
+                af.log_timestamps["frame_end"] = time.time()
+                log_frame_timestamps("Audio", af)
                 frame = av.audio.frame.AudioFrame.from_ndarray(af.samples, format=af.format, layout=af.layout)
                 frame.sample_rate = af.rate
                 frame.pts = rescale_ts(af.timestamp, af.time_base, output_audio_stream.codec_context.time_base)
@@ -129,3 +134,17 @@ def rescale_ts(pts: int, orig_tb: Fraction, dest_tb: Fraction):
     if orig_tb == dest_tb:
         return pts
     return int(round(float((Fraction(pts) * orig_tb) / dest_tb)))
+
+
+def log_frame_timestamps(frame_type: str, frame: InputFrame):
+    ts = frame.log_timestamps
+
+    def log_duration(start_key: str, end_key: str):
+        if start_key in ts and end_key in ts:
+            duration = ts[end_key] - ts[start_key]
+            logging.debug(f"frame_type={frame_type} start_tag={start_key} end_tag={end_key} duration_s={duration}s")
+
+    log_duration('frame_init', 'pre_process_frame')
+    log_duration('pre_process_frame', 'post_process_frame')
+    log_duration('post_process_frame', 'frame_end')
+    log_duration('frame_init', 'frame_end')

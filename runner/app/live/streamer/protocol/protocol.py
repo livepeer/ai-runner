@@ -27,7 +27,7 @@ class StreamProtocol(ABC):
         pass
 
     @abstractmethod
-    async def emit_monitoring_event(self, event: dict):
+    async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         """Sends a monitoring event to the event stream if available"""
         pass
 

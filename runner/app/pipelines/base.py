@@ -6,6 +6,11 @@ from pydantic import BaseModel, Field
 class HealthCheck(BaseModel):
     status: Literal["OK", "ERROR", "IDLE"] = Field(..., description="The health status of the pipeline")
 
+class Version(BaseModel):
+    pipeline: str
+    model_id: str
+    version: str = Field(..., description="The version of the Runner")
+
 class Pipeline(ABC):
     @abstractmethod
     def __init__(self, model_id: str, model_dir: str):
@@ -20,4 +25,4 @@ class Pipeline(ABC):
         """
         Returns a health check object for the pipeline.
         """
-        return HealthCheck(status="OK")
+        return HealthCheck(status="OK", version="undefined")

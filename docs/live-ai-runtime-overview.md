@@ -13,6 +13,12 @@ The architecture consists of several key components:
 
 ![Architecture Overview](./assets/ai-inference-runtime-arch.jpg)
 
+### Video Overview
+
+We did a team session to share knowledge on the whole AI Runner architecture. Here are the resources:
+- [Recording](https://drive.google.com/file/d/1Mx0dp7bATBTX-ZkQfSxzRchvuOZpKjCm/view)
+- [Miro Board](https://miro.com/app/board/uXjVIIMmtjw=/?share_link_id=971432331307)
+
 ## Startup flow
 
 The high level description of how the above components interact is:

@@ -1,7 +1,6 @@
 import av
+import time
 import logging
-import sys
-from PIL import Image
 
 from .frame import InputFrame
 
@@ -79,6 +78,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         continue
 
                     avframe = InputFrame.from_av_audio(aframe)
+                    avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)
                     continue
 
@@ -108,6 +108,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         w = int((512 * frame.width / frame.height) / 2) * 2
                     frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
                     avframe = InputFrame.from_av_video(frame)
+                    avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)
                     continue
 
