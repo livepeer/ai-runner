@@ -1,236 +1,25 @@
 import os
 import json
 import torch
-from PIL import Image
 import asyncio
 import numpy as np
+from PIL import Image
 from typing import Union
 from pydantic import BaseModel, field_validator
+import pathlib
 
 from .interface import Pipeline
 from comfystream.client import ComfyStreamClient
+from trickle import VideoFrame, VideoOutput
 
 import logging
 
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
-DEFAULT_WORKFLOW_JSON = json.loads("""
-{
-  "1": {
-    "inputs": {
-      "image": "DALL·E 2024-11-15 10.15.49 - An anime-style character standing in a modern office space. The character is a young professional, dressed in a stylish business outfit, with medium-l.jpg",
-      "upload": "image"
-    },
-    "class_type": "LoadImage",
-    "_meta": {
-      "title": "Load Image"
-    }
-  },
-  "2": {
-    "inputs": {
-      "engine": "depth_anything_vitl14-fp16.engine",
-      "images": [
-        "1",
-        0
-      ]
-    },
-    "class_type": "DepthAnythingTensorrt",
-    "_meta": {
-      "title": "Depth Anything Tensorrt"
-    }
-  },
-  "3": {
-    "inputs": {
-      "unet_name": "static-dreamshaper8_SD15_$stat-b-1-h-512-w-512_00001_.engine",
-      "model_type": "SD15"
-    },
-    "class_type": "TensorRTLoader",
-    "_meta": {
-      "title": "TensorRT Loader"
-    }
-  },
-  "4": {
-    "inputs": {
-      "ckpt_name": "SD1.5/dreamshaper-8.safetensors"
-    },
-    "class_type": "CheckpointLoaderSimple",
-    "_meta": {
-      "title": "Load Checkpoint"
-    }
-  },
-  "5": {
-    "inputs": {
-      "text": "the hulk",
-      "clip": [
-        "4",
-        1
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Prompt)"
-    }
-  },
-  "6": {
-    "inputs": {
-      "text": "",
-      "clip": [
-        "4",
-        1
-      ]
-    },
-    "class_type": "CLIPTextEncode",
-    "_meta": {
-      "title": "CLIP Text Encode (Prompt)"
-    }
-  },
-  "7": {
-    "inputs": {
-      "seed": 945236422600751,
-      "steps": 1,
-      "cfg": 1,
-      "sampler_name": "lcm",
-      "scheduler": "normal",
-      "denoise": 1,
-      "model": [
-        "3",
-        0
-      ],
-      "positive": [
-        "9",
-        0
-      ],
-      "negative": [
-        "9",
-        1
-      ],
-      "latent_image": [
-        "16",
-        0
-      ]
-    },
-    "class_type": "KSampler",
-    "_meta": {
-      "title": "KSampler"
-    }
-  },
-  "8": {
-    "inputs": {
-      "control_net_name": "control_v11f1p_sd15_depth_fp16.safetensors"
-    },
-    "class_type": "ControlNetLoader",
-    "_meta": {
-      "title": "Load ControlNet Model"
-    }
-  },
-  "9": {
-    "inputs": {
-      "strength": 1,
-      "start_percent": 0,
-      "end_percent": 1,
-      "positive": [
-        "5",
-        0
-      ],
-      "negative": [
-        "6",
-        0
-      ],
-      "control_net": [
-        "10",
-        0
-      ],
-      "image": [
-        "2",
-        0
-      ]
-    },
-    "class_type": "ControlNetApplyAdvanced",
-    "_meta": {
-      "title": "Apply ControlNet"
-    }
-  },
-  "10": {
-    "inputs": {
-      "backend": "inductor",
-      "fullgraph": false,
-      "mode": "reduce-overhead",
-      "controlnet": [
-        "8",
-        0
-      ]
-    },
-    "class_type": "TorchCompileLoadControlNet",
-    "_meta": {
-      "title": "TorchCompileLoadControlNet"
-    }
-  },
-  "11": {
-    "inputs": {
-      "vae_name": "taesd"
-    },
-    "class_type": "VAELoader",
-    "_meta": {
-      "title": "Load VAE"
-    }
-  },
-  "13": {
-    "inputs": {
-      "backend": "inductor",
-      "fullgraph": true,
-      "mode": "reduce-overhead",
-      "compile_encoder": true,
-      "compile_decoder": true,
-      "vae": [
-        "11",
-        0
-      ]
-    },
-    "class_type": "TorchCompileLoadVAE",
-    "_meta": {
-      "title": "TorchCompileLoadVAE"
-    }
-  },
-  "14": {
-    "inputs": {
-      "samples": [
-        "7",
-        0
-      ],
-      "vae": [
-        "13",
-        0
-      ]
-    },
-    "class_type": "VAEDecode",
-    "_meta": {
-      "title": "VAE Decode"
-    }
-  },
-  "15": {
-    "inputs": {
-      "images": [
-        "14",
-        0
-      ]
-    },
-    "class_type": "PreviewImage",
-    "_meta": {
-      "title": "Preview Image"
-    }
-  },
-  "16": {
-    "inputs": {
-      "width": 512,
-      "height": 512,
-      "batch_size": 1
-    },
-    "class_type": "EmptyLatentImage",
-    "_meta": {
-      "title": "Empty Latent Image"
-    }
-  }
-}
-""")
+WARMUP_RUNS = 1
+
+_default_workflow_path = pathlib.Path(__file__).parent.absolute() / "comfyui_default_workflow.json"
+with open(_default_workflow_path, 'r') as f:
+    DEFAULT_WORKFLOW_JSON = json.load(f)
 
 
 class ComfyUIParams(BaseModel):
@@ -261,39 +50,54 @@ class ComfyUIParams(BaseModel):
 
 
 class ComfyUI(Pipeline):
-    def __init__(self, **params):
-        super().__init__(**params)
-
+    def __init__(self):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
         self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
+        self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
 
-        self.update_params(**params)
+    async def initialize(self, **params):
+        new_params = ComfyUIParams(**params)
+        logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
+        # TODO: currently its a single prompt, but need to support multiple prompts
+        await self.client.set_prompts([new_params.prompt])
+        self.params = new_params
 
-        # Comfy will cache nodes that only need to be run once (i.e. a node that loads model weights)
-        # We can run the prompt once before actual inputs come in to "warmup"
-        warmup_input = torch.randn(1, 512, 512, 3)
-        asyncio.get_event_loop().run_until_complete(self.client.queue_prompt(warmup_input))
+        # Warm up the pipeline
+        dummy_frame = VideoFrame(None, 0, 0)
+        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
 
-    def process_frame(self, image: Image.Image) -> Image.Image:
-        # Normalize by dividing by 255 to ensure the tensor values are between 0 and 1
-        image_np = np.array(image.convert("RGB")).astype(np.float32) / 255.0
-        # Convert from numpy to torch.Tensor
-        # Initially, the torch.Tensor will have shape HWC but we want BHWC
-        # unsqueeze(0) will add a batch dimension at the beginning of 1 which means we just have 1 image
-        image_tensor = torch.tensor(image_np).unsqueeze(0)
+        for _ in range(WARMUP_RUNS):
+            self.client.put_video_input(dummy_frame)
+            _ = await self.client.get_video_output()
+        logging.info("Pipeline initialization and warmup complete")
 
-        # Process using ComfyUI pipeline
-        result_tensor = asyncio.get_event_loop().run_until_complete(self.client.queue_prompt(image_tensor))
+    async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
+        frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
+        frame.side_data.skipped = True
+        self.client.put_video_input(frame)
+        await self.video_incoming_frames.put(VideoOutput(frame, request_id))
 
-        # Convert back from Tensor to PIL.Image
+    async def get_processed_video_frame(self):
+        result_tensor = await self.client.get_video_output()
+        out = await self.video_incoming_frames.get()
+        while out.frame.side_data.skipped:
+            out = await self.video_incoming_frames.get()
+
         result_tensor = result_tensor.squeeze(0)
         result_image_np = (result_tensor * 255).byte()
         result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return result_image
+        return out.replace_image(result_image)
 
-    def update_params(self, **params):
+    async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
-        logging.info(f"ComfyUI Pipeline Prompt: {new_params.prompt}")
-        self.client.set_prompt(new_params.prompt)
+        logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
+        # TODO: currently its a single prompt, but need to support multiple prompts
+        await self.client.update_prompts([new_params.prompt])
         self.params = new_params
+
+    async def stop(self):
+        logging.info("Stopping ComfyUI pipeline")
+        await self.client.stop()
+        logging.info("ComfyUI pipeline stopped")

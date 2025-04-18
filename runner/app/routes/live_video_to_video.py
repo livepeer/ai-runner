@@ -72,6 +72,20 @@ class LiveVideoToVideoParams(BaseModel):
             description="Initial parameters for the pipeline."
         ),
     ]
+    gateway_request_id: Annotated[
+        str,
+        Field(
+            default="",
+            description="The ID of the Gateway request (for logging purposes)."
+        ),
+    ]
+    stream_id: Annotated[
+        str,
+        Field(
+            default="",
+            description="The Stream ID (for logging purposes)."
+        ),
+    ]
 
 RESPONSES: dict[int | str, dict[str, Any]]= {
     status.HTTP_200_OK: {
@@ -108,8 +122,6 @@ async def live_video_to_video(
     params: LiveVideoToVideoParams,
     pipeline: Pipeline = Depends(get_pipeline),
     token: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
-    requestID: str = Header(None),
-    streamID: str = Header(None),
 ):
     auth_token = os.environ.get("AUTH_TOKEN")
     if auth_token:
@@ -130,7 +142,7 @@ async def live_video_to_video(
         )
 
     try:
-        pipeline(**params.model_dump(), request_id=requestID, stream_id=streamID)
+        pipeline(**params.model_dump(), request_id=params.gateway_request_id)
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             torch.cuda.empty_cache()

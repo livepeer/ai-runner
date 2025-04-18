@@ -23,7 +23,7 @@ RUN ls /usr/local/lib && ls /usr/local/lib/pkgconfig && ls -lha /usr/local/bin &
 
 # Install any additional Python packages
 RUN pip install --no-cache-dir \
-    uvicorn==0.30.0 \
+    uvicorn==0.34.0 \
     fastapi==0.111.0 \
     numpy==1.26.4 \
     torch==2.5.1 \
@@ -35,7 +35,8 @@ RUN pip install --no-cache-dir \
     opencv-python==4.10.0.84 \
     --no-binary=av \
     av==14.0.1 \
-    psutil==6.0.0
+    psutil==6.0.0 \
+    prometheus_client>=0.21.1
 
 # Set environment variables
 ENV MAX_WORKERS=1
@@ -48,6 +49,9 @@ COPY app/ /app/app
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 
+ARG VERSION="undefined"
+ENV VERSION=${VERSION}
+
 WORKDIR /app
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

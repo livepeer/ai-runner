@@ -37,7 +37,7 @@ class ZeroMQProtocol(StreamProtocol):
             frame_bytes = to_jpeg_bytes(frame)
             await self.output_socket.send(frame_bytes)
 
-    async def emit_monitoring_event(self, event: dict):
+    async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         pass  # No-op for ZeroMQ
 
     async def control_loop(self, done: asyncio.Event) -> AsyncGenerator[dict, None]:

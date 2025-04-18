@@ -4,8 +4,7 @@
 
 # ComfyUI image configuration
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
-
-docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
+CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 
 # Checks HF_TOKEN and huggingface-cli login status and throw warning if not authenticated.
 check_hf_auth() {
@@ -92,21 +91,23 @@ function download_all_models() {
 
 # Download models only for the live-video-to-video pipeline.
 function download_live_models() {
+  docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
+
   # ComfyUI models
   if ! docker image inspect $AI_RUNNER_COMFYUI_IMAGE >/dev/null 2>&1; then
     echo "ERROR: ComfyUI base image $AI_RUNNER_COMFYUI_IMAGE not found"
-    return 1
+    exit 1
   fi
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
   docker run --rm -v ./models:/models --gpus all -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
-    bash -c "cd /comfystream && \
-                 python src/comfystream/scripts/setup_models.py --workspace /ComfyUI && \
+    bash -c "cd /workspace/comfystream && \
+                 $CONDA_PYTHON src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
                  adduser $(id -u -n) && \
                  chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI setup_models.py"
-      return 1
+      exit 1
     )
 }
 
@@ -122,27 +123,45 @@ function build_tensorrt_models() {
 
   # Depth-Anything-Tensorrt
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
-    bash -c "cd /ComfyUI/models/tensorrt/depth-anything && \
-                python /ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py && \
+    bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
+                $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
+                $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
                 adduser $(id -u -n) && \
                 chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI Depth-Anything-Tensorrt"
-      return 1
+      exit 1
     )
 
   # Dreamshaper-8-Dmd-1kstep
-  # TODO: Remove the script download with curl. It should already come in the base image once eliteprox/comfystream#1 is merged.
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
-    bash -c "cd /comfystream/src/comfystream/scripts && \
-                 curl -O https://raw.githubusercontent.com/pschroedl/comfystream/refs/heads/10_29/build_trt/src/comfystream/scripts/build_trt.py && \
-                 python ./build_trt.py \
-                --model /ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
-                --out-engine /ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
-                 adduser $(id -u -n) && \
+    bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
+                $CONDA_PYTHON ./build_trt.py \
+                --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
+                --out-engine /workspace/ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
+                adduser $(id -u -n) && \
                  chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI build_trt.py"
+      exit 1
+    )
+  
+  # Dreamshaper-8-Dmd-1kstep static dynamic 488x704
+  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+    bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
+                $CONDA_PYTHON ./build_trt.py \
+                --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
+                --out-engine /workspace/ComfyUI/output/tensorrt/dynamic-dreamshaper8_SD15_\$dyn-b-1-4-2-h-448-704-512-w-448-704-512_00001_.engine \
+                --width 512 \
+                --height 512 \
+                --min-width 448 \
+                --min-height 448 \
+                --max-width 704 \
+                --max-height 704 && \
+                adduser $(id -u -n) && \
+                chown -R $(id -u -n):$(id -g -n) /models" ||
+    (
+      echo "failed ComfyUI build_trt.py dynamic engine"
       return 1
     )
 }
@@ -207,7 +226,7 @@ done
 
 echo "Starting livepeer AI subnet model downloader..."
 echo "Creating 'models' directory in the current working directory..."
-mkdir -p models/checkpoints models/StreamDiffusion--engines models/ComfyUI--{models,output}
+mkdir -p models/checkpoints models/ComfyUI--{models,output}
 
 # Ensure 'huggingface-cli' is installed.
 echo "Checking if 'huggingface-cli' is installed..."

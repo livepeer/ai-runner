@@ -1,4 +1,4 @@
 #!/bin/sh
 
 cd /app
-exec uvicorn app.main:app --log-config app/cfg/uvicorn_logging_config.json --host 0.0.0.0 --port 8000
+exec uvicorn app.main:app --log-config app/cfg/uvicorn_logging_config.json --host "" --port 8000

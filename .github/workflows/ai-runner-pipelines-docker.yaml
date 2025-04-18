@@ -26,7 +26,7 @@ jobs:
     permissions:
       packages: write
       contents: read
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -37,7 +37,7 @@ jobs:
           - docker/Dockerfile.llm
     steps:
       - name: Check out code
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           # Check https://github.com/livepeer/go-livepeer/pull/1891
@@ -69,7 +69,7 @@ jobs:
           images: |
             livepeer/ai-runner
           tags: |
-            type=raw,value=${{ steps.docker-tag.outputs.suffix }}
+            type=raw,value=${{ steps.docker-tag.outputs.suffix }},enable={{is_default_branch}}
             type=sha,prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=ref,event=pr,prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=ref,event=tag,prefix=${{ steps.docker-tag.outputs.suffix }}-
@@ -84,7 +84,7 @@ jobs:
             type=raw,value=stable,enable=${{ startsWith(github.event.ref, 'refs/tags/v') }},prefix=${{ steps.docker-tag.outputs.suffix }}-
 
       - name: Build and push runner docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
           platforms: linux/amd64
