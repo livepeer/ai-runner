@@ -127,12 +127,6 @@ def upscale(
     image = Image.open(image.file).convert("RGB")
 
     try:
-        pipeline_call = partial(pipeline,
-                                prompt=prompt,
-                                image=image,
-                                num_inference_steps=num_inference_steps,
-                                safety_check=safety_check,
-                                seed=seed)
         images, has_nsfw_concept = pipeline(
             prompt=prompt,
             image=image,
