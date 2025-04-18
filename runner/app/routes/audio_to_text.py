@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from typing import Annotated, Dict, Tuple, Union
@@ -90,7 +89,7 @@ def parse_return_timestamps(value: str) -> Union[bool, str]:
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def audio_to_text(
+def audio_to_text(
     audio: Annotated[
         UploadFile, File(description="Uploaded audio file to be transcribed.")
     ],
@@ -156,8 +155,9 @@ async def audio_to_text(
         )
 
     try:
-
-        return await asyncio.to_thread(pipeline, audio=audio, return_timestamps=return_timestamps, duration=duration)
+        return pipeline(
+            audio=audio, return_timestamps=return_timestamps, duration=duration
+        )
         
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):

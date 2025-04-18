@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from typing import Annotated, Dict, Tuple, Union
@@ -65,7 +64,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def image_to_text(
+def image_to_text(
     image: Annotated[
         UploadFile, File(description="Uploaded image to transform with the pipeline.")
     ],
@@ -106,8 +105,7 @@ async def image_to_text(
 
     image = Image.open(image.file).convert("RGB")
     try:
-        out = await asyncio.to_thread(pipeline, prompt=prompt, image=image)
-        return ImageToTextResponse(text=out)
+        return ImageToTextResponse(text=pipeline(prompt=prompt, image=image))
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.

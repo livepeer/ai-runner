@@ -1,4 +1,3 @@
-import asyncio
 from functools import partial
 import logging
 import os
@@ -70,7 +69,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def upscale(
+def upscale(
     prompt: Annotated[
         str,
         Form(description="Text prompt(s) to guide upscaled image generation."),
@@ -134,7 +133,13 @@ async def upscale(
                                 num_inference_steps=num_inference_steps,
                                 safety_check=safety_check,
                                 seed=seed)
-        images, has_nsfw_concept = await asyncio.to_thread(pipeline_call)
+        images, has_nsfw_concept = pipeline(
+            prompt=prompt,
+            image=image,
+            num_inference_steps=num_inference_steps,
+            safety_check=safety_check,
+            seed=seed,
+        )
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.

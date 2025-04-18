@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 import time
@@ -94,7 +93,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def text_to_speech(
+def text_to_speech(
     params: TextToSpeechParams,
     pipeline: Pipeline = Depends(get_pipeline),
     token: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
@@ -128,7 +127,7 @@ async def text_to_speech(
 
     try:
         start = time.time()
-        out = await asyncio.to_thread(pipeline, params)
+        out = pipeline(params)
         logger.info(f"TextToSpeechPipeline took {time.time() - start} seconds.")
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
