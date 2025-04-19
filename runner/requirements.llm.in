@@ -1,4 +1,4 @@
-vllm==0.6.5
+vllm==0.8.4
 diffusers
 accelerate
 transformers
@@ -20,3 +20,6 @@ sentencepiece
 protobuf
 bitsandbytes
 psutil
+nvidia-ml-py>=12.560.30
+pynvml==12.0.0
+prometheus_client>=0.21.1
