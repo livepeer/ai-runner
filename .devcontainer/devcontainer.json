@@ -12,7 +12,6 @@
             "args": {
                 "PIPELINE": "comfyui"
             },
-            // "dockerfile": "../Dockerfile",
             // "dockerfile": "../docker/Dockerfile.text_to_speech",
             "context": "../runner"
         },
