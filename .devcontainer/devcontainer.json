@@ -8,12 +8,12 @@
             "PIPELINE": "comfyui"
         },
         "build": {
-			"dockerfile": "../runner/Dockerfile",
+			// "dockerfile": "../runner/Dockerfile",
 			// "dockerfile": "../docker/Dockerfile.text_to_speech",
-            // "dockerfile": "../runner/docker/Dockerfile.live-app__PIPELINE__",
-            // "args": {
-            //     "PIPELINE": "comfyui"
-            // },
+            "dockerfile": "../runner/docker/Dockerfile.live-app__PIPELINE__",
+            "args": {
+                "PIPELINE": "comfyui"
+            },
             "context": "../runner"
         },
         "runArgs": [
