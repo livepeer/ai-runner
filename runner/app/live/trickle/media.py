@@ -11,6 +11,9 @@ from .trickle_publisher import TricklePublisher
 from .decoder import decode_av
 from .encoder import encode_av
 
+MAX_DECODER_RETRIES = 3
+DECODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
+
 MAX_ENCODER_RETRIES = 3
 ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 
@@ -73,13 +76,27 @@ async def AsyncifyFdWriter(write_fd):
 
 async def decode_in(in_pipe, frame_callback, put_metadata):
     def decode_runner():
-        try:
-            decode_av(f"pipe:{in_pipe}", frame_callback, put_metadata)
-        except Exception as e:
-            logging.error(f"Decoding error {e}", exc_info=True)
-        finally:
-            os.close(in_pipe)
-            logging.info("Decoding finished")
+        retry_count = 0
+        last_retry_time = time.time()
+        while retry_count < MAX_DECODER_RETRIES:
+            try:
+                decode_av(f"pipe:{in_pipe}", frame_callback, put_metadata)
+                break  # clean exit
+            except Exception as e:
+                current_time = time.time()
+                # Reset retry counter if enough time has elapsed
+                if current_time - last_retry_time > DECODER_RETRY_RESET_SECONDS:
+                    logging.info("Resetting decoder retry count")
+                    retry_count = 0
+                retry_count += 1
+                last_retry_time = current_time
+                if retry_count < MAX_DECODER_RETRIES:
+                    logging.exception(f"Error in decode_av, retrying {retry_count}/{MAX_DECODER_RETRIES}", stack_info=True)
+                else:
+                    logging.exception("Error in decode_av, maximum retries reached", stack_info=True)
+
+        os.close(in_pipe)
+        logging.info("Decoding finished")
 
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, decode_runner)
