@@ -26,8 +26,7 @@ async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monito
         await asyncio.gather(subscribe_task, parse_task)
         logging.info("run_subscribe complete")
     except Exception as e:
-        logging.error(f"preprocess got error {e}", e)
-        raise e
+        logging.exception("run_subscribe got error", stack_info=True)
     finally:
         put_metadata(None) # in case decoder quit without writing anything
 
@@ -83,6 +82,10 @@ async def decode_in(in_pipe, frame_callback, put_metadata):
                 decode_av(f"pipe:{in_pipe}", frame_callback, put_metadata)
                 break  # clean exit
             except Exception as e:
+                msg = str(e)
+                if f"Invalid data found when processing input: 'pipe:{in_pipe}'" in msg:
+                    logging.info("Stream closed before initialization")
+                    break
                 current_time = time.time()
                 # Reset retry counter if enough time has elapsed
                 if current_time - last_retry_time > DECODER_RETRY_RESET_SECONDS:

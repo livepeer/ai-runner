@@ -114,6 +114,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
 
     except Exception as e:
         logging.error(f"Exception while decoding: {e}")
+        raise # should be caught upstream
 
     finally:
         container.close()
