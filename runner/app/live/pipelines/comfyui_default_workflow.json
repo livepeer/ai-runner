@@ -30,7 +30,7 @@
   },
   "5": {
     "inputs": {
-      "text": "the hulk",
+      "text": "",
       "clip": ["23", 0]
     },
     "class_type": "CLIPTextEncode",
