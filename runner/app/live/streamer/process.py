@@ -172,10 +172,10 @@ class PipelineProcess:
                     raise
 
     async def _run_pipeline_loops(self):
-        pipeline = await self._initialize_pipeline()
-        input_task = asyncio.create_task(self._input_loop(pipeline))
-        output_task = asyncio.create_task(self._output_loop(pipeline))
-        param_task = asyncio.create_task(self._param_update_loop(pipeline))
+        self.pipeline = await self._initialize_pipeline()
+        input_task = asyncio.create_task(self._input_loop())
+        output_task = asyncio.create_task(self._output_loop())
+        param_task = asyncio.create_task(self._param_update_loop())
 
         async def wait_for_stop():
             while not self.is_done():
@@ -225,21 +225,22 @@ class PipelineProcess:
             raise  # Re-raise to ensure the error is propagated
         finally:
             try:
-                await pipeline.stop()
+                if self.pipeline:
+                    await self.pipeline.stop()
             except Exception as e:
                 self._report_error(f"Error stopping pipeline: {str(e)}")
             finally:
-                pipeline = None
+                self.pipeline = None
                 
             logging.info("Successfully stopped pipeline")
 
-    async def _input_loop(self, pipeline: Pipeline):
+    async def _input_loop(self):
         while not self.is_done():
             try:
                 input_frame = await asyncio.to_thread(self.input_queue.get)
                 if isinstance(input_frame, VideoFrame):
                     input_frame.log_timestamps["pre_process_frame"] = time.time()
-                    await pipeline.put_video_frame(input_frame, self.request_id)
+                    await self.pipeline.put_video_frame(input_frame, self.request_id)
                 elif isinstance(input_frame, AudioFrame):
                     await asyncio.to_thread(self.output_queue.put, AudioOutput([input_frame], self.request_id))
             except queue.Empty:
@@ -247,22 +248,22 @@ class PipelineProcess:
             except Exception as e:
                 self._report_error(f"Error processing input frame: {e}")
 
-    async def _output_loop(self, pipeline: Pipeline):
+    async def _output_loop(self):
         while not self.is_done():
             try:
-                output_frame = await pipeline.get_processed_video_frame()
+                output_frame = await self.pipeline.get_processed_video_frame()
                 output_frame.log_timestamps["post_process_frame"] = time.time()
                 await asyncio.to_thread(self.output_queue.put, output_frame)
             except Exception as e:
                 self._report_error(f"Error processing output frame: {e}")
 
-    async def _param_update_loop(self, pipeline: Pipeline):
+    async def _param_update_loop(self):
         while not self.is_done():
             try:
                 params = await asyncio.to_thread(self.param_update_queue.get)
                 if self._handle_logging_params(params):
                     logging.info(f"PipelineProcess: Updating pipeline parameters: {params}")
-                    await pipeline.update_params(**params)
+                    await self.pipeline.update_params(**params)
             except queue.Empty:
                 await asyncio.sleep(0.1)
             except Exception as e:
