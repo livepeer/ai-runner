@@ -26,7 +26,7 @@ class PipelineProcess:
     def __init__(self, pipeline_name: str):
         self.pipeline_name = pipeline_name
         self.ctx = mp.get_context("spawn")
-
+        self.tasks: list[asyncio.Task] = []
         self.input_queue = self.ctx.Queue(maxsize=5)
         self.output_queue = self.ctx.Queue()
         self.param_update_queue = self.ctx.Queue()
@@ -190,36 +190,48 @@ class PipelineProcess:
             
             logging.info("PipelineProcess: Pipeline shutting down") 
             
-            # Check if any task failed
+            # Check if any task failed and get the error details
+            error_task = None
             for task in done:
                 try:
                     await task
                 except Exception as e:
-                    self._report_error(f"Error in pipeline loop: {e}")
+                    error_task = task
+                    error_msg = f"Error in {task.get_name() if task.get_name() else 'pipeline'} loop: {str(e)}"
+                    self._report_error(error_msg)
                     # Set done to stop other tasks
                     self.done.set()
                     break
             
             # Cancel remaining tasks
             for task in pending:
-                task.cancel()
+                try:
+                    task.cancel()
+                    await task
+                except asyncio.CancelledError:
+                    # Expected cancellation
+                    pass
+                except Exception as e:
+                    task_name = task.get_name() if task.get_name() else 'unknown'
+                    self._report_error(f"Error while cancelling {task_name} task: {str(e)}")
             
-            # Wait for cancellation to complete
-            if pending:
-                await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
+            # If a task failed, re-raise the error with more context
+            if error_task:
+                error_task.result() # This will re-raise the original exception
                 
         except Exception as e:
-            self._report_error(f"Error in pipeline loops: {e}")
+            self._report_error(f"Fatal error in pipeline loops: {str(e)}")
             self.done.set()
+            raise  # Re-raise to ensure the error is propagated
         finally:
             try:
                 await pipeline.stop()
             except Exception as e:
-                self._report_error(f"Error stopping pipeline: {e}")
+                self._report_error(f"Error stopping pipeline: {str(e)}")
             finally:
                 pipeline = None
                 
-            logging.info("PipelineProcess: Pipeline loops stopped") 
+            logging.info("Successfully stopped pipeline")
 
     async def _input_loop(self, pipeline: Pipeline):
         while not self.is_done():
