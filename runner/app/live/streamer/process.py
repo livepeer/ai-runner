@@ -180,18 +180,46 @@ class PipelineProcess:
         async def wait_for_stop():
             while not self.is_done():
                 await asyncio.sleep(0.1)
-
-        tasks = [input_task, output_task, param_task, asyncio.create_task(wait_for_stop())]
+            logging.info("PipelineProcess: Pipeline loops interrupted, stopping pipeline")
 
         try:
-            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            self.tasks = [input_task, output_task, param_task, asyncio.create_task(wait_for_stop())]
+            
+            # Wait for first task to complete or fail
+            done, pending = await asyncio.wait(self.tasks, return_when=asyncio.FIRST_COMPLETED)
+            
+            logging.info("PipelineProcess: Pipeline shutting down") 
+            
+            # Check if any task failed
+            for task in done:
+                try:
+                    await task
+                except Exception as e:
+                    self._report_error(f"Error in pipeline loop: {e}")
+                    # Set done to stop other tasks
+                    self.done.set()
+                    break
+            
+            # Cancel remaining tasks
+            for task in pending:
+                task.cancel()
+            
+            # Wait for cancellation to complete
+            if pending:
+                await asyncio.wait(pending, return_when=asyncio.ALL_COMPLETED)
+                
         except Exception as e:
             self._report_error(f"Error in pipeline loops: {e}")
+            self.done.set()
         finally:
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            await self._cleanup_pipeline(pipeline)
+            try:
+                await pipeline.stop()
+            except Exception as e:
+                self._report_error(f"Error stopping pipeline: {e}")
+            finally:
+                pipeline = None
+                
+            logging.info("PipelineProcess: Pipeline loops stopped") 
 
     async def _input_loop(self, pipeline: Pipeline):
         while not self.is_done():
@@ -236,12 +264,6 @@ class PipelineProcess:
         logging.error(error_msg)
         self._queue_put_fifo(self.error_queue, error_event)
 
-    async def _cleanup_pipeline(self, pipeline):
-        if pipeline is not None:
-            try:
-                await pipeline.stop()
-            except Exception as e:
-                logging.error(f"Error stopping pipeline: {e}")
 
     def _setup_logging(self):
         level = (
