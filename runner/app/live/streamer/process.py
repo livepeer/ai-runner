@@ -191,33 +191,21 @@ class PipelineProcess:
             logging.info("PipelineProcess: Pipeline shutting down") 
             
             # Check if any task failed and get the error details
-            error_task = None
-            for task in done:
-                try:
-                    await task
-                except Exception as e:
-                    error_task = task
-                    error_msg = f"Error in {task.get_name() if task.get_name() else 'pipeline'} loop: {str(e)}"
-                    self._report_error(error_msg)
-                    # Set done to stop other tasks
-                    self.done.set()
-                    break
-            
-            # Cancel remaining tasks
-            for task in pending:
-                try:
-                    task.cancel()
-                    await task
-                except asyncio.CancelledError:
-                    # Expected cancellation
-                    pass
-                except Exception as e:
+            results = await asyncio.gather(*done, return_exceptions=True)
+            for task, result in zip(done, results):
+                if isinstance(result, Exception):
                     task_name = task.get_name() if task.get_name() else 'unknown'
-                    self._report_error(f"Error while cancelling {task_name} task: {str(e)}")
+                    self._report_error(f"Error while cancelling {task_name} task: {str(result)}")
+                    self.done.set()
             
-            # If a task failed, re-raise the error with more context
-            if error_task:
-                error_task.result() # This will re-raise the original exception
+            # Cancel remaining tasks and gather results
+            if pending:
+                results = await asyncio.gather(*pending, return_exceptions=True)
+                for task, result in zip(pending, results):
+                    if isinstance(result, Exception):
+                        task_name = task.get_name() if task.get_name() else 'unknown'
+                        self._report_error(f"Error while cancelling {task_name} task: {str(result)}")
+                        self.done.set()
                 
         except Exception as e:
             self._report_error(f"Fatal error in pipeline loops: {str(e)}")
