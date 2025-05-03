@@ -52,45 +52,43 @@ class ComfyUIParams(BaseModel):
 class ComfyUI(Pipeline):
     def __init__(self):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
-        self.pipeline = ComfyStreamPipeline(width=512, height=512, cwd=comfy_ui_workspace)
+        self.comfystream = ComfyStreamPipeline(width=512, height=512, cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
 
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
-        await self.pipeline.set_prompts([new_params.prompt])
+        await self.comfystream.set_prompts([new_params.prompt])
         self.params = new_params
 
         # Warm up the pipeline
-        await self.pipeline.warm_video()
+        await self.comfystream.warm_video()
         logging.info("Pipeline initialization and warmup complete")
 
-
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        await self.pipeline.put_video_frame(self._convert_to_av_frame(frame))
+        await self.comfystream.put_video_frame(self._convert_to_av_frame(frame), request_id)
 
     async def put_audio_frame(self, frame: AudioFrame, request_id: str):
-        await self.pipeline.put_audio_frame(self._convert_to_av_frame(frame))
+        await self.comfystream.put_audio_frame(self._convert_to_av_frame(frame), request_id)
 
-    async def get_processed_video_frame(self, request_id: str) -> VideoOutput:
-        av_frame = await self.pipeline.get_processed_video_frame()
+    async def get_processed_video_frame(self) -> VideoOutput:
+        av_frame = await self.comfystream.get_processed_video_frame()
         video_frame = VideoFrame.from_av_video(av_frame)
-        video_frame.side_data.request_id = request_id
-        return VideoOutput(video_frame).replace_image(av_frame.to_image())
+        return VideoOutput(video_frame, av_frame.side_data.request_id).replace_image(av_frame.to_image())
 
-    async def get_processed_audio_frame(self, request_id: str) -> AudioOutput:        
-        av_frame = await self.pipeline.get_processed_audio_frame()
-        return AudioOutput(av_frame, request_id)
+    async def get_processed_audio_frame(self) -> AudioOutput:
+        av_frame = await self.comfystream.get_processed_audio_frame()
+        return AudioOutput(av_frame)
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
-        await self.pipeline.update_prompts([new_params.prompt])
+        await self.comfystream.update_prompts([new_params.prompt])
         self.params = new_params
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
-        await self.pipeline.cleanup()
+        await self.comfystream.cleanup()
         logging.info("ComfyUI pipeline stopped")
 
     def _convert_to_av_frame(self, frame: Union[VideoFrame, AudioFrame]) -> Union[av.VideoFrame, av.AudioFrame]:
