@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=livepeer/comfyui-base:feat-refactor-package-export
+ARG BASE_IMAGE=livepeer/comfyui-base:v0.1.0
 FROM ${BASE_IMAGE}
 
 # -----------------------------------------------------------------------------
