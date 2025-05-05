@@ -4,7 +4,6 @@ import asyncio
 import logging
 import os
 import threading
-import subprocess
 
 from .trickle_subscriber import TrickleSubscriber
 from .trickle_publisher import TricklePublisher
@@ -20,15 +19,17 @@ ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback):
     # TODO add some pre-processing parameters, eg image size
     try:
-        read_fd, write_fd = os.pipe()
-        parse_task = asyncio.create_task(decode_in(read_fd, image_callback, put_metadata))
-        subscribe_task = asyncio.create_task(subscribe(subscribe_url, await AsyncifyFdWriter(write_fd), monitoring_callback))
+        in_pipe, out_pipe = os.pipe()
+        write_fd = await AsyncifyFdWriter(out_pipe)
+        parse_task = asyncio.create_task(decode_in(in_pipe, image_callback, put_metadata, write_fd))
+        subscribe_task = asyncio.create_task(subscribe(subscribe_url, write_fd, monitoring_callback))
         await asyncio.gather(subscribe_task, parse_task)
         logging.info("run_subscribe complete")
     except Exception as e:
         logging.exception("run_subscribe got error", stack_info=True)
     finally:
         put_metadata(None) # in case decoder quit without writing anything
+        image_callback(None) # stops inference if this function exits early
 
 async def subscribe(subscribe_url, out_pipe, monitoring_callback):
     first_segment = True
@@ -73,7 +74,7 @@ async def AsyncifyFdWriter(write_fd):
     writer = asyncio.StreamWriter(write_transport, write_protocol, None, loop)
     return writer
 
-async def decode_in(in_pipe, frame_callback, put_metadata):
+async def decode_in(in_pipe, frame_callback, put_metadata, write_fd):
     def decode_runner():
         retry_count = 0
         last_retry_time = time.time()
@@ -97,6 +98,8 @@ async def decode_in(in_pipe, frame_callback, put_metadata):
                     logging.exception(f"Error in decode_av, retrying {retry_count}/{MAX_DECODER_RETRIES}", stack_info=True)
                 else:
                     logging.exception("Error in decode_av, maximum retries reached", stack_info=True)
+                    # force write end of pipe to close to terminate trickle subscriber
+                    write_fd.close()
 
         os.close(in_pipe)
         logging.info("Decoding finished")
