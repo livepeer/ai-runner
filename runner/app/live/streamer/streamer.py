@@ -9,7 +9,7 @@ from asyncio import Lock
 import cv2
 from PIL import Image
 
-from .process_guardian import ProcessGuardian
+from .process_guardian import ProcessGuardian, ProcessCallbacks
 from .protocol.protocol import StreamProtocol
 from .status import timestamp_to_ms
 from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
@@ -17,7 +17,7 @@ from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutpu
 fps_log_interval = 10
 status_report_interval = 10
 
-class PipelineStreamer:
+class PipelineStreamer(ProcessCallbacks):
     def __init__(
         self,
         protocol: StreamProtocol,
@@ -43,7 +43,7 @@ class PipelineStreamer:
             raise RuntimeError("Streamer already started")
 
         await self.process.reset_stream(
-            self.request_id, self.stream_id, params, self._emit_monitoring_event
+            self.request_id, self.stream_id, params, self
         )
 
         self.stop_event.clear()
@@ -58,9 +58,8 @@ class PipelineStreamer:
             run_in_background("control_loop", self.run_control_loop()),
         ]
         # auxiliary tasks that are not critical to the supervisor, but which we want to run
-        self.auxiliary_tasks = [
-            
-        ]
+        # TODO: maybe remove this since we had to move the control loop to main tasks
+        self.auxiliary_tasks: list[asyncio.Task] = []
         self.tasks_supervisor_task = run_in_background(
             "tasks_supervisor", self.tasks_supervisor()
         )
@@ -128,7 +127,7 @@ class PipelineStreamer:
                 next_report += status_report_interval
 
             status = self.process.get_status(clear_transient=True)
-            await self._emit_monitoring_event(status.model_dump())
+            await self.emit_monitoring_event(status.model_dump())
 
             last_input_time = max(
                 status.input_status.last_input_time or 0, status.start_time
@@ -140,7 +139,7 @@ class PipelineStreamer:
                 )
                 self.stop_event.set()
 
-    async def _emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
+    async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         """Protected method to emit monitoring event with lock"""
         event["timestamp"] = timestamp_to_ms(time.time())
         logging.info(f"Emitting monitoring event: {event}")

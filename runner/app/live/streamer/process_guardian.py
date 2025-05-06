@@ -1,11 +1,18 @@
 import asyncio
 import logging
 import time
-from typing import Awaitable, Callable, Optional
+from typing import Optional
+import abc
 from trickle import InputFrame, OutputFrame
 
 from .process import PipelineProcess
 from .status import PipelineState, PipelineStatus
+
+
+class ProcessCallbacks(abc.ABC):
+    @abc.abstractmethod
+    async def emit_monitoring_event(self, event_data: dict) -> None:
+        ...
 
 
 class ProcessGuardian:
@@ -20,9 +27,9 @@ class ProcessGuardian:
     ):
         self.pipeline = pipeline
         self.params = params
-        self.monitoring_callback = _noop_callback
+        self.callbacks: ProcessCallbacks = _NoopProcessCallbacks()
 
-        self.process = None
+        self.process: Optional[PipelineProcess] = None
         self.monitor_task = None
         self.stream_running = False
         self.status = PipelineStatus(pipeline=pipeline, start_time=0).update_params(params, False)
@@ -46,7 +53,7 @@ class ProcessGuardian:
         if self.process:
             await self.process.stop()
             self.process = None
-    
+
     def stop_stream(self):
         self.stream_running = False
 
@@ -55,13 +62,13 @@ class ProcessGuardian:
         request_id: str,
         stream_id: str,
         params: dict,
-        monitoring_callback: Callable[[dict], Awaitable[None]],
+        callbacks: ProcessCallbacks | None = None,
     ):
         self.stream_running = True
         if not self.process:
             raise RuntimeError("Process not running")
         self.status = PipelineStatus(pipeline=self.pipeline, start_time=time.time())
-        self.monitoring_callback = monitoring_callback
+        self.callbacks = callbacks or _NoopProcessCallbacks()
         self.process.reset_stream(request_id, stream_id)
         await self.update_params(params)
 
@@ -101,7 +108,7 @@ class ProcessGuardian:
         self.process.update_params(params)
         self.status.update_params(params)
 
-        await self.monitoring_callback(
+        await self.callbacks.emit_monitoring_event(
             {
                 "type": "params_update",
                 "pipeline": self.pipeline,
@@ -195,7 +202,7 @@ class ProcessGuardian:
             self.status.inference_status.last_error = error_msg
             self.status.inference_status.last_error_time = error_time
 
-        await self.monitoring_callback(
+        await self.callbacks.emit_monitoring_event(
             {
                 "type": "restart",
                 "pipeline": self.pipeline,
@@ -226,7 +233,7 @@ class ProcessGuardian:
                     error_msg, error_time = last_error
                     self.status.inference_status.last_error = error_msg
                     self.status.inference_status.last_error_time = error_time
-                    await self.monitoring_callback(
+                    await self.callbacks.emit_monitoring_event(
                         {
                             "type": "error",
                             "pipeline": self.pipeline,
@@ -298,5 +305,6 @@ def calculate_rolling_fps(previous_fps: float, previous_frame_time: float):
     return (now, new_fps)
 
 
-async def _noop_callback(_):
-    pass
+class _NoopProcessCallbacks(ProcessCallbacks):
+    async def emit_monitoring_event(self, event_data: dict) -> None:
+        pass
