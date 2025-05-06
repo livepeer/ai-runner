@@ -126,6 +126,12 @@ class ProcessGuardian:
         return status
 
     def _current_state(self) -> str:
+        # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
+        # So return an error state if the process has restarted so the worker will restart the whole container.
+        # TODO: Remove this once pipeline shutodwn is fixed and restarting process is useful again.
+        if self.status.inference_status.restart_count > 0:
+            return PipelineState.ERROR
+
         current_time = time.time()
         input = self.status.input_status
         last_input_time = input.last_input_time or self.status.start_time
