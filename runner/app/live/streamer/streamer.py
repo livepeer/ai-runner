@@ -139,6 +139,12 @@ class PipelineStreamer(ProcessCallbacks):
                 )
                 self.stop_event.set()
 
+    def on_before_process_restart(self, restart_count: int) -> None:
+        # Restarting the process will take a couple of time, so we stop the stream
+        # before it happens so the gateway/app can switch to a functioning O ASAP.
+        logging.info(f"Stopping streamer due to process restart restart_count={restart_count}")
+        self.stop_event.set()
+
     async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         """Protected method to emit monitoring event with lock"""
         event["timestamp"] = timestamp_to_ms(time.time())

@@ -14,6 +14,10 @@ class ProcessCallbacks(abc.ABC):
     async def emit_monitoring_event(self, event_data: dict) -> None:
         ...
 
+    @abc.abstractmethod
+    def on_before_process_restart(self, restart_count: int) -> None:
+        ...
+
 
 class ProcessGuardian:
     """
@@ -187,6 +191,8 @@ class ProcessGuardian:
         if not self.process:
             raise RuntimeError("Process not started")
 
+        self.callbacks.on_before_process_restart(self.status.inference_status.restart_count)
+
         # Capture logs before stopping the process
         restart_logs = self.process.get_recent_logs()
         last_error = self.process.get_last_error()
@@ -307,4 +313,7 @@ def calculate_rolling_fps(previous_fps: float, previous_frame_time: float):
 
 class _NoopProcessCallbacks(ProcessCallbacks):
     async def emit_monitoring_event(self, event_data: dict) -> None:
+        pass
+
+    def on_before_process_restart(self, restart_count: int) -> None:
         pass
