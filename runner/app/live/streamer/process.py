@@ -38,6 +38,9 @@ class PipelineProcess:
         self.start_time = 0.0
         self.request_id = ""
 
+    def is_alive(self):
+        return self.process.is_alive()
+
     async def stop(self):
         self._stop_sync()
 

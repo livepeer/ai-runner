@@ -210,6 +210,10 @@ class ProcessGuardian:
                 await asyncio.sleep(1)
                 if not self.process or self.process.done.is_set():
                     continue
+                if not self.process.is_alive():
+                    logging.error("Process is not alive. Restarting...")
+                    await self._restart_process()
+                    continue
 
                 last_error = self.process.get_last_error()
                 if last_error:
