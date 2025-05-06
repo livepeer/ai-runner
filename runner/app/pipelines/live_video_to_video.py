@@ -75,7 +75,7 @@ class LiveVideoToVideoPipeline(Pipeline):
             # The infer process is supposed to be always running, so if it's
             # gone it means an ERROR and the worker is allowed to kill us.
             logging.error("[HEALTHCHECK] Infer process is not running")
-            return HealthCheck(status="ERROR", version=self.version)
+            return HealthCheck(status="ERROR")
 
         try:
             conn = http.client.HTTPConnection("localhost", 8888)
@@ -91,8 +91,11 @@ class LiveVideoToVideoPipeline(Pipeline):
 
             pipe_status = PipelineStatus(**json.loads(response.read().decode()))
             return HealthCheck(
-                status="IDLE" if pipe_status.state == "OFFLINE" else "OK",
-                version=self.version,
+                status=(
+                    "IDLE" if pipe_status.state == "OFFLINE"
+                    else "ERROR" if pipe_status.state == "ERROR"
+                    else "OK"
+                ),
             )
         except Exception as e:
             logging.error(f"[HEALTHCHECK] Failed to get status: {type(e).__name__}: {str(e)}")
