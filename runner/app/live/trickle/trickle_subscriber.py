@@ -56,8 +56,8 @@ class TrickleSubscriber:
                 resp.release()
                 logging.error(f"Trickle sub Failed GET {url} status code: {resp.status}, msg: {body}")
 
-            except aiohttp.ClientError as e:
-                logging.error(f"Trickle sub Failed to complete GET {url} error: {e}")
+            except Exception:
+                logging.exception(f"Trickle sub Failed to complete GET {url}", stack_info=True)
 
             if attempt < self.max_retries - 1:
                 await asyncio.sleep(0.5)
