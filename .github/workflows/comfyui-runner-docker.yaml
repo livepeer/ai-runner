@@ -1,0 +1,128 @@
+name: Build ai-runner image for comfyui
+
+on:
+  workflow_dispatch:
+    inputs:
+      comfyui-base-digest:
+        description: "SHA256 image digest for livepeer/comfyui-base docker image"
+        required: true
+        type: string
+      triggering-branch:
+        description: "Branch name or PR in comfystream triggering this workflow"
+        required: true
+        type: string
+      branch-prefix:
+        description: "Prefix for branch name to create PR here"
+        required: false
+        type: string
+        default: "comfyui/"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ !((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag') }}
+
+jobs:
+  base:
+    name: Build comfyui-base image
+    runs-on: [self-hosted, linux, amd64]
+    outputs:
+      image-digest: ${{ steps.build-base.outputs.digest }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for app image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: livepeer/ai-runner
+          flavor: |
+            latest=false
+            prefix=live-base-comfyui-
+          tags: |
+            type=raw,value=${{ inputs.triggering-branch }}
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
+
+      - name: Build and push live-base image
+        id: build-base
+        uses: docker/build-push-action@v6
+        if: steps.check_build.outputs.should_build == 'true'
+        with:
+          context: "{{defaultContext}}:runner"
+          file: docker/Dockerfile.live-base-comfyui
+          provenance: mode=max
+          sbom: true
+          push: true
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE=livepeer/comfyui-base@${{ inputs.comfyui-base-digest }}
+          tags: ${{ steps.meta.outputs.tags }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=livepeer/ai-runner:live-base-comfyui-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-base-comfyui-dockerbuildcache,mode=max
+
+  runner:
+    name: Build pipeline image for runner
+    needs: base
+    runs-on: [self-hosted, linux, amd64]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for app image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: livepeer/ai-runner
+          flavor: |
+            prefix=live-app-comfyui-
+          tags: |
+            type=raw,value=${{ inputs.triggering-branch }}
+
+      - name: Get version information (for docker build tag)
+        id: version
+        run: |
+          echo "version=$(bash runner/print_version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
+
+      - name: Build and push pipeline app image
+        uses: docker/build-push-action@v6
+        with:
+          context: "{{defaultContext}}:runner"
+          provenance: mode=max
+          sbom: true
+          push: true
+          file: docker/Dockerfile.live-app__PIPELINE__
+          build-args: |
+            BASE_IMAGE=livepeer/ai-runner@${{ needs.build-base.outputs.image-digest }}
+            PIPELINE=comfyui
+            GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
+            VERSION=${{ steps.version.outputs.version }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=livepeer/ai-runner:live-app-comfyui-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-comfyui-dockerbuildcache,mode=max
+
+      - name: Notify new build upload
+        run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
