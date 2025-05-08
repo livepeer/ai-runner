@@ -255,13 +255,9 @@ class ProcessGuardian:
                 time_since_reload = min(time_since_last_params, time_since_start)
 
                 gone_stale = (
-                    time_since_last_output > time_since_last_input
-                    and time_since_last_output > 60
-                    and time_since_reload > 240
+                    time_since_last_output > 10
+                    or time_since_last_input > 10
                 )
-                if time_since_last_input > 5 and not gone_stale:
-                    # nothing to do if we're not sending inputs
-                    continue
 
                 active_after_reload = time_since_last_output < (time_since_reload - 1)
                 stopped_recently = (
