@@ -33,7 +33,7 @@ jobs:
         shell: bash
         run: |
           BASE_IMAGE="livepeer/comfyui-base@${{ inputs.comfyui-base-digest }}"
-          sed -i "1s/.*/ARG BASE_IMAGE=$BASE_IMAGE/" runner/docker/Dockerfile.live-base-comfyui
+          sed -i "1s~.*~ARG BASE_IMAGE=$BASE_IMAGE~" runner/docker/Dockerfile.live-base-comfyui
           head runner/docker/Dockerfile.live-base-comfyui
 
       - name: Commit and push changes
