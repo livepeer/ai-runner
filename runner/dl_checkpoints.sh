@@ -173,7 +173,7 @@ function build_tensorrt_models() {
                 chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI FasterLivePortrait Tensorrt Engines"
-      exit 1
+      return 1
     )
 
 }
