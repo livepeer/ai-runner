@@ -164,6 +164,18 @@ function build_tensorrt_models() {
       echo "failed ComfyUI build_trt.py dynamic engine"
       return 1
     )
+
+  # FasterLivePortrait
+  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+    bash -c "/workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
+             /workspace/ComfyUI/models/liveportrait_onnx && \
+                adduser $(id -u -n) && \
+                chown -R $(id -u -n):$(id -g -n) /models" ||
+    (
+      echo "failed ComfyUI FasterLivePortrait Tensorrt Engines"
+      exit 1
+    )
+
 }
 
 # Download models with a restrictive license.
