@@ -99,5 +99,5 @@ class ComfyUI(Pipeline):
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
-        await self.client.stop()
+        await self.client.cleanup()
         logging.info("ComfyUI pipeline stopped")

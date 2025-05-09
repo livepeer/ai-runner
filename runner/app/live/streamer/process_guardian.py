@@ -126,6 +126,12 @@ class ProcessGuardian:
         return status
 
     def _current_state(self) -> str:
+        # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
+        # So return an error state if the process has restarted so the worker will restart the whole container.
+        # TODO: Remove this once pipeline shutodwn is fixed and restarting process is useful again.
+        if self.status.inference_status.restart_count > 0:
+            return PipelineState.ERROR
+
         current_time = time.time()
         input = self.status.input_status
         last_input_time = input.last_input_time or self.status.start_time
@@ -209,6 +215,10 @@ class ProcessGuardian:
             while True:
                 await asyncio.sleep(1)
                 if not self.process or self.process.done.is_set():
+                    continue
+                if not self.process.is_alive():
+                    logging.error("Process is not alive. Restarting...")
+                    await self._restart_process()
                     continue
 
                 last_error = self.process.get_last_error()

@@ -42,6 +42,7 @@ class PipelineState:
     ONLINE = "ONLINE"
     DEGRADED_INPUT = "DEGRADED_INPUT"
     DEGRADED_INFERENCE = "DEGRADED_INFERENCE"
+    ERROR = "ERROR"
 
 class PipelineStatus(BaseModel):
     """Holds metrics for the pipeline streamer"""
