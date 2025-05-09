@@ -42,9 +42,6 @@ class PipelineProcess:
         return self.process.is_alive()
 
     async def stop(self):
-        self._stop_sync()
-
-    def _stop_sync(self):
         self.done.set()
 
         if not self.process.is_alive():
@@ -53,18 +50,18 @@ class PipelineProcess:
 
         logging.info("Terminating pipeline process")
 
-        def wait_stop(timeout: float) -> bool:
+        async def wait_stop(timeout: float) -> bool:
             try:
-                self.process.join(timeout=timeout)
+                await asyncio.to_thread(self.process.join, timeout=timeout)
                 return not self.process.is_alive()
             except Exception as e:
                 logging.error(f"Process join error: {e}")
                 return False
 
-        if not wait_stop(10):
+        if not await wait_stop(10):
             logging.error("Failed to terminate process, killing")
             self.process.kill()
-            if not wait_stop(5):
+            if not await wait_stop(5):
                 logging.error("Failed to kill process")
 
         for q in [self.input_queue, self.output_queue, self.param_update_queue,
