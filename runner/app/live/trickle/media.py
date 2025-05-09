@@ -98,8 +98,13 @@ async def decode_in(in_pipe, frame_callback, put_metadata, write_fd):
                     logging.exception(f"Error in decode_av, retrying {retry_count}/{MAX_DECODER_RETRIES}", stack_info=True)
                 else:
                     logging.exception("Error in decode_av, maximum retries reached", stack_info=True)
-                    # force write end of pipe to close to terminate trickle subscriber
-                    write_fd.close()
+
+        try:
+            # force write end of pipe to close to terminate trickle subscriber
+            write_fd.close()
+        except Exception:
+            # happens sometimes but ignore
+            pass
 
         os.close(in_pipe)
         logging.info("Decoding finished")
