@@ -21,13 +21,11 @@ class PipelineStreamer(ProcessCallbacks):
     def __init__(
         self,
         protocol: StreamProtocol,
-        input_timeout: int,
         process: ProcessGuardian,
         request_id: str,
         stream_id: str,
     ):
         self.protocol = protocol
-        self.input_timeout = input_timeout  # 0 means disabled
         self.process = process
 
         self.stop_event = asyncio.Event()
@@ -130,16 +128,6 @@ class PipelineStreamer(ProcessCallbacks):
 
             status = self.process.get_status(clear_transient=True)
             await self.emit_monitoring_event(status.model_dump())
-
-            last_input_time = max(
-                status.input_status.last_input_time or 0, status.start_time
-            )
-            time_since_last_input = time.time() - last_input_time
-            if self.input_timeout > 0 and time_since_last_input > self.input_timeout:
-                logging.info(
-                    f"Input stream stopped for {time_since_last_input} seconds. Shutting down..."
-                )
-                self.stop_event.set()
 
     async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         """Protected method to emit monitoring event with lock"""

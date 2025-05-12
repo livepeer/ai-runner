@@ -130,11 +130,22 @@ class ProcessGuardian:
             self.status.state = new_state
             self.status.last_state_update_time = time.time()
             logging.info(f"Pipeline state changed to {new_state}")
-        status = self.status.model_copy()
+        status = self.status.model_copy(deep=True)
         if clear_transient:
             # Clear the large transient fields if requested, but do return them
             self.status.inference_status.last_params = None
             self.status.inference_status.last_restart_logs = None
+
+        last_input_time = max(
+            status.input_status.last_input_time or 0, status.start_time
+        )
+        time_since_last_input = time.time() - last_input_time
+        if self.stream_running and time_since_last_input > STREAM_INPUT_TIMEOUT:
+            logging.info(
+                f"Input stream stopped for {time_since_last_input} seconds. Shutting down..."
+            )
+            self.callbacks.trigger_stop_stream()
+
         return status
 
     def _current_state(self) -> str:
