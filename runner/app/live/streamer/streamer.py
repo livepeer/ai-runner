@@ -193,7 +193,8 @@ class PipelineStreamer(ProcessCallbacks):
                     ]
 
                 # Resize using cv2 (much faster than PIL)
-                frame_array = cv2.resize(frame_array, (512, 512))
+                if frame_array.shape != (512, 512):
+                    frame_array = cv2.resize(frame_array, (512, 512))
                 frame = Image.fromarray(frame_array)
 
             logging.debug(
