@@ -33,6 +33,7 @@ class PipelineProcess:
         self.error_queue = self.ctx.Queue()
         self.log_queue = self.ctx.Queue(maxsize=100)  # Keep last 100 log lines
 
+        self.pipeline_initialized = self.ctx.Event()
         self.done = self.ctx.Event()
         self.process = self.ctx.Process(target=self.process_loop, args=())
         self.start_time = 0.0
@@ -71,6 +72,9 @@ class PipelineProcess:
 
     def is_done(self):
         return self.done.is_set()
+
+    def is_pipeline_initialized(self):
+        return self.pipeline_initialized.is_set()
 
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
@@ -173,6 +177,7 @@ class PipelineProcess:
 
     async def _run_pipeline_loops(self):
         pipeline = await self._initialize_pipeline()
+        self.pipeline_initialized.set()
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
         param_task = asyncio.create_task(self._param_update_loop(pipeline))

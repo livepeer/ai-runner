@@ -38,6 +38,7 @@ class InferenceStatus(BaseModel):
 
 # Use a class instead of an enum since Pydantic can't handle serializing enums
 class PipelineState:
+    INITIALIZING = "INITIALIZING"
     OFFLINE = "OFFLINE"
     ONLINE = "ONLINE"
     DEGRADED_INPUT = "DEGRADED_INPUT"

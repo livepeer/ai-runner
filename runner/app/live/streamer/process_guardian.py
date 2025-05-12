@@ -158,6 +158,9 @@ class ProcessGuardian:
         if self.status.inference_status.restart_count > 0:
             return PipelineState.ERROR
 
+        if self.process and not self.process.is_pipeline_initialized():
+            return PipelineState.INITIALIZING
+
         current_time = time.time()
         input = self.status.input_status
         last_input_time = input.last_input_time or self.status.start_time
