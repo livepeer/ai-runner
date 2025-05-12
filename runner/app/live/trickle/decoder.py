@@ -76,7 +76,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
             if audio_stream and packet.stream == audio_stream:
                 # Decode audio frames
                 for aframe in packet.decode():
-                    if aframe.pts is None:
+                    if not isinstance(aframe, av.AudioFrame) or aframe.pts is None:
                         continue
 
                     avframe = InputFrame.from_av_audio(aframe)

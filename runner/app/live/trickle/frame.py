@@ -1,6 +1,7 @@
+from fractions import Fraction
 import av
 from PIL import Image
-from typing import List, Union
+from typing import List
 import numpy as np
 
 class SideData:
@@ -8,7 +9,7 @@ class SideData:
         Base class for side data, needed to keep it consistent with av frame side_data
     """
     skipped: bool = True
-    input: Union[Image.Image, np.ndarray] = None
+    input: Image.Image | np.ndarray | None
 
 class InputFrame:
     """
@@ -18,30 +19,27 @@ class InputFrame:
     """
 
     timestamp: int
-    time_base: int
+    time_base: Fraction
     log_timestamps: dict[str, float] = {}
     side_data: SideData = SideData()
 
-    def __init__(self):
-        self.timestamp = av.AV_NOPTS_VALUE
-        self.time_base = av.AV_TIME_BASE
-
     @classmethod
-    def from_av_video(cls, frame: av.video.frame.VideoFrame):
+    def from_av_video(cls, frame: av.VideoFrame):
         return VideoFrame(frame.to_image(), frame.pts, frame.time_base)
 
     @classmethod
-    def from_av_audio(cls, frame: av.audio.frame.AudioFrame):
+    def from_av_audio(cls, frame: av.AudioFrame):
         return AudioFrame(frame)
 
 class VideoFrame(InputFrame):
     image: Image.Image
 
-    def __init__(self, image: Image.Image, timestamp: int, time_base: int, log_timestamps: dict[str, float] = {}):
+    def __init__(self, image: Image.Image, timestamp: int, time_base: Fraction, log_timestamps: dict[str, float] = {}):
         self.image = image
         self.timestamp = timestamp
         self.time_base = time_base
         self.log_timestamps = log_timestamps
+
     # Returns a copy of an existing VideoFrame with its image replaced
     def replace_image(self, image: Image.Image):
         new_frame = VideoFrame(image, self.timestamp, self.time_base, self.log_timestamps)
@@ -54,7 +52,10 @@ class AudioFrame(InputFrame):
     layout: str # av.audio.layout.AudioLayout
     rate: int
     nb_samples: int
-    def __init__(self, frame: av.audio.frame.AudioFrame):
+
+    def __init__(self, frame: av.AudioFrame):
+        if frame.pts is None:
+            raise ValueError("Audio frame has no timestamp")
         self.samples = frame.to_ndarray()
         self.nb_samples = frame.samples
         self.format = frame.format.name
