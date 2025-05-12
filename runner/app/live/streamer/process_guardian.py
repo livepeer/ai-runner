@@ -58,7 +58,7 @@ class ProcessGuardian:
             await self.process.stop()
             self.process = None
 
-    def stop_stream(self):
+    def on_stream_stopped(self):
         self.stream_running = False
 
     async def reset_stream(
