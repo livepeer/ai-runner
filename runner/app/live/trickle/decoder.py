@@ -106,10 +106,10 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         next_pts_time = next_pts_time + frame_interval
 
                     h = 512
-                    w = int((512 * frame.width / frame.height) / 2) * 2
+                    w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
                     if frame.height > frame.width:
                         w = 512
-                        h = int((512 * frame.height / frame.width) / 2) * 2 # force divisible by 2
+                        h = int((512 * frame.height / frame.width) / 2) * 2
                     frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
                     avframe = InputFrame.from_av_video(frame)
                     avframe.log_timestamps["frame_init"] = time.time()
