@@ -3,6 +3,7 @@ from av.video.reformatter import VideoReformatter
 from av.container import InputContainer
 import time
 import logging
+from typing import cast
 
 from .frame import InputFrame
 
@@ -16,9 +17,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
     :param frame_callback: A function that accepts an InputFrame object
     :param put_metadata: A function that accepts audio/video metadata
     """
-    container = av.open(pipe_input, 'r')
-    if not isinstance(container, InputContainer):
-        raise ValueError("Container is not an InputContainer")
+    container = cast(InputContainer, av.open(pipe_input, 'r'))
 
     # Locate the first video and first audio stream (if they exist)
     video_stream = None
@@ -77,7 +76,8 @@ def decode_av(pipe_input, frame_callback, put_metadata):
             if audio_stream and packet.stream == audio_stream:
                 # Decode audio frames
                 for aframe in packet.decode():
-                    if not isinstance(aframe, av.AudioFrame) or aframe.pts is None:
+                    aframe = cast(av.AudioFrame, aframe)
+                    if aframe.pts is None:
                         continue
 
                     avframe = InputFrame.from_av_audio(aframe)
@@ -88,7 +88,8 @@ def decode_av(pipe_input, frame_callback, put_metadata):
             elif video_stream and packet.stream == video_stream:
                 # Decode video frames
                 for frame in packet.decode():
-                    if not isinstance(frame, av.VideoFrame) or frame.pts is None:
+                    frame = cast(av.VideoFrame, frame)
+                    if frame.pts is None:
                         continue
 
                     # drop frames that come in too fast
