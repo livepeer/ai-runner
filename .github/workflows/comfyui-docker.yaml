@@ -118,10 +118,11 @@ jobs:
           push: true
           file: docker/Dockerfile.live-app__PIPELINE__
           build-args: |
-            BASE_IMAGE=livepeer/ai-runner@${{ needs.base.outputs.image-digest }}
             PIPELINE=comfyui
             GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
             VERSION=${{ steps.version.outputs.version }}
+            # only specify base image if we just built it above, otherwise use whatever default is in the Dockerfile
+            ${{ needs.base.outputs.image-digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.base.outputs.image-digest) }}
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}

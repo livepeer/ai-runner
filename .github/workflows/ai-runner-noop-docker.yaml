@@ -146,8 +146,9 @@ jobs:
         with:
           context: "{{defaultContext}}:runner"
           build-args: |
-            BASE_IMAGE=livepeer/ai-runner@${{ needs.build-common-base.outputs.digest }}
             VERSION=${{ steps.version.outputs.version }}
+            # only specify base image if we just built it above, otherwise use whatever default is in the Dockerfile
+            ${{ needs.build-common-base.outputs.digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.build-common-base.outputs.digest) }}
           file: docker/Dockerfile.live-app-noop
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
