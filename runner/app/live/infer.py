@@ -96,7 +96,8 @@ async def main(
         raise e
     finally:
         if streamer:
-            await streamer.stop(timeout=5)
+            streamer.trigger_stop_stream()
+            await streamer.wait(timeout=5)
         if api:
             await api.cleanup()
         await process.stop()

@@ -102,7 +102,8 @@ async def handle_start_stream(request: web.Request):
             # Stop the previous streamer before starting a new one
             try:
                 logging.info("Stopping previous streamer")
-                await prev_streamer.stop(timeout=10)
+                prev_streamer.trigger_stop_stream()
+                await prev_streamer.wait(timeout=10)
             except asyncio.TimeoutError as e:
                 logging.error(f"Timeout stopping streamer: {e}")
                 raise web.HTTPBadRequest(text="Timeout stopping previous streamer")

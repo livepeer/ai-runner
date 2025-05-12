@@ -8,6 +8,7 @@ from trickle import InputFrame, OutputFrame
 from .process import PipelineProcess
 from .status import PipelineState, PipelineStatus
 
+STREAM_INPUT_TIMEOUT = 60
 
 class ProcessCallbacks(abc.ABC):
     @abc.abstractmethod
@@ -15,7 +16,7 @@ class ProcessCallbacks(abc.ABC):
         ...
 
     @abc.abstractmethod
-    def on_before_process_restart(self, restart_count: int) -> None:
+    def trigger_stop_stream(self) -> None:
         ...
 
 
@@ -191,7 +192,10 @@ class ProcessGuardian:
         if not self.process:
             raise RuntimeError("Process not started")
 
-        self.callbacks.on_before_process_restart(self.status.inference_status.restart_count)
+        # Restarting the process will take a couple of time, so we stop the stream
+        # before it happens so the gateway/app can switch to a functioning O ASAP.
+        logging.info(f"Stopping streamer due to process restart prev_restart_count={self.status.inference_status.restart_count}")
+        self.callbacks.trigger_stop_stream()
 
         # Capture logs before stopping the process
         restart_logs = self.process.get_recent_logs()
@@ -315,5 +319,5 @@ class _NoopProcessCallbacks(ProcessCallbacks):
     async def emit_monitoring_event(self, event_data: dict) -> None:
         pass
 
-    def on_before_process_restart(self, restart_count: int) -> None:
+    def trigger_stop_stream(self) -> None:
         pass
