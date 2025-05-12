@@ -1,5 +1,6 @@
 import av
 from av.video.reformatter import VideoReformatter
+from av.container import InputContainer
 import time
 import logging
 
@@ -16,7 +17,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
     :param put_metadata: A function that accepts audio/video metadata
     """
     container = av.open(pipe_input, 'r')
-    if not isinstance(container, av.InputContainer):
+    if not isinstance(container, InputContainer):
         raise ValueError("Container is not an InputContainer")
 
     # Locate the first video and first audio stream (if they exist)
