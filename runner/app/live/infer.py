@@ -184,7 +184,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if args.verbose:
-        os.environ["VERBOSE_LOGGING"] = "1"  # enable verbose logging in subprocesses
+        os.environ["VERBOSE_LOGGING"] = "1"  # enable verbose logging in sub-processes
 
     config_logging(
         log_level=logging.DEBUG if os.getenv("VERBOSE_LOGGING")=="1" else logging.INFO,
