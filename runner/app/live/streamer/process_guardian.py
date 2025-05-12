@@ -10,14 +10,19 @@ from .status import PipelineState, PipelineStatus
 
 STREAM_INPUT_TIMEOUT = 60
 
-class ProcessCallbacks(abc.ABC):
+class StreamerCallbacks(abc.ABC):
+    """
+    Interface implemented by the streamer for the ProcessGuardian to call back on.
+    This is used to avoid circular dependencies between the ProcessGuardian and the Streamer.
+    """
     @abc.abstractmethod
-    async def emit_monitoring_event(self, event_data: dict) -> None:
-        ...
+    def is_stream_running(self) -> bool: ...
 
     @abc.abstractmethod
-    def trigger_stop_stream(self) -> None:
-        ...
+    async def emit_monitoring_event(self, event_data: dict) -> None: ...
+
+    @abc.abstractmethod
+    def trigger_stop_stream(self) -> None: ...
 
 
 class ProcessGuardian:
@@ -32,11 +37,10 @@ class ProcessGuardian:
     ):
         self.pipeline = pipeline
         self.params = params
-        self.callbacks: ProcessCallbacks = _NoopProcessCallbacks()
+        self.streamer: StreamerCallbacks = _NoopStreamerCallbacks()
 
         self.process: Optional[PipelineProcess] = None
         self.monitor_task = None
-        self.stream_running = False
         self.status = PipelineStatus(pipeline=pipeline, start_time=0).update_params(params, False)
 
     async def start(self):
@@ -59,21 +63,17 @@ class ProcessGuardian:
             await self.process.stop()
             self.process = None
 
-    def on_stream_stopped(self):
-        self.stream_running = False
-
     async def reset_stream(
         self,
         request_id: str,
         stream_id: str,
         params: dict,
-        callbacks: ProcessCallbacks | None = None,
+        streamer: StreamerCallbacks | None = None,
     ):
-        self.stream_running = True
         if not self.process:
             raise RuntimeError("Process not running")
         self.status = PipelineStatus(pipeline=self.pipeline, start_time=time.time())
-        self.callbacks = callbacks or _NoopProcessCallbacks()
+        self.streamer = streamer or _NoopStreamerCallbacks()
         self.process.reset_stream(request_id, stream_id)
         await self.update_params(params)
 
@@ -113,7 +113,7 @@ class ProcessGuardian:
         self.process.update_params(params)
         self.status.update_params(params)
 
-        await self.callbacks.emit_monitoring_event(
+        await self.streamer.emit_monitoring_event(
             {
                 "type": "params_update",
                 "pipeline": self.pipeline,
@@ -140,11 +140,14 @@ class ProcessGuardian:
             status.input_status.last_input_time or 0, status.start_time
         )
         time_since_last_input = time.time() - last_input_time
-        if self.stream_running and time_since_last_input > STREAM_INPUT_TIMEOUT:
+        if (
+            self.streamer.is_stream_running()
+            and time_since_last_input > STREAM_INPUT_TIMEOUT
+        ):
             logging.info(
                 f"Input stream stopped for {time_since_last_input} seconds. Shutting down..."
             )
-            self.callbacks.trigger_stop_stream()
+            self.streamer.trigger_stop_stream()
 
         return status
 
@@ -160,7 +163,7 @@ class ProcessGuardian:
         last_input_time = input.last_input_time or self.status.start_time
         time_since_last_input = current_time - last_input_time
         # Stream is done and 3s grace period reached
-        if not self.stream_running and time_since_last_input > 3:
+        if not self.streamer.is_stream_running() and time_since_last_input > 3:
             return PipelineState.OFFLINE
         if time_since_last_input > 60:
             if time_since_last_input < 90:
@@ -206,7 +209,7 @@ class ProcessGuardian:
         # Restarting the process will take a couple of time, so we stop the stream
         # before it happens so the gateway/app can switch to a functioning O ASAP.
         logging.info(f"Stopping streamer due to process restart prev_restart_count={self.status.inference_status.restart_count}")
-        self.callbacks.trigger_stop_stream()
+        self.streamer.trigger_stop_stream()
 
         # Capture logs before stopping the process
         restart_logs = self.process.get_recent_logs()
@@ -223,7 +226,7 @@ class ProcessGuardian:
             self.status.inference_status.last_error = error_msg
             self.status.inference_status.last_error_time = error_time
 
-        await self.callbacks.emit_monitoring_event(
+        await self.streamer.emit_monitoring_event(
             {
                 "type": "restart",
                 "pipeline": self.pipeline,
@@ -254,7 +257,7 @@ class ProcessGuardian:
                     error_msg, error_time = last_error
                     self.status.inference_status.last_error = error_msg
                     self.status.inference_status.last_error_time = error_time
-                    await self.callbacks.emit_monitoring_event(
+                    await self.streamer.emit_monitoring_event(
                         {
                             "type": "error",
                             "pipeline": self.pipeline,
@@ -326,7 +329,10 @@ def calculate_rolling_fps(previous_fps: float, previous_frame_time: float):
     return (now, new_fps)
 
 
-class _NoopProcessCallbacks(ProcessCallbacks):
+class _NoopStreamerCallbacks(StreamerCallbacks):
+    async def is_stream_running(self) -> bool:
+        return True
+
     async def emit_monitoring_event(self, event_data: dict) -> None:
         pass
 

@@ -9,7 +9,7 @@ from asyncio import Lock
 import cv2
 from PIL import Image
 
-from .process_guardian import ProcessGuardian, ProcessCallbacks
+from .process_guardian import ProcessGuardian, StreamerCallbacks
 from .protocol.protocol import StreamProtocol
 from .status import timestamp_to_ms
 from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
@@ -17,7 +17,7 @@ from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutpu
 fps_log_interval = 10
 status_report_interval = 10
 
-class PipelineStreamer(ProcessCallbacks):
+class PipelineStreamer(StreamerCallbacks):
     def __init__(
         self,
         protocol: StreamProtocol,
@@ -97,7 +97,9 @@ class PipelineStreamer(ProcessCallbacks):
         self.main_tasks = []
         self.auxiliary_tasks = []
         self.tasks_supervisor_task = None
-        self.process.on_stream_stopped()
+
+    def is_stream_running(self) -> bool:
+        return self.tasks_supervisor_task is not None
 
     async def wait(self, *, timeout: float = 0):
         """Wait for the streamer to stop with an optional timeout. This is a blocking call."""
