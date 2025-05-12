@@ -178,14 +178,14 @@ class PipelineStreamer(ProcessCallbacks):
             if frame.mode != "RGBA":
                 frame = frame.convert("RGBA")
 
-            # crop the max square from the center of the image and scale to 512x512
-            # most models expect this size especially when using tensorrt
+            # Scale image to 512x512 as most models expect this size, especially when using tensorrt
             width, height = frame.size
             if (width, height) != (512, 512):
                 frame_array = np.array(frame)
 
+                # Crop to the center square if image not already square
+                square_size = min(width, height)
                 if width != height:
-                    square_size = min(width, height)
                     start_x = width // 2 - square_size // 2
                     start_y = height // 2 - square_size // 2
                     frame_array = frame_array[
@@ -193,8 +193,9 @@ class PipelineStreamer(ProcessCallbacks):
                     ]
 
                 # Resize using cv2 (much faster than PIL)
-                if frame_array.shape != (512, 512):
+                if square_size != 512:
                     frame_array = cv2.resize(frame_array, (512, 512))
+
                 frame = Image.fromarray(frame_array)
 
             logging.debug(
