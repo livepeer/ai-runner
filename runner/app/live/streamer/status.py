@@ -56,6 +56,11 @@ class PipelineStatus(BaseModel):
     input_status: InputStatus = InputStatus()
     inference_status: InferenceStatus = InferenceStatus()
 
+    def update_state(self, state: str):
+        self.state = state
+        self.last_state_update_time = time.time()
+        return self
+
     def update_params(self, params: dict, do_update_time=True):
         self.inference_status.last_params = params
         self.inference_status.last_params_hash = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()

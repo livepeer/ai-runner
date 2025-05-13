@@ -6,7 +6,7 @@ import abc
 from trickle import InputFrame, OutputFrame
 
 from .process import PipelineProcess
-from .status import PipelineState, PipelineStatus
+from .status import PipelineState, PipelineStatus, InferenceStatus
 
 
 class StreamerCallbacks(abc.ABC):
@@ -22,7 +22,12 @@ class StreamerCallbacks(abc.ABC):
     async def emit_monitoring_event(self, event_data: dict) -> None: ...
 
     @abc.abstractmethod
-    def trigger_stop_stream(self) -> bool: ...
+    def trigger_stop_stream(self) -> bool:
+        """
+        Trigger a stop of the stream. Returns True if the stream was actually
+        stopped on this call or False if it was already stopped.
+        """
+        ...
 
 
 class ProcessGuardian:
@@ -37,7 +42,7 @@ class ProcessGuardian:
         params: dict,
     ):
         self.pipeline = pipeline
-        self.params = params
+        self.initial_params = params
         self.streamer: StreamerCallbacks = _NoopStreamerCallbacks()
 
         self.process: Optional[PipelineProcess] = None
@@ -47,8 +52,8 @@ class ProcessGuardian:
         )
 
     async def start(self):
-        self.process = PipelineProcess.start(self.pipeline, self.params)
-        self.status.state = PipelineState.INITIALIZING
+        self.process = PipelineProcess.start(self.pipeline, self.initial_params)
+        self.status.update_state(PipelineState.INITIALIZING)
         self.monitor_task = asyncio.create_task(self._monitor_loop())
 
     async def stop(self):
@@ -112,10 +117,7 @@ class ProcessGuardian:
     async def update_params(self, params: dict):
         if not self.process:
             raise RuntimeError("Process not running")
-        self.params = params
-        logging.info(
-            f"ProcessGuardian: Queuing parameter update with hash={self.status.inference_status.last_params_hash}, params={params}"
-        )
+
         self.process.update_params(params)
         self.status.update_params(params)
 
@@ -129,7 +131,7 @@ class ProcessGuardian:
             }
         )
         logging.info(
-            f"ProcessGuardian: Parameter update queued and monitoring callback completed. Hash={self.status.inference_status.last_params_hash}"
+            f"ProcessGuardian: Parameter update queued. hash={self.status.inference_status.last_params_hash} params={params}"
         )
 
     def get_status(self, clear_transient: bool = False) -> PipelineStatus:
@@ -141,15 +143,18 @@ class ProcessGuardian:
         return status
 
     def _compute_current_state(self) -> str:
-        if not self.process:
+        # Special case: process not running or initializing
+        if not self.process or not self.process.is_alive():
+            logging.error("Process is not alive. Returning ERROR state")
             return PipelineState.ERROR
-        if not self.process.is_pipeline_initialized():
+        elif not self.process.is_pipeline_initialized() or self.process.done.is_set():
+            # done is only set in the middle of the restart process so also return INITIALIZING
             return PipelineState.INITIALIZING
 
+        # Special case: stream shutdown
         current_time = time.time()
         input = self.status.input_status
-        last_input_time = input.last_input_time or 0
-        time_since_last_input = current_time - last_input_time
+        time_since_last_input = current_time - (input.last_input_time or 0)
 
         if not self.streamer.is_stream_running():
             return (
@@ -157,67 +162,57 @@ class ProcessGuardian:
                 if time_since_last_input > 3  # 3s grace period after shutdown
                 else PipelineState.DEGRADED_INPUT
             )
-        elif time_since_last_input > 90:
-            # Streamer is running but not sending inputs nor shutting down for 30s, declare ERROR
-            return PipelineState.ERROR
         elif time_since_last_input > 60:
             if self.streamer.trigger_stop_stream():
                 logging.info(
                     f"Shutting down streamer. Flagging DEGRADED_INPUT state during shutdown: time_since_last_input={time_since_last_input:.1f}s"
                 )
-            return PipelineState.DEGRADED_INPUT
-        elif time_since_last_input > 2 or input.fps < 15:
-            logging.info(
-                f"Detected DEGRADED_INPUT: time_since_last_input={time_since_last_input:.1f}s, fps={input.fps}"
+            return (
+                PipelineState.DEGRADED_INPUT
+                if time_since_last_input < 90
+                else PipelineState.ERROR  # Not shutting down after 30s, declare ERROR
             )
-            return PipelineState.DEGRADED_INPUT
 
+        # Special case: pipeline load
         start_time = max(self.process.start_time, self.status.start_time)
         inference = self.status.inference_status
+
+        time_since_last_output = current_time - (inference.last_output_time or 0)
         pipeline_load_time = max(inference.last_params_update_time or 0, start_time)
-        time_since_pipeline_load = current_time - pipeline_load_time
+        # -1s to be conservative and avoid race conditions on the timestamp comparisons below
+        time_since_pipeline_load = max(0, current_time - pipeline_load_time - 1)
 
-        if not inference.last_output_time and time_since_pipeline_load < 30:
-            # 30s grace period for the pipeline to start
-            return PipelineState.ONLINE
+        active_after_load = time_since_last_output < time_since_pipeline_load
+        if not active_after_load:
+            is_params_update = (inference.last_params_update_time or 0) > start_time
+            load_grace_period = 2 if is_params_update else 10
+            load_timeout = 30 if is_params_update else 120
+            return (
+                PipelineState.ONLINE
+                if time_since_pipeline_load < load_grace_period
+                else PipelineState.DEGRADED_INPUT
+                if time_since_last_input > time_since_pipeline_load
+                else PipelineState.DEGRADED_INFERENCE
+                if time_since_pipeline_load < load_timeout
+                else PipelineState.ERROR  # Not starting after timeout, declare ERROR
+            )
 
-        delayed_frames = (
-            not inference.last_output_time
-            or current_time - inference.last_output_time > 5
-        )
-        low_fps = inference.fps < min(10, 0.8 * input.fps)
-        recent_restart = (
-            inference.last_restart_time
-            and current_time - inference.last_restart_time < 60
-        )
-        recent_error = (
-            inference.last_error_time and current_time - inference.last_error_time < 15
-        )
-        if delayed_frames or low_fps or recent_restart or recent_error:
-            return PipelineState.DEGRADED_INFERENCE
-
-        last_output_time = inference.last_output_time or 0
-        time_since_last_output = current_time - last_output_time
-        time_since_start = current_time - start_time
-        time_since_reload = min(time_since_pipeline_load, time_since_start)
-
-        gone_stale = (
-            time_since_last_output > time_since_last_input
-            and time_since_last_output > 60
-            and time_since_reload > 240
-        )
-        if time_since_last_input > 5 and not gone_stale:
-            # nothing to do if we're not sending inputs
-            return PipelineState.ONLINE
-
-        active_after_reload = time_since_last_output < (time_since_reload - 1)
-        stopped_recently = (
-            active_after_reload
+        # Normal case: active stream
+        stopped_producing_frames = (
+            time_since_last_output > (time_since_last_input + 1)
             and time_since_last_output > 5
-            and time_since_last_output < 60
         )
-        if stopped_recently or gone_stale:
+        if stopped_producing_frames:
             return PipelineState.ERROR
+
+        recent_error = (inference.last_error_time or 0) > current_time - 15
+        recent_restart = (inference.last_restart_time or 0) > current_time - 60
+        if recent_error or recent_restart:
+            return PipelineState.DEGRADED_INFERENCE
+        elif time_since_last_input > 2 or input.fps < 15:
+            return PipelineState.DEGRADED_INPUT
+        elif time_since_last_output > 2 or inference.fps < min(10, 0.8 * input.fps):
+            return PipelineState.DEGRADED_INFERENCE
 
         return PipelineState.ONLINE
 
@@ -234,19 +229,17 @@ class ProcessGuardian:
 
         # Capture logs before stopping the process
         restart_logs = self.process.get_recent_logs()
-        last_error = self.process.get_last_error()
         # don't call the full start/stop methods since we only want to restart the process
         await self.process.stop()
 
-        self.process = PipelineProcess.start(self.pipeline, self.params)
-        self.status.state = PipelineState.INITIALIZING
-        self.status.inference_status.restart_count += 1
-        self.status.inference_status.last_restart_time = time.time()
-        self.status.inference_status.last_restart_logs = restart_logs
-        if last_error:
-            error_msg, error_time = last_error
-            self.status.inference_status.last_error = error_msg
-            self.status.inference_status.last_error_time = error_time
+        self.process = PipelineProcess.start(self.pipeline, self.initial_params)
+        self.status.update_state(PipelineState.INITIALIZING)
+        curr_status = self.status.inference_status
+        self.status.inference_status = InferenceStatus(
+            restart_count=curr_status.restart_count + 1,
+            last_restart_time=time.time(),
+            last_restart_logs=restart_logs,
+        )
 
         await self.streamer.emit_monitoring_event(
             {
@@ -255,7 +248,6 @@ class ProcessGuardian:
                 "restart_count": self.status.inference_status.restart_count,
                 "restart_time": self.status.inference_status.last_restart_time,
                 "restart_logs": restart_logs,
-                "last_error": last_error,
             }
         )
 
@@ -264,14 +256,10 @@ class ProcessGuardian:
         )
 
     async def _monitor_loop(self):
-        try:
-            while True:
+        while True:
+            try:
                 await asyncio.sleep(1)
-                if not self.process or self.process.done.is_set():
-                    continue
-                if not self.process.is_alive():
-                    logging.error("Process is not alive. Restarting...")
-                    await self._restart_process()
+                if not self.process:
                     continue
 
                 last_error = self.process.get_last_error()
@@ -290,19 +278,33 @@ class ProcessGuardian:
 
                 state = self._compute_current_state()
                 if state != self.status.state:
-                    self.status.state = state
-                    self.status.last_state_update_time = time.time()
-                    logging.info(f"Pipeline state changed to {state}")
+                    time_since_last_state_update = time.time() - (
+                        self.status.last_state_update_time or 0
+                    )
+                    logging.info(
+                        f"Pipeline state changed. old_state={self.status.state} new_state={state} time_since_last_state_update={time_since_last_state_update:.1f}s "
+                        + f"process_alive={self.process.is_alive()} process_initialized={self.process.is_pipeline_initialized()} process_done={self.process.done.is_set()} "
+                        + f"streamer_running={self.streamer.is_stream_running()} status={self.status.model_dump_json()}"
+                    )
+                    self.status.update_state(state)
 
                 if state == PipelineState.ERROR:
+                    if self.status.inference_status.restart_count >= 3:
+                        logging.error(
+                            "Pipeline process max restarts reached. Staying in ERROR state"
+                        )
+                        continue
                     logging.error("Pipeline is in ERROR state. Restarting process.")
                     # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
                     # So we skip the restart here and leave the status in ERROR so the worker will restart the whole container.
                     logging.warning("Skipping process restart, staying in ERROR state")
                     # TODO: Uncomment this once pipeline shutdown is fixed and restarting process is useful again.
                     # await self._restart_process()
-        except asyncio.CancelledError:
-            pass
+            except asyncio.CancelledError:
+                return
+            except Exception:
+                logging.exception("Error in monitor loop", stack_info=True)
+                continue
 
 
 fps_ema_alpha = 0.0645  # 2 + (30 + 1); to give the most weight to the past 30 frames
@@ -320,10 +322,10 @@ def calculate_rolling_fps(previous_fps: float, previous_frame_time: float):
 
 class _NoopStreamerCallbacks(StreamerCallbacks):
     async def is_stream_running(self) -> bool:
-        return True
+        return False
 
     async def emit_monitoring_event(self, event_data: dict) -> None:
         pass
 
     def trigger_stop_stream(self) -> bool:
-        return True
+        return False
