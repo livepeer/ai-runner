@@ -53,7 +53,7 @@ class ProcessGuardian:
 
     async def start(self):
         self.process = PipelineProcess.start(self.pipeline, self.initial_params)
-        self.status.update_state(PipelineState.INITIALIZING)
+        self.status.update_state(PipelineState.LOADING)
         self.monitor_task = asyncio.create_task(self._monitor_loop())
 
     async def stop(self):
@@ -149,7 +149,7 @@ class ProcessGuardian:
             return PipelineState.ERROR
         elif not self.process.is_pipeline_initialized() or self.process.done.is_set():
             # done is only set in the middle of the restart process so also return INITIALIZING
-            return PipelineState.INITIALIZING
+            return PipelineState.LOADING
 
         # Special case: stream shutdown
         current_time = time.time()
@@ -233,7 +233,7 @@ class ProcessGuardian:
         await self.process.stop()
 
         self.process = PipelineProcess.start(self.pipeline, self.initial_params)
-        self.status.update_state(PipelineState.INITIALIZING)
+        self.status.update_state(PipelineState.LOADING)
         curr_status = self.status.inference_status
         self.status.inference_status = InferenceStatus(
             restart_count=curr_status.restart_count + 1,
@@ -278,14 +278,6 @@ class ProcessGuardian:
 
                 state = self._compute_current_state()
                 if state != self.status.state:
-                    time_since_last_state_update = time.time() - (
-                        self.status.last_state_update_time or 0
-                    )
-                    logging.info(
-                        f"Pipeline state changed. old_state={self.status.state} new_state={state} time_since_last_state_update={time_since_last_state_update:.1f}s "
-                        + f"process_alive={self.process.is_alive()} process_initialized={self.process.is_pipeline_initialized()} process_done={self.process.done.is_set()} "
-                        + f"streamer_running={self.streamer.is_stream_running()} status={self.status.model_dump_json()}"
-                    )
                     self.status.update_state(state)
 
                 if state == PipelineState.ERROR:

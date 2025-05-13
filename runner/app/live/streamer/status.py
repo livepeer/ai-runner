@@ -1,6 +1,7 @@
 import time
 import hashlib
 import json
+import logging
 
 from pydantic import BaseModel, field_serializer
 
@@ -38,7 +39,7 @@ class InferenceStatus(BaseModel):
 
 # Use a class instead of an enum since Pydantic can't handle serializing enums
 class PipelineState:
-    INITIALIZING = "INITIALIZING"
+    LOADING = "LOADING"
     OFFLINE = "OFFLINE"
     ONLINE = "ONLINE"
     DEGRADED_INPUT = "DEGRADED_INPUT"
@@ -57,6 +58,14 @@ class PipelineStatus(BaseModel):
     inference_status: InferenceStatus = InferenceStatus()
 
     def update_state(self, state: str):
+        if state == self.state:
+            return self
+
+        time_since_last = time.time() - (self.last_state_update_time or 0)
+        logging.info(
+            f"Pipeline state changed. old_state={self.state} new_state={state} time_since_last_state_update={time_since_last:.1f}s "
+            + f"status={self.model_dump_json()}"
+        )
         self.state = state
         self.last_state_update_time = time.time()
         return self
