@@ -151,6 +151,10 @@ class ProcessGuardian:
             # done is only set in the middle of the restart process so also return INITIALIZING
             return PipelineState.LOADING
 
+        if self.status.state == PipelineState.ERROR:
+            # The ERROR state should be permanent, so ignore the other checks below
+            return PipelineState.ERROR
+
         # Special case: stream shutdown
         current_time = time.time()
         input = self.status.input_status
