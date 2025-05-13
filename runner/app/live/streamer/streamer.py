@@ -114,8 +114,11 @@ class PipelineStreamer(StreamerCallbacks):
     def is_running(self):
         return self.tasks_supervisor_task is not None
 
-    def trigger_stop_stream(self):
-        self.stop_event.set()
+    def trigger_stop_stream(self) -> bool:
+        if not self.stop_event.is_set():
+            self.stop_event.set()
+            return True
+        return False
 
     async def report_status_loop(self):
         next_report = time.time() + status_report_interval
