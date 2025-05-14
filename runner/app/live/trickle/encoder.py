@@ -70,7 +70,6 @@ def encode_av(
         output_audio_stream.layout = 'mono'
         # Optional: set other encoding parameters, e.g.:
         # output_audio_stream.bit_rate = 128_000
-        audio_buffer = deque()
 
     # Now read packets from the input, decode, then re-encode, and mux.
     start = datetime.datetime.now()
@@ -80,6 +79,8 @@ def encode_av(
     first_video_ts = 0
     dropped_video = 0
     dropped_audio = 0
+    audio_buffer = deque()
+
     while True:
         avframe = input_queue()
         if avframe is None:
@@ -101,7 +102,8 @@ def encode_av(
                 if audio_ts - current > AUDIO_BUFFER_SECS:
                     dropped_video += 1
                     if dropped_video > MAX_DROPPED_VIDEO:
-                        logging.error(f"Audio was too far ahead of video by {float(audio_ts - current)} seconds. Output may not be detected as having audio.")
+                        # stop the stream
+                        logging.error(f"Audio was too far ahead of video by {float(audio_ts - current)} seconds. Output may not be detected as having audio, so exiting.")
                         break
                     continue
             if not last_kf or float(current - last_kf) >= GOP_SECS:
@@ -136,10 +138,10 @@ def encode_av(
                 continue
 
             while len(audio_buffer) > 0:
-                # if we hit this point then we have a video frame, so process any buffered audio
+                # if we hit this point then we have a video frame
+                # Check whether audio is too far behind first video packet.
                 af = audio_buffer[0]
                 first_audio_ts = af.timestamp * af.time_base
-                # audio is too far behind first video packet, so drop
                 if first_video_ts - first_audio_ts > AUDIO_BUFFER_SECS:
                     audio_buffer.popleft()
                     dropped_audio += 1
@@ -148,14 +150,13 @@ def encode_av(
                 # NB: video being too far behind audio is handled within the video code
                 #     so we can drop video frames if necessary
 
-                logging.info(f"JOSH - first packets are v {float(first_video_ts)} a {float(first_audio_ts)}")
                 break
 
             if len(audio_buffer) > 0:
                 first_ts = float(audio_buffer[0].timestamp * audio_buffer[0].time_base)
                 last_ts = float(audio_buffer[-1].timestamp * audio_buffer[-1].time_base)
                 avframe.frames[:0] = audio_buffer
-                logging.info(f"Flushing {len(audio_buffer)} audio frames from={first_ts} to={last_ts} first_video_ts={float(first_video_ts)} dropped_audio={dropped_audio} dropped_video={dropped_video}")
+                logging.info(f"Flushing {len(audio_buffer)} audio frames from={first_ts} to={last_ts} dropped_audio={dropped_audio} dropped_video={dropped_video}")
                 audio_buffer.clear()
 
             av_broken = False
@@ -163,13 +164,13 @@ def encode_av(
                 af.log_timestamps["frame_end"] = time.time()
                 log_frame_timestamps("Audio", af)
                 if not audio_received and video_received:
-                    audio_ts = af.timestamp * af.time_base
-                    if abs(af.timestamp * af.time_base - first_video_ts) > AUDIO_BUFFER_SECS:
+                    first_audio_ts = af.timestamp * af.time_base
+                    if abs(first_audio_ts - first_video_ts) > AUDIO_BUFFER_SECS:
                         # A/V is out of sync badly enough so exit for now
                         av_broken = True
-                        logging.error(f"A/V is out of sync, exiting. audio_ts={audio_ts} video_ts={first_video_ts}")
+                        logging.error(f"A/V is out of sync, exiting. audio_ts={float(first_audio_ts)} video_ts={float(first_video_ts)}")
                         break
-                    logging.info(f"Received first audio_ts={audio_ts} video_ts={first_video_ts}")
+                    logging.info(f"Received first audio_ts={float(first_audio_ts)} video_ts={float(first_video_ts)} delta={float(first_audio_ts - first_video_ts)}")
                     audio_received = True
                 frame = av.audio.frame.AudioFrame.from_ndarray(af.samples, format=af.format, layout=af.layout)
                 frame.sample_rate = af.rate
@@ -179,6 +180,7 @@ def encode_av(
                 for ep in encoded_packets:
                     output_container.mux(ep)
             if av_broken:
+                # too far out of sync, so stop encoding
                 break
             continue
 
