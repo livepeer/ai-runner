@@ -11,7 +11,7 @@ from .frame import VideoOutput, AudioOutput, InputFrame
 
 # use mpegts default time base
 OUT_TIME_BASE=Fraction(1, 90_000)
-GOP_SECS=3
+GOP_SECS=2
 
 def encode_av(
     input_queue,
