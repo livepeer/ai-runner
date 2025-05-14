@@ -283,20 +283,21 @@ class ProcessGuardian:
                     )
 
                 state = self._compute_current_state()
-                if state != self.status.state:
+                changed = state != self.status.state
+                if changed:
                     self.status.update_state(state)
 
-                if state == PipelineState.ERROR:
+                if changed and state == PipelineState.ERROR:
                     if self.status.inference_status.restart_count >= 3:
                         logging.error(
                             "Pipeline process max restarts reached. Staying in ERROR state"
                         )
                         continue
+                    logging.error("Pipeline is in ERROR state. Restarting process.")
                     # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
                     # So we skip the restart here and leave the status in ERROR so the worker will restart the whole container.
-                    logging.debug("Skipping process restart, staying in ERROR state")
+                    logging.warning("Skipping process restart, staying in ERROR state")
                     # TODO: Uncomment this once pipeline shutdown is fixed and restarting process is useful again.
-                    # logging.error("Pipeline is in ERROR state. Restarting process.")
                     # await self._restart_process()
             except asyncio.CancelledError:
                 return
