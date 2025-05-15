@@ -12,7 +12,7 @@ from PIL import Image
 from .process_guardian import ProcessGuardian, StreamerCallbacks
 from .protocol.protocol import StreamProtocol
 from .status import timestamp_to_ms
-from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
+from ..trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
 
 fps_log_interval = 10
 status_report_interval = 10
