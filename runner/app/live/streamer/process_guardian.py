@@ -273,8 +273,8 @@ class ProcessGuardian:
 
                 now = time.time()
                 if now - last_fps_compute > FPS_LOG_INTERVAL:
-                    self.status.input_status.fps = input_fps = self.input_fps_counter.fps()
-                    self.status.inference_status.fps = output_fps = self.output_fps_counter.fps()
+                    self.status.input_status.fps = input_fps = self.input_fps_counter.fps(now)
+                    self.status.inference_status.fps = output_fps = self.output_fps_counter.fps(now)
                     logging.info(f"Input FPS: {input_fps:.2f} Output FPS: {output_fps:.2f}")
                     last_fps_compute = now
 
@@ -325,17 +325,20 @@ class FPSCounter:
         if self.start_time is None:
             self.start_time = time.time()
 
-    def fps(self) -> float:
+    def fps(self, now = time.time()) -> float:
         if self.frame_count < 2 or not self.start_time:
             fps = 0
         else:
-            fps = (self.frame_count - 1) / (time.time() - self.start_time)
-        self.reset()
+            fps = (self.frame_count - 1) / (now - self.start_time)
+
+        self.frame_count = 0
+        self.start_time = now # do not wait for next frame to start calculating next window
+
         return fps
 
     def reset(self):
         self.frame_count = 0
-        self.start_time = time.time()
+        self.start_time = None
 
 class _NoopStreamerCallbacks(StreamerCallbacks):
     def is_stream_running(self) -> bool:
