@@ -9,6 +9,7 @@ from trickle import InputFrame, OutputFrame
 from .process import PipelineProcess
 from .status import PipelineState, PipelineStatus, InferenceStatus, InputStatus
 
+FPS_LOG_INTERVAL = 10.0
 
 class StreamerCallbacks(abc.ABC):
     """
@@ -52,8 +53,8 @@ class ProcessGuardian:
             params, False
         )
 
-        self.input_timestamps: deque[float] = deque()
-        self.output_timestamps: deque[float] = deque()
+        self.input_frames_count = 0
+        self.output_frames_count = 0
 
     async def start(self):
         self.process = PipelineProcess.start(self.pipeline, self.initial_params)
@@ -83,8 +84,7 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
-        self.input_timestamps = deque()
-        self.output_timestamps = deque()
+        self.input_frames_count = self.output_frames_count = 0
         self.streamer = streamer or _NoopStreamerCallbacks()
 
         self.process.reset_stream(request_id, stream_id)
@@ -95,10 +95,8 @@ class ProcessGuardian:
         if not self.process:
             raise RuntimeError("Process not running")
 
-        current_time = time.time()
-        iss = self.status.input_status
-        iss.fps = calculate_fps_over_window(self.input_timestamps, current_time)
-        iss.last_input_time = current_time
+        self.status.input_status.last_input_time = time.time()
+        self.input_frames_count += 1
 
         self.process.send_input(frame)
 
@@ -107,10 +105,8 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
         output = await self.process.recv_output()
 
-        current_time = time.time()
-        oss = self.status.inference_status
-        oss.fps = calculate_fps_over_window(self.output_timestamps, current_time)
-        oss.last_output_time = current_time
+        self.status.inference_status.last_output_time = time.time()
+        self.output_frames_count += 1
 
         return output
 
@@ -254,6 +250,7 @@ class ProcessGuardian:
         )
 
     async def _monitor_loop(self):
+        last_fps_compute = time.time()
         while True:
             try:
                 await asyncio.sleep(1)
@@ -274,8 +271,14 @@ class ProcessGuardian:
                         }
                     )
 
-                self.status.input_status.fps = calculate_fps_over_window(self.input_timestamps)
-                self.status.inference_status.fps = calculate_fps_over_window(self.output_timestamps)
+                now = time.time()
+                since_last_fps = now - last_fps_compute
+                if since_last_fps > FPS_LOG_INTERVAL:
+                    self.status.input_status.fps = input_fps = self.input_frames_count / since_last_fps
+                    self.status.inference_status.fps = output_fps = self.output_frames_count / since_last_fps
+                    logging.info(f"Input FPS: {input_fps:.2f} Output FPS: {output_fps:.2f}")
+                    self.input_frames_count = self.output_frames_count = 0
+                    last_fps_compute = now
 
                 state = self._compute_current_state()
                 if state == self.status.state:
@@ -313,35 +316,6 @@ class ProcessGuardian:
             except Exception:
                 logging.exception("Error in monitor loop", stack_info=True)
                 continue
-
-
-def calculate_fps_over_window(
-    frame_timestamps: deque[float], new_timestamp: float | None = None, *, window_duration: float = 10.0
-) -> float:
-    """
-    Updates a deque of timestamps and calculates FPS over a sliding window. The deque is modified in-place.
-    The new_timestamp is optional and we this will only clear the old timestamps if it is not provided.
-    """
-    if new_timestamp is not None:
-        frame_timestamps.append(new_timestamp)
-
-    cutoff_time = time.time() - window_duration
-    while frame_timestamps and frame_timestamps[0] <= cutoff_time:
-        frame_timestamps.popleft()
-
-    num_frames = len(frame_timestamps)
-    if num_frames < 2:
-        # can't calculate fps with less than 2 frames
-        return 0.0
-
-    # adjust calculation if we don't have a full window of frames
-    time_range = frame_timestamps[-1] - frame_timestamps[0]
-    if time_range < 0.95*window_duration:
-        window_duration = time_range
-        num_frames -= 1 # discount 1 frame since we're using the exact timestamp between first/last frames
-
-    fps = num_frames / window_duration
-    return fps
 
 
 class _NoopStreamerCallbacks(StreamerCallbacks):
