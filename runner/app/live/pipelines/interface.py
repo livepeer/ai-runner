@@ -65,6 +65,15 @@ class Pipeline(ABC):
         """
         pass
 
+    @abstractmethod
+    async def update_resolution(self, width: int, height: int):
+        """Update pipeline resolution.
+
+        Must maintain valid state on success or restore previous state on failure.
+        Called sequentially with process_frame so concurrency is not an issue.
+        """
+        pass
+
     async def stop(self):
         """Stop the pipeline.
 

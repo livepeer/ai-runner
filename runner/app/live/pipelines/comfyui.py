@@ -27,6 +27,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
+    width: int = None
+    height: int = None
 
     @field_validator('prompt')
     @classmethod
@@ -92,10 +94,16 @@ class ComfyUI(Pipeline):
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
-        logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
-        # TODO: currently its a single prompt, but need to support multiple prompts
-        await self.client.update_prompts([new_params.prompt])
+        if new_params.width is not None and new_params.height is not None:
+            self.client.update_resolution(new_params.width, new_params.height)
+        else:
+            logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
+            await self.client.update_prompts([new_params.prompt])
         self.params = new_params
+        
+    async def update_resolution(self, width: int, height: int):
+        """Warm up the video processing pipeline with dummy frames."""
+        self.client.update_resolution(width, height)
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
