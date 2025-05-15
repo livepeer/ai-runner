@@ -82,6 +82,7 @@ class ProcessGuardian:
         self.streamer = streamer or _NoopStreamerCallbacks()
         self.process.reset_stream(request_id, stream_id)
         await self.update_params(params)
+        self.status.update_state(PipelineState.ONLINE)
 
     def send_input(self, frame: InputFrame):
         if not self.process:
