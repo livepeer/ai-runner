@@ -145,12 +145,7 @@ class PipelineStreamer(StreamerCallbacks):
                 logging.error(f"Failed to emit monitoring event: {e}")
 
     async def run_ingress_loop(self):
-        frame_count = 0
-        start_time = 0.0
         async for av_frame in self.protocol.ingress_loop(self.stop_event):
-            if not start_time:
-                start_time = time.time()
-
             # TODO any necessary accounting here for audio
             if isinstance(av_frame, AudioFrame):
                 self.process.send_input(av_frame)
@@ -192,22 +187,11 @@ class PipelineStreamer(StreamerCallbacks):
             )
             av_frame = av_frame.replace_image(frame)
             self.process.send_input(av_frame)
-
-            # Increment frame count and measure FPS
-            frame_count += 1
-            elapsed_time = time.time() - start_time
-            if elapsed_time >= fps_log_interval:
-                status = self.process.get_status()
-                logging.info(f"Input FPS: {status.input_status.fps:.2f}")
-                frame_count = 0
-                start_time = time.time()
         logging.info("Ingress loop ended")
 
     async def run_egress_loop(self):
         request_id = self.request_id
         async def gen_output_frames() -> AsyncGenerator[OutputFrame, None]:
-            frame_count = 0
-            start_time = 0.0
             while not self.stop_event.is_set():
                 output = await self.process.recv_output()
                 if not output:
@@ -240,21 +224,7 @@ class PipelineStreamer(StreamerCallbacks):
                     f"Output image received outputRequestId={output.request_id} ts={output.timestamp} time_base={output.time_base} resolution={output.image.width}x{output.image.height} mode={output.image.mode}"
                 )
 
-
-                if not start_time:
-                    # only start measuring output FPS after the first frame
-                    start_time = time.time()
-
                 yield output
-
-                # Increment frame count and measure FPS
-                frame_count += 1
-                elapsed_time = time.time() - start_time
-                if elapsed_time >= fps_log_interval:
-                    status = self.process.get_status()
-                    logging.info(f"Output FPS: {status.inference_status.fps:.2f}")
-                    frame_count = 0
-                    start_time = time.time()
 
         await self.protocol.egress_loop(gen_output_frames())
         logging.info("Egress loop ended")
