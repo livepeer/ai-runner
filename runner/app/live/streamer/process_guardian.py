@@ -274,6 +274,9 @@ class ProcessGuardian:
                         }
                     )
 
+                self.status.input_status.fps = calculate_windowed_fps(self.input_timestamps)
+                self.status.inference_status.fps = calculate_windowed_fps(self.output_timestamps)
+
                 state = self._compute_current_state()
                 if state == self.status.state:
                     continue
@@ -313,13 +316,17 @@ class ProcessGuardian:
 
 
 def calculate_windowed_fps(
-    timestamp_history: deque[float], new_timestamp: float, *, window_duration: float = 10.0
+    timestamp_history: deque[float], new_timestamp: float | None = None, *, window_duration: float = 10.0
 ) -> float:
     """
     Updates a deque of timestamps and calculates FPS over a sliding window. The deque is modified in-place.
+    The new_timestamp is optional and we this will only clear the old timestamps if it is not provided.
     """
-    cutoff_time = new_timestamp - window_duration
-    timestamp_history.append(new_timestamp)
+    if new_timestamp is None:
+        new_timestamp = time.time()
+    else:
+        cutoff_time = new_timestamp - window_duration
+        timestamp_history.append(new_timestamp)
 
     while timestamp_history and timestamp_history[0] <= cutoff_time:
         timestamp_history.popleft()
