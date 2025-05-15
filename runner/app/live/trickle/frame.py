@@ -10,6 +10,7 @@ class SideData:
     """
     skipped: bool = True
     input: Image.Image | np.ndarray | None
+    request_id: str = ''
 
 class InputFrame:
     """
