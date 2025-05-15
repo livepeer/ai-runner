@@ -30,7 +30,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         self.start_process()
 
     def __call__(  # type: ignore
-        self, *, subscribe_url: str, publish_url: str, control_url: str, events_url: str, params: dict, request_id: str, stream_id: str, **kwargs
+        self, *, subscribe_url: str, publish_url: str, control_url: str, events_url: str, params: dict, request_id: str, manifest_id: str, stream_id: str, **kwargs
     ):
         if not self.process:
             raise RuntimeError("Pipeline process not running")
@@ -53,6 +53,7 @@ class LiveVideoToVideoPipeline(Pipeline):
                             "events_url": events_url,
                             "params": params,
                             "request_id": request_id or "",
+                            "manifest_id": manifest_id or "",
                             "stream_id": stream_id or "",
                         }
                     ),
