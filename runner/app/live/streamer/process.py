@@ -83,13 +83,13 @@ class PipelineProcess:
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
 
-    def reset_stream(self, request_id: str, stream_id: str):
+    def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
         clear_queue(self.input_queue)
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
         clear_queue(self.log_queue)
-        self.param_update_queue.put({"request_id": request_id, "stream_id": stream_id})
+        self.param_update_queue.put({"request_id": request_id, "manifest_id": manifest_id, "stream_id": stream_id})
 
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
@@ -143,11 +143,11 @@ class PipelineProcess:
 
 
     def _handle_logging_params(self, params: dict) -> dict:
-        if isinstance(params, dict) and "request_id" in params and "stream_id" in params:
-            logging.info(f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, stream_id={params['stream_id']}")
+        if isinstance(params, dict) and "request_id" in params and "manifest_id" in params and "stream_id" in params:
+            logging.info(f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, manifest_id={params['manifest_id']} stream_id={params['stream_id']}")
             self.request_id = params["request_id"]
             self._reset_logging_fields(
-                params["request_id"], params["stream_id"]
+                params["request_id"], params["manifest_id"], params["stream_id"]
             )
             return {}
         return params
@@ -267,7 +267,7 @@ class PipelineProcess:
         )
         logger = config_logging(log_level=level)
         queue_handler = LogQueueHandler(self)
-        config_logging_fields(queue_handler, "", "")
+        config_logging_fields(queue_handler, "", "", "")
         logger.addHandler(queue_handler)
 
         self.queue_handler = queue_handler
@@ -276,9 +276,9 @@ class PipelineProcess:
         sys.stdout = QueueTeeStream(sys.stdout, self)
         sys.stderr = QueueTeeStream(sys.stderr, self)
 
-    def _reset_logging_fields(self, request_id: str, stream_id: str):
-        config_logging(request_id=request_id, stream_id=stream_id)
-        config_logging_fields(self.queue_handler, request_id, stream_id)
+    def _reset_logging_fields(self, request_id: str, manifest_id: str, stream_id: str):
+        config_logging(request_id=request_id, manifest_id=manifest_id, stream_id=stream_id)
+        config_logging_fields(self.queue_handler, request_id, manifest_id, stream_id)
 
     def _queue_put_fifo(self, _queue: mp.Queue, item: Any):
         """Helper to put an item on a queue, dropping oldest items if needed"""

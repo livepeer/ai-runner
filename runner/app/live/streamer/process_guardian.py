@@ -75,6 +75,7 @@ class ProcessGuardian:
     async def reset_stream(
         self,
         request_id: str,
+        manifest_id: str,
         stream_id: str,
         params: dict,
         streamer: StreamerCallbacks | None = None,
@@ -87,7 +88,7 @@ class ProcessGuardian:
         self.output_fps_counter.reset()
         self.streamer = streamer or _NoopStreamerCallbacks()
 
-        self.process.reset_stream(request_id, stream_id)
+        self.process.reset_stream(request_id, manifest_id, stream_id)
         await self.update_params(params)
         self.status.update_state(PipelineState.ONLINE)
 

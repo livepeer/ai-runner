@@ -57,6 +57,10 @@ class StartStreamParams(BaseModel):
         str,
         Field(default="", description="Unique identifier for the request."),
     ]
+    manifest_id: Annotated[
+        str,
+        Field(default="", description="Orchestrator identifier for the request."),
+    ]
     stream_id: Annotated[
         str,
         Field(default="", description="Unique identifier for the stream."),
@@ -116,7 +120,7 @@ async def handle_start_stream(request: web.Request):
         except Exception as e:
             logging.error(f"Error saving last params to file: {e}")
 
-        config_logging(request_id=params.request_id, stream_id=params.stream_id)
+        config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
         protocol = TrickleProtocol(
             params.subscribe_url,
@@ -128,6 +132,7 @@ async def handle_start_stream(request: web.Request):
             protocol,
             process,
             params.request_id,
+            params.manifest_id,
             params.stream_id,
         )
 

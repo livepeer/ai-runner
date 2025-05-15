@@ -79,6 +79,13 @@ class LiveVideoToVideoParams(BaseModel):
             description="The ID of the Gateway request (for logging purposes)."
         ),
     ]
+    manifest_id: Annotated[
+        str,
+        Field(
+            default="",
+            description="The manifest ID from the orchestrator (for logging purposes)."
+        ),
+    ]
     stream_id: Annotated[
         str,
         Field(
