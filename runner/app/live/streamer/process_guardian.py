@@ -3,9 +3,8 @@ import logging
 import time
 from typing import Optional
 import abc
-from collections import deque
-from trickle import InputFrame, OutputFrame
 
+from ..trickle import InputFrame, OutputFrame
 from .process import PipelineProcess
 from .status import PipelineState, PipelineStatus, InferenceStatus, InputStatus
 
@@ -53,8 +52,8 @@ class ProcessGuardian:
             params, False
         )
 
-        self.input_frames_count = 0
-        self.output_frames_count = 0
+        self.input_fps_counter = FPSCounter()
+        self.output_fps_counter = FPSCounter()
 
     async def start(self):
         self.process = PipelineProcess.start(self.pipeline, self.initial_params)
@@ -84,7 +83,8 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
-        self.input_frames_count = self.output_frames_count = 0
+        self.input_fps_counter.reset()
+        self.output_fps_counter.reset()
         self.streamer = streamer or _NoopStreamerCallbacks()
 
         self.process.reset_stream(request_id, stream_id)
@@ -96,7 +96,7 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
 
         self.status.input_status.last_input_time = time.time()
-        self.input_frames_count += 1
+        self.input_fps_counter.inc()
 
         self.process.send_input(frame)
 
@@ -106,7 +106,7 @@ class ProcessGuardian:
         output = await self.process.recv_output()
 
         self.status.inference_status.last_output_time = time.time()
-        self.output_frames_count += 1
+        self.output_fps_counter.inc()
 
         return output
 
@@ -272,12 +272,10 @@ class ProcessGuardian:
                     )
 
                 now = time.time()
-                since_last_fps = now - last_fps_compute
-                if since_last_fps > FPS_LOG_INTERVAL:
-                    self.status.input_status.fps = input_fps = self.input_frames_count / since_last_fps
-                    self.status.inference_status.fps = output_fps = self.output_frames_count / since_last_fps
+                if now - last_fps_compute > FPS_LOG_INTERVAL:
+                    self.status.input_status.fps = input_fps = self.input_fps_counter.fps()
+                    self.status.inference_status.fps = output_fps = self.output_fps_counter.fps()
                     logging.info(f"Input FPS: {input_fps:.2f} Output FPS: {output_fps:.2f}")
-                    self.input_frames_count = self.output_frames_count = 0
                     last_fps_compute = now
 
                 state = self._compute_current_state()
@@ -317,6 +315,27 @@ class ProcessGuardian:
                 logging.exception("Error in monitor loop", stack_info=True)
                 continue
 
+class FPSCounter:
+    def __init__(self):
+        self.frame_count = 0
+        self.start_time = None
+
+    def inc(self):
+        self.frame_count += 1
+        if self.start_time is None:
+            self.start_time = time.time()
+
+    def fps(self) -> float:
+        if self.frame_count < 2 or not self.start_time:
+            fps = 0
+        else:
+            fps = (self.frame_count - 1) / (time.time() - self.start_time)
+        self.reset()
+        return fps
+
+    def reset(self):
+        self.frame_count = 0
+        self.start_time = time.time()
 
 class _NoopStreamerCallbacks(StreamerCallbacks):
     def is_stream_running(self) -> bool:
