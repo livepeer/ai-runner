@@ -97,7 +97,7 @@ class ProcessGuardian:
 
         current_time = time.time()
         iss = self.status.input_status
-        iss.fps = calculate_windowed_fps(self.input_timestamps, current_time)
+        iss.fps = calculate_fps_over_window(self.input_timestamps, current_time)
         iss.last_input_time = current_time
 
         self.process.send_input(frame)
@@ -109,7 +109,7 @@ class ProcessGuardian:
 
         current_time = time.time()
         oss = self.status.inference_status
-        oss.fps = calculate_windowed_fps(self.output_timestamps, current_time)
+        oss.fps = calculate_fps_over_window(self.output_timestamps, current_time)
         oss.last_output_time = current_time
 
         return output
@@ -274,8 +274,8 @@ class ProcessGuardian:
                         }
                     )
 
-                self.status.input_status.fps = calculate_windowed_fps(self.input_timestamps)
-                self.status.inference_status.fps = calculate_windowed_fps(self.output_timestamps)
+                self.status.input_status.fps = calculate_fps_over_window(self.input_timestamps)
+                self.status.inference_status.fps = calculate_fps_over_window(self.output_timestamps)
 
                 state = self._compute_current_state()
                 if state == self.status.state:
@@ -315,29 +315,27 @@ class ProcessGuardian:
                 continue
 
 
-def calculate_windowed_fps(
-    timestamp_history: deque[float], new_timestamp: float | None = None, *, window_duration: float = 10.0
+def calculate_fps_over_window(
+    frame_timestamps: deque[float], new_timestamp: float | None = None, *, window_duration: float = 10.0
 ) -> float:
     """
     Updates a deque of timestamps and calculates FPS over a sliding window. The deque is modified in-place.
     The new_timestamp is optional and we this will only clear the old timestamps if it is not provided.
     """
-    if new_timestamp is None:
-        new_timestamp = time.time()
-    else:
-        cutoff_time = new_timestamp - window_duration
-        timestamp_history.append(new_timestamp)
+    if new_timestamp is not None:
+        frame_timestamps.append(new_timestamp)
 
-    while timestamp_history and timestamp_history[0] <= cutoff_time:
-        timestamp_history.popleft()
+    cutoff_time = time.time() - window_duration
+    while frame_timestamps and frame_timestamps[0] <= cutoff_time:
+        frame_timestamps.popleft()
 
-    num_frames = len(timestamp_history)
+    num_frames = len(frame_timestamps)
     if num_frames < 2:
         # can't calculate fps with less than 2 frames
         return 0.0
 
     # adjust calculation if we don't have a full window of frames
-    time_range = timestamp_history[-1] - timestamp_history[0]
+    time_range = frame_timestamps[-1] - frame_timestamps[0]
     if time_range < 0.95*window_duration:
         window_duration = time_range
         num_frames -= 1 # discount 1 frame since we're using the exact timestamp between first/last frames
