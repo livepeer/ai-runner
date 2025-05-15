@@ -236,7 +236,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPError'
         '413':
-          description: Request Entity Too Large
+          description: Content Too Large
           content:
             application/json:
               schema:
@@ -391,7 +391,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/HTTPError'
         '413':
-          description: Request Entity Too Large
+          description: Content Too Large
           content:
             application/json:
               schema:
