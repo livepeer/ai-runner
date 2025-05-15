@@ -27,8 +27,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
-    width: int = None
-    height: int = None
+    width: int = 512
+    height: int = 512
 
     @field_validator('prompt')
     @classmethod
@@ -65,13 +65,9 @@ class ComfyUI(Pipeline):
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
 
-        # Warm up the pipeline
-        dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
+        # Use warm_video with params dimensions
+        await self.warm_video(self.params.width, self.params.height, WARMUP_RUNS)
 
-        for _ in range(WARMUP_RUNS):
-            self.client.put_video_input(dummy_frame)
-            _ = await self.client.get_video_output()
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
@@ -95,17 +91,34 @@ class ComfyUI(Pipeline):
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
         if new_params.width is not None and new_params.height is not None:
-            self.client.update_resolution(new_params.width, new_params.height)
+            logging.info(f"Updating resolution to {new_params.width}x{new_params.height}")
+            self.params.width = new_params.width
+            self.params.height = new_params.height
+            await self.client.update_resolution(new_params.width, new_params.height, WARMUP_RUNS)
         else:
             logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
             await self.client.update_prompts([new_params.prompt])
         self.params = new_params
+
+    def get_pipeline_width(self) -> int:
+        return self.params.width if self.params and self.params.width is not None else 512
         
-    async def update_resolution(self, width: int, height: int):
+    def get_pipeline_height(self) -> int:
+        return self.params.height if self.params and self.params.height is not None else 512
+        
+    async def warm_video(self, width: int, height: int, num_runs: int = 5):
         """Warm up the video processing pipeline with dummy frames."""
-        self.client.update_resolution(width, height)
+        await self.client.warm_video(width, height, num_runs)
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
         await self.client.cleanup()
         logging.info("ComfyUI pipeline stopped")
+
+    async def update_resolution(self, width: int, height: int):
+        """Update pipeline resolution.
+        
+        Implementation of abstract method from Pipeline interface.
+        Delegates to update_params to maintain single source of truth for parameter updates.
+        """
+        await self.update_params(width=width, height=height)
