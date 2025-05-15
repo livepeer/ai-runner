@@ -3,6 +3,7 @@ import logging
 import time
 from typing import Optional
 import abc
+from collections import deque
 from trickle import InputFrame, OutputFrame
 
 from .process import PipelineProcess
@@ -51,6 +52,9 @@ class ProcessGuardian:
             params, False
         )
 
+        self.input_timestamps: deque[float] = deque()
+        self.output_timestamps: deque[float] = deque()
+
     async def start(self):
         self.process = PipelineProcess.start(self.pipeline, self.initial_params)
         self.status.update_state(PipelineState.LOADING)
@@ -79,7 +83,10 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
+        self.input_timestamps = deque()
+        self.output_timestamps = deque()
         self.streamer = streamer or _NoopStreamerCallbacks()
+
         self.process.reset_stream(request_id, stream_id)
         await self.update_params(params)
         self.status.update_state(PipelineState.ONLINE)
@@ -87,15 +94,11 @@ class ProcessGuardian:
     def send_input(self, frame: InputFrame):
         if not self.process:
             raise RuntimeError("Process not running")
+
+        current_time = time.time()
         iss = self.status.input_status
-        if not iss.last_input_time:
-            iss.last_input_time = time.time()
-            # can't calculate fps from the first frame
-        else:
-            previous_input_time = max(iss.last_input_time, self.status.start_time)
-            (iss.last_input_time, iss.fps) = calculate_rolling_fps(
-                iss.fps, previous_input_time
-            )
+        iss.fps = calculate_windowed_fps(self.input_timestamps, current_time)
+        iss.last_input_time = current_time
 
         self.process.send_input(frame)
 
@@ -104,15 +107,10 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
         output = await self.process.recv_output()
 
+        current_time = time.time()
         oss = self.status.inference_status
-        if not oss.last_output_time:
-            oss.last_output_time = time.time()
-            # can't calculate fps from the first frame
-        else:
-            previous_output_time = max(oss.last_output_time, self.status.start_time)
-            (oss.last_output_time, oss.fps) = calculate_rolling_fps(
-                oss.fps, previous_output_time
-            )
+        oss.fps = calculate_windowed_fps(self.output_timestamps, current_time)
+        oss.last_output_time = current_time
 
         return output
 
@@ -314,17 +312,31 @@ class ProcessGuardian:
                 continue
 
 
-fps_ema_alpha = 0.0645  # 2 + (30 + 1); to give the most weight to the past 30 frames
+def calculate_windowed_fps(
+    timestamp_history: deque[float], new_timestamp: float, *, window_duration: float = 10.0
+) -> float:
+    """
+    Updates a deque of timestamps and calculates FPS over a sliding window. The deque is modified in-place.
+    """
+    cutoff_time = new_timestamp - window_duration
+    timestamp_history.append(new_timestamp)
 
+    while timestamp_history and timestamp_history[0] <= cutoff_time:
+        timestamp_history.popleft()
 
-def calculate_rolling_fps(previous_fps: float, previous_frame_time: float):
-    now = time.time()
-    time_since_last_frame = now - previous_frame_time
-    if time_since_last_frame <= 0:
-        return (now, previous_fps)  # Avoid division by zero or negative time
-    current_fps = 1 / time_since_last_frame
-    new_fps = fps_ema_alpha * current_fps + (1 - fps_ema_alpha) * previous_fps
-    return (now, new_fps)
+    num_frames = len(timestamp_history)
+    if num_frames < 2:
+        # can't calculate fps with less than 2 frames
+        return 0.0
+
+    # adjust calculation if we don't have a full window of frames
+    time_range = timestamp_history[-1] - timestamp_history[0]
+    if time_range < 0.95*window_duration:
+        window_duration = time_range
+        num_frames -= 1 # discount 1 frame since we're using the exact timestamp between first/last frames
+
+    fps = num_frames / window_duration
+    return fps
 
 
 class _NoopStreamerCallbacks(StreamerCallbacks):
