@@ -64,6 +64,7 @@ class ProcessGuardian:
     async def reset_stream(
         self,
         request_id: str,
+        manifest_id: str,
         stream_id: str,
         params: dict,
         callbacks: ProcessCallbacks | None = None,
@@ -73,7 +74,7 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
         self.status = PipelineStatus(pipeline=self.pipeline, start_time=time.time())
         self.callbacks = callbacks or _NoopProcessCallbacks()
-        self.process.reset_stream(request_id, stream_id)
+        self.process.reset_stream(request_id, manifest_id, stream_id)
         await self.update_params(params)
 
     def send_input(self, frame: InputFrame):

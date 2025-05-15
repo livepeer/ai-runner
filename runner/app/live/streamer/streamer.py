@@ -24,6 +24,7 @@ class PipelineStreamer(ProcessCallbacks):
         input_timeout: int,
         process: ProcessGuardian,
         request_id: str,
+        manifest_id: str,
         stream_id: str,
     ):
         self.protocol = protocol
@@ -36,6 +37,7 @@ class PipelineStreamer(ProcessCallbacks):
         self.main_tasks: list[asyncio.Task] = []
         self.tasks_supervisor_task: asyncio.Task | None = None
         self.request_id = request_id
+        self.manifest_id = manifest_id
         self.stream_id = stream_id
 
     async def start(self, params: dict):
@@ -43,7 +45,7 @@ class PipelineStreamer(ProcessCallbacks):
             raise RuntimeError("Streamer already started")
 
         await self.process.reset_stream(
-            self.request_id, self.stream_id, params, self
+            self.request_id, self.manifest_id, self.stream_id, params, self
         )
 
         self.stop_event.clear()

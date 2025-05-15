@@ -135,6 +135,10 @@ class LiveVideoToVideoResponse(BaseModel):
         default='',
         description="The ID generated for this request",
     )
+    manifest_id: str = Field(
+        default='',
+        description="Orchestrator manifest ID for this request",
+    )
 
 
 class APIError(BaseModel):

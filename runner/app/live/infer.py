@@ -53,6 +53,7 @@ async def main(
     params: dict,
     input_timeout: int,
     request_id: str,
+    manifest_id: str,
     stream_id: str,
 ):
     loop = asyncio.get_event_loop()
@@ -174,6 +175,9 @@ if __name__ == "__main__":
         help="The Livepeer request ID associated with this video stream",
     )
     parser.add_argument(
+        "--manifest-id", type=str, default="", help="The orchestrator manifest ID"
+    )
+    parser.add_argument(
         "--stream-id", type=str, default="", help="The Livepeer stream ID"
     )
     args = parser.parse_args()
@@ -189,6 +193,7 @@ if __name__ == "__main__":
     config_logging(
         log_level=logging.DEBUG if os.getenv("VERBOSE_LOGGING")=="1" else logging.INFO,
         request_id=args.request_id,
+        manifest_id=args.manifest_id,
         stream_id=args.stream_id,
     )
 
@@ -205,6 +210,7 @@ if __name__ == "__main__":
                 params=params,
                 input_timeout=args.input_timeout,
                 request_id=args.request_id,
+                manifest_id=args.manifest_id,
                 stream_id=args.stream_id,
             )
         )
