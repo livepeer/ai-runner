@@ -276,32 +276,36 @@ class ProcessGuardian:
                     )
 
                 state = self._compute_current_state()
-                changed = state != self.status.state
-                if changed:
+                if state == self.status.state:
+                    continue
+
+                if state != PipelineState.ERROR:
+                    # avoid thrashing the state to ERROR if we're going to restart the process below
                     self.status.update_state(state)
-
-                if changed and state == PipelineState.ERROR:
-                    restart_count = self.status.inference_status.restart_count
-                    # Restarting the process to fix the error will take a couple of time, so we also stop
-                    # the stream before it happens so the gateway/app can switch to a functioning O ASAP.
-                    logging.error(
-                        f"Pipeline is in ERROR state. Stopping streamer and restarting process. prev_restart_count={restart_count}"
-                    )
-
-                    self.streamer.trigger_stop_stream()
-
-                    if restart_count >= 3:
+                else:
+                    try:
+                        restart_count = self.status.inference_status.restart_count
                         logging.error(
-                            f"Pipeline process max restarts reached, staying in ERROR state. restart_count={restart_count}"
+                            f"Pipeline is in ERROR state. Stopping streamer and restarting process. prev_restart_count={restart_count}"
                         )
-                    else:
+
+                        # Restarting the process to fix the error will take a couple of time, so we also stop
+                        # the stream before it happens so the gateway/app can switch to a functioning O ASAP.
+                        self.streamer.trigger_stop_stream()
+
+                        if restart_count >= 3:
+                            raise Exception(f"Pipeline process max restarts reached ({restart_count})")
+
                         # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
-                        # So we skip the restart here and leave the status in ERROR so the worker will restart the whole container.
-                        logging.warning(
-                            "Skipping process restart, staying in ERROR state"
-                        )
-                        # TODO: Uncomment this once pipeline shutdown is fixed and restarting process is useful again.
-                        # await self._restart_process()
+                        # So we skip the restart here and move the state to ERROR so the worker will restart the whole container.
+                        # TODO: Remove this exception once pipeline shutdown is fixed and restarting process is useful again.
+                        raise Exception("Skipping process restart due to pipeline shutdown issues")
+                        await self._restart_process()
+                    except Exception:
+                        logging.exception("Failed to stop streamer and restart process. Moving to ERROR state", stack_info=True)
+                        self.status.update_state(PipelineState.ERROR)
+
+
             except asyncio.CancelledError:
                 return
             except Exception:
