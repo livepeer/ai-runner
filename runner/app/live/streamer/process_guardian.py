@@ -274,10 +274,11 @@ class ProcessGuardian:
                 now = time.time()
                 if now - last_fps_compute > FPS_LOG_INTERVAL:
                     self.status.input_status.fps = self.input_fps_counter.fps(now)
-                    logging.info(f"Input FPS: {self.status.input_status.fps:.2f}")
                     self.status.inference_status.fps = self.output_fps_counter.fps(now)
-                    logging.info(f"Output FPS: {self.status.inference_status.fps:.2f}")
                     last_fps_compute = now
+                    if self.streamer.is_stream_running():
+                        logging.info(f"Input FPS: {self.status.input_status.fps:.2f}")
+                        logging.info(f"Output FPS: {self.status.inference_status.fps:.2f}")
 
                 state = self._compute_current_state()
                 if state == self.status.state:
