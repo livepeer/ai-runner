@@ -74,11 +74,12 @@ class ComfyUI(Pipeline):
     async def get_processed_video_frame(self) -> VideoOutput:
         av_frame = await self.comfystream.get_processed_video_frame()
         video_frame = VideoFrame.from_av_video(av_frame)
-        return VideoOutput(video_frame, av_frame.side_data.request_id).replace_image(av_frame.to_image())
+        return VideoOutput(video_frame, av_frame.side_data.request_id)
 
     async def get_processed_audio_frame(self) -> AudioOutput:
         av_frame = await self.comfystream.get_processed_audio_frame()
-        return AudioOutput(av_frame)
+        audio_frame = AudioFrame.from_av_audio(av_frame)
+        return AudioOutput(audio_frame, av_frame.side_data.request_id)
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
