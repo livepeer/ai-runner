@@ -293,7 +293,7 @@ class ProcessGuardian:
                         time_since_last_params={time_since_last_params} \
                         time_since_reload={time_since_reload}"
                     )
-                    await self._restart_process()
+#                    await self._restart_process()
         except asyncio.CancelledError:
             pass
 

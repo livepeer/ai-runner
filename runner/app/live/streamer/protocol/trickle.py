@@ -12,7 +12,7 @@ from .protocol import StreamProtocol
 from .last_value_cache import LastValueCache
 
 class TrickleProtocol(StreamProtocol):
-    def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None):
+    def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None, width: int = None, height: int = None):
         self.subscribe_url = subscribe_url
         self.publish_url = publish_url
         self.control_url = control_url
@@ -23,16 +23,18 @@ class TrickleProtocol(StreamProtocol):
         self.events_publisher = None
         self.subscribe_task = None
         self.publish_task = None
+        self.width = width
+        self.height = height
 
     async def start(self):
         self.subscribe_queue = queue.Queue[InputFrame]()
         self.publish_queue = queue.Queue[OutputFrame]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
-            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, 448, 704)
+            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, self.width, self.height)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, 448, 704)
+            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, self.width, self.height)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)
@@ -66,6 +68,12 @@ class TrickleProtocol(StreamProtocol):
         self.publish_task = None
 
     async def ingress_loop(self, done: asyncio.Event, width: int, height: int) -> AsyncGenerator[InputFrame, None]:
+        if width != self.width or height != self.height:
+            logging.info(f"Dimensions changed to {width}x{height}")
+            self.width = width
+            self.height = height
+        
+        logging.info(f"Starting ingress loop with dimensions {self.width}x{self.height}")
         subscribe_queue = self.subscribe_queue
         publish_queue = self.publish_queue
         def dequeue_frame():
@@ -87,6 +95,12 @@ class TrickleProtocol(StreamProtocol):
             yield image
 
     async def egress_loop(self, output_frames: AsyncGenerator[OutputFrame, None], width: int, height: int):
+        if width != self.width or height != self.height:
+            logging.info(f"Dimensions changed to {width}x{height}")
+            self.width = width
+            self.height = height
+        
+        logging.info(f"Starting egress loop with dimensions {self.width}x{self.height}")
         publish_queue = self.publish_queue
         def enqueue_bytes(frame: OutputFrame):
             publish_queue.put(frame)

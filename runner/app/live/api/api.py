@@ -109,7 +109,8 @@ async def handle_start_stream(request: web.Request):
 
         params_data = await parse_request_data(request)
         params = StartStreamParams(**params_data)
-
+        logging.info(f"Handled request with dimensions {params.params.get('width')}x{params.params.get('height')}")
+        
         try:
             with open(last_params_file, "w") as f:
                 json.dump(params.model_dump(), f)
@@ -123,6 +124,8 @@ async def handle_start_stream(request: web.Request):
             params.publish_url,
             params.control_url,
             params.events_url,
+            params.params.get('width', 448),
+            params.params.get('height', 704)
         )
         streamer = PipelineStreamer(
             protocol,
@@ -130,6 +133,8 @@ async def handle_start_stream(request: web.Request):
             process,
             params.request_id,
             params.stream_id,
+            params.params.get('width', 448),
+            params.params.get('height', 704)
         )
 
         await streamer.start(params.params)

@@ -25,10 +25,14 @@ class PipelineStreamer(ProcessCallbacks):
         process: ProcessGuardian,
         request_id: str,
         stream_id: str,
+        width: int,
+        height: int
     ):
         self.protocol = protocol
         self.input_timeout = input_timeout  # 0 means disabled
         self.process = process
+        self.width = width
+        self.height = height
 
         self.stop_event = asyncio.Event()
         self.emit_event_lock = Lock()
@@ -37,8 +41,6 @@ class PipelineStreamer(ProcessCallbacks):
         self.tasks_supervisor_task: asyncio.Task | None = None
         self.request_id = request_id
         self.stream_id = stream_id
-        self.width = 448
-        self.height = 704
 
     async def start(self, params: dict):
         if self.tasks_supervisor_task:
@@ -56,7 +58,8 @@ class PipelineStreamer(ProcessCallbacks):
         self.main_tasks = [
             run_in_background("ingress_loop", self.run_ingress_loop()),
             run_in_background("egress_loop", self.run_egress_loop()),
-            run_in_background("report_status_loop", self.report_status_loop())
+            run_in_background("report_status_loop", self.report_status_loop()),
+            
         ]
         # auxiliary tasks that are not critical to the supervisor, but which we want to run
         # TODO: maybe remove this since we had to move the control loop to main tasks
