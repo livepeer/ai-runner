@@ -27,8 +27,8 @@ def encode_av(
     get_metadata,
     video_codec: Optional[str] ='libx264',
     audio_codec: Optional[str] ='libfdk_aac',
-    width: int = 512,
-    height: int = 512
+    width: Optional[int] = 512,
+    height: Optional[int] = 512
 ):
     logging.info(f"Starting encoder with resolution {width}x{height}")
 

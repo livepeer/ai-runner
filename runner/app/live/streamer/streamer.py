@@ -37,6 +37,8 @@ class PipelineStreamer(ProcessCallbacks):
         self.tasks_supervisor_task: asyncio.Task | None = None
         self.request_id = request_id
         self.stream_id = stream_id
+        self.width = 448
+        self.height = 704
 
     async def start(self, params: dict):
         if self.tasks_supervisor_task:
@@ -157,15 +159,15 @@ class PipelineStreamer(ProcessCallbacks):
                 logging.error(f"Failed to emit monitoring event: {e}")
 
     async def run_ingress_loop(self):
-        target_width = self.process.pipeline.get_pipeline_width()
-        target_height = self.process.pipeline.get_pipeline_height()
+        target_width = self.width
+        target_height = self.height
         
         frame_count = 0
         start_time = 0.0
         async for av_frame in self.protocol.ingress_loop(
             self.stop_event, 
-            target_width=target_width,
-            target_height=target_height
+            width=target_width,
+            height=target_height
         ):
             if not start_time:
                 start_time = time.time()
@@ -222,8 +224,6 @@ class PipelineStreamer(ProcessCallbacks):
         logging.info("Ingress loop ended")
 
     async def run_egress_loop(self):
-        target_width = self.process.pipeline.get_pipeline_width()
-        target_height = self.process.pipeline.get_pipeline_height()
         
         request_id = self.request_id
         async def gen_output_frames() -> AsyncGenerator[OutputFrame, None]:
@@ -279,8 +279,8 @@ class PipelineStreamer(ProcessCallbacks):
 
         await self.protocol.egress_loop(
             gen_output_frames(),
-            width=target_width,
-            height=target_height
+            width=self.width,
+            height=self.height
         )
         logging.info("Egress loop ended")
 

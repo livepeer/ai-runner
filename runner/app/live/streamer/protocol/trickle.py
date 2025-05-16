@@ -29,10 +29,10 @@ class TrickleProtocol(StreamProtocol):
         self.publish_queue = queue.Queue[OutputFrame]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
-            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event)
+            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, 448, 704)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event)
+            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, 448, 704)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)
@@ -65,7 +65,7 @@ class TrickleProtocol(StreamProtocol):
         self.subscribe_task = None
         self.publish_task = None
 
-    async def ingress_loop(self, done: asyncio.Event) -> AsyncGenerator[InputFrame, None]:
+    async def ingress_loop(self, done: asyncio.Event, width: int, height: int) -> AsyncGenerator[InputFrame, None]:
         subscribe_queue = self.subscribe_queue
         publish_queue = self.publish_queue
         def dequeue_frame():
@@ -86,7 +86,7 @@ class TrickleProtocol(StreamProtocol):
                 continue
             yield image
 
-    async def egress_loop(self, output_frames: AsyncGenerator[OutputFrame, None]):
+    async def egress_loop(self, output_frames: AsyncGenerator[OutputFrame, None], width: int, height: int):
         publish_queue = self.publish_queue
         def enqueue_bytes(frame: OutputFrame):
             publish_queue.put(frame)

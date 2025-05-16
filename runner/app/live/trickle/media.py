@@ -16,12 +16,12 @@ DECODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 MAX_ENCODER_RETRIES = 3
 ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 
-async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback):
+async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback, width, height):
     # TODO add some pre-processing parameters, eg image size
     try:
         in_pipe, out_pipe = os.pipe()
         write_fd = await AsyncifyFdWriter(out_pipe)
-        parse_task = asyncio.create_task(decode_in(in_pipe, image_callback, put_metadata, write_fd))
+        parse_task = asyncio.create_task(decode_in(in_pipe, image_callback, put_metadata, write_fd, width, height))
         subscribe_task = asyncio.create_task(subscribe(subscribe_url, write_fd, monitoring_callback))
         await asyncio.gather(subscribe_task, parse_task)
         logging.info("run_subscribe complete")
@@ -74,13 +74,13 @@ async def AsyncifyFdWriter(write_fd):
     writer = asyncio.StreamWriter(write_transport, write_protocol, None, loop)
     return writer
 
-async def decode_in(in_pipe, frame_callback, put_metadata, write_fd):
+async def decode_in(in_pipe, frame_callback, put_metadata, write_fd, width, height):
     def decode_runner():
         retry_count = 0
         last_retry_time = time.time()
         while retry_count < MAX_DECODER_RETRIES:
             try:
-                decode_av(f"pipe:{in_pipe}", frame_callback, put_metadata)
+                decode_av(f"pipe:{in_pipe}", frame_callback, put_metadata, width, height)
                 break  # clean exit
             except Exception as e:
                 msg = str(e)
@@ -114,6 +114,8 @@ async def decode_in(in_pipe, frame_callback, put_metadata, write_fd):
 
 def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadata, **kwargs):
     # encode_av has a tendency to crash, so restart as necessary
+    
+    
     retryCount = 0
     last_retry_time = time.time()
     while retryCount < MAX_ENCODER_RETRIES:
@@ -146,7 +148,7 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
                         logging.exception("Error closing pipe on task list", stack_info=True)
             logging.info(f"Closed pipes - {pipe_count}/{total_pipes}")
 
-async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback):
+async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback, width, height):
     first_segment = True
 
     publisher = None
@@ -205,7 +207,7 @@ async def run_publish(publish_url: str, image_generator, get_metadata, monitorin
                 return task_done2(task, pipe_writer)
             task.add_done_callback(task_done)
 
-        encode_thread = threading.Thread(target=encode_in, args=(live_pipes, live_tasks_lock, image_generator, sync_callback, get_metadata), kwargs={"audio_codec":"libopus"})
+        encode_thread = threading.Thread(target=encode_in, args=(live_pipes, live_tasks_lock, image_generator, sync_callback, get_metadata), kwargs={"audio_codec":"libopus", "width": width, "height": height})
         encode_thread.start()
         logging.debug("run_publish: encoder thread started")
 

@@ -15,14 +15,14 @@ class StreamProtocol(ABC):
         pass
 
     @abstractmethod
-    async def ingress_loop(self, done: asyncio.Event) -> AsyncGenerator[Image.Image, None]:
+    async def ingress_loop(self, done: asyncio.Event, width: int, height: int) -> AsyncGenerator[Image.Image, None]:
         """Generator that yields the ingress frames"""
         if False:
             yield Image.new('RGB', (1, 1))  # dummy yield for type checking
         pass
 
     @abstractmethod
-    async def egress_loop(self, output_frames: AsyncGenerator[Image.Image, None]):
+    async def egress_loop(self, output_frames: AsyncGenerator[Image.Image, None], width: int, height: int):
         """Consumes generated frames and processes them"""
         pass
 
