@@ -157,9 +157,16 @@ class PipelineStreamer(ProcessCallbacks):
                 logging.error(f"Failed to emit monitoring event: {e}")
 
     async def run_ingress_loop(self):
+        target_width = self.process.pipeline.get_pipeline_width()
+        target_height = self.process.pipeline.get_pipeline_height()
+        
         frame_count = 0
         start_time = 0.0
-        async for av_frame in self.protocol.ingress_loop(self.stop_event):
+        async for av_frame in self.protocol.ingress_loop(
+            self.stop_event, 
+            target_width=target_width,
+            target_height=target_height
+        ):
             if not start_time:
                 start_time = time.time()
 
@@ -179,10 +186,6 @@ class PipelineStreamer(ProcessCallbacks):
             if frame.mode != "RGBA":
                 frame = frame.convert("RGBA")
 
-            # Get target dimensions from pipeline
-            target_width = self.process.pipeline.get_pipeline_width()
-            target_height = self.process.pipeline.get_pipeline_height()
-            
             width, height = frame.size
             if (width, height) != (target_width, target_height):
                 frame_array = np.array(frame)
@@ -219,6 +222,9 @@ class PipelineStreamer(ProcessCallbacks):
         logging.info("Ingress loop ended")
 
     async def run_egress_loop(self):
+        target_width = self.process.pipeline.get_pipeline_width()
+        target_height = self.process.pipeline.get_pipeline_height()
+        
         request_id = self.request_id
         async def gen_output_frames() -> AsyncGenerator[OutputFrame, None]:
             frame_count = 0
@@ -271,7 +277,11 @@ class PipelineStreamer(ProcessCallbacks):
                     frame_count = 0
                     start_time = time.time()
 
-        await self.protocol.egress_loop(gen_output_frames())
+        await self.protocol.egress_loop(
+            gen_output_frames(),
+            width=target_width,
+            height=target_height
+        )
         logging.info("Egress loop ended")
 
     async def run_control_loop(self):
