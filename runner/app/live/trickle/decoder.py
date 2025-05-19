@@ -9,13 +9,15 @@ from .frame import InputFrame
 
 MAX_FRAMERATE=24
 
-def decode_av(pipe_input, frame_callback, put_metadata):
+def decode_av(pipe_input, frame_callback, put_metadata, output_width=512, output_height=512):
     """
     Reads from a pipe (or file-like object).
 
     :param pipe_input: File path, 'pipe:', sys.stdin, or another file-like object.
     :param frame_callback: A function that accepts an InputFrame object
     :param put_metadata: A function that accepts audio/video metadata
+    :param output_width: Desired output width (default: 512)
+    :param output_height: Desired output height (default: 512)
     """
     container = cast(InputContainer, av.open(pipe_input, 'r'))
 
@@ -45,8 +47,8 @@ def decode_av(pipe_input, frame_callback, put_metadata):
     if video_stream is not None:
         video_metadata = {
             "codec": video_stream.codec_context.name,
-            "width": video_stream.codec_context.width,
-            "height": video_stream.codec_context.height,
+            "width": output_width,  # Report the output width
+            "height": output_height,  # Report the output height
             "pix_fmt": video_stream.codec_context.pix_fmt,
             "time_base": video_stream.time_base,
             # framerate is usually unreliable, especially with webrtc
@@ -105,11 +107,11 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
 
-                    h = 512
-                    w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
-                    if frame.height > frame.width:
-                        w = 512
-                        h = int((512 * frame.height / frame.width) / 2) * 2
+                    # Calculate dimensions maintaining aspect ratio
+                    # Resize to specified dimensions without maintaining aspect ratio
+                    w = output_width
+                    h = output_height
+
                     frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
                     avframe = InputFrame.from_av_video(frame)
                     avframe.log_timestamps["frame_init"] = time.time()
