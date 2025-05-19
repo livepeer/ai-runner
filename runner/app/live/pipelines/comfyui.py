@@ -54,7 +54,7 @@ class ComfyUIParams(BaseModel):
 class ComfyUI(Pipeline):
     def __init__(self):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
-        self.client = ComfyStreamClient(cwd=comfy_ui_workspace, width=448, height=704)
+        self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
 
@@ -66,8 +66,9 @@ class ComfyUI(Pipeline):
         self.params = new_params
 
         # Warm up the pipeline
+        logging.info(f"Warming up pipeline with dimensions: {new_params.width}x{new_params.height}")
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 448, 704, 3)
+        dummy_frame.side_data.input = torch.randn(1, new_params.height, new_params.width, 3)
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)
