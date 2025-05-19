@@ -27,6 +27,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
+    width: int = 512
+    height: int = 512
 
     @field_validator('prompt')
     @classmethod

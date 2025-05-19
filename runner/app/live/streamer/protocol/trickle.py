@@ -23,8 +23,8 @@ class TrickleProtocol(StreamProtocol):
         self.events_publisher = None
         self.subscribe_task = None
         self.publish_task = None
-        self.output_width = 448
-        self.output_height = 704
+        self.output_width = 512
+        self.output_height = 512
 
     async def start(self, params: dict = None):
         self.subscribe_queue = queue.Queue[InputFrame]()
@@ -37,10 +37,12 @@ class TrickleProtocol(StreamProtocol):
             self.output_height = params.get('height', self.output_height)
         
         self.subscribe_task = asyncio.create_task(
-            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event)
+            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, 
+                              output_width=self.output_width, output_height=self.output_height)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, self.output_width, self.output_height)
+            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, 
+                            output_width=self.output_width, output_height=self.output_height)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)

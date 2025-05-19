@@ -35,17 +35,23 @@ class PipelineStreamer(StreamerCallbacks):
         self.tasks_supervisor_task: asyncio.Task | None = None
         self.request_id = request_id
         self.stream_id = stream_id
+        self.output_width = 512
+        self.output_height = 512
 
     async def start(self, params: dict):
         if self.tasks_supervisor_task:
             raise RuntimeError("Streamer already started")
+
+        # Extract width and height from params if available
+        self.output_width = params.get('width', self.output_width)
+        self.output_height = params.get('height', self.output_height)
 
         await self.process.reset_stream(
             self.request_id, self.stream_id, params, self
         )
 
         self.stop_event.clear()
-        await self.protocol.start()
+        await self.protocol.start(params)  # Pass params to protocol.start()
 
         # We need a bunch of concurrent tasks to run the streamer. So we start them all in background and then also start
         # a supervisor task that will stop everything if any of the main tasks return or the stop event is set.

@@ -107,7 +107,6 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width=512, output
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
 
-                    # Calculate dimensions maintaining aspect ratio
                     # Resize to specified dimensions without maintaining aspect ratio
                     w = output_width
                     h = output_height
