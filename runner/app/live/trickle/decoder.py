@@ -47,8 +47,8 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width=512, output
     if video_stream is not None:
         video_metadata = {
             "codec": video_stream.codec_context.name,
-            "width": output_width,  # Report the output width
-            "height": output_height,  # Report the output height
+            "width": video_stream.codec_context.width,
+            "height": video_stream.codec_context.height,
             "pix_fmt": video_stream.codec_context.pix_fmt,
             "time_base": video_stream.time_base,
             # framerate is usually unreliable, especially with webrtc
@@ -108,10 +108,9 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width=512, output
                         next_pts_time = next_pts_time + frame_interval
 
                     # Resize to specified dimensions without maintaining aspect ratio
-                    w = output_width
-                    h = output_height
-
-                    frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
+                    frame = reformatter.reformat(frame, format='rgba', 
+                                               width=output_width, 
+                                               height=output_height)
                     avframe = InputFrame.from_av_video(frame)
                     avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)
