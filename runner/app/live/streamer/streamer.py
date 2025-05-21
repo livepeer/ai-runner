@@ -3,7 +3,7 @@ import logging
 import os
 import time
 import numpy as np
-from typing import AsyncGenerator, Awaitable
+from typing import AsyncGenerator, Awaitable, cast
 from asyncio import Lock
 
 import cv2
@@ -145,6 +145,11 @@ class PipelineStreamer(StreamerCallbacks):
                 logging.error(f"Failed to emit monitoring event: {e}")
 
     async def run_ingress_loop(self):
+        format_conversion_time = []
+        np_copy_time = []
+        crop_time = []
+        resize_time = []
+        frame_to_np_time = []
         async for av_frame in self.protocol.ingress_loop(self.stop_event):
             # TODO any necessary accounting here for audio
             if isinstance(av_frame, AudioFrame):
@@ -155,32 +160,46 @@ class PipelineStreamer(StreamerCallbacks):
                 logging.warning("Unknown frame type received, dropping")
                 continue
 
-            frame = av_frame.image
+            frame = cast(Image.Image,av_frame.image)
             if not frame:
                 continue
 
+            start_time = time.time()
             if frame.mode != "RGBA":
                 frame = frame.convert("RGBA")
+                format_conversion_time.append(time.time() - start_time)
 
             # Scale image to 512x512 as most models expect this size, especially when using tensorrt
             width, height = frame.size
             if (width, height) != (512, 512):
-                frame_array = np.array(frame)
-
                 # Crop to the center square if image not already square
                 square_size = min(width, height)
                 if width != height:
                     start_x = width // 2 - square_size // 2
                     start_y = height // 2 - square_size // 2
-                    frame_array = frame_array[
-                        start_y : start_y + square_size, start_x : start_x + square_size
-                    ]
+                    frame = frame.crop((start_x, start_y, start_x + square_size, start_y + square_size))
+                    crop_time.append(time.time() - start_time)
 
                 # Resize using cv2 (much faster than PIL)
                 if square_size != 512:
+                    frame_array = np.array(frame)
+                    np_copy_time.append(time.time() - start_time)
                     frame_array = cv2.resize(frame_array, (512, 512))
+                    resize_time.append(time.time() - start_time)
+                    frame = Image.fromarray(frame_array)
+                    frame_to_np_time.append(time.time() - start_time)
 
-                frame = Image.fromarray(frame_array)
+            if len(crop_time) > 600:
+                logging.info(f"format_conversion_time: {np.average(format_conversion_time)}")
+                logging.info(f"np_copy_time: {np.average(np_copy_time)}")
+                logging.info(f"crop_time: {np.average(crop_time)}")
+                logging.info(f"resize_time: {np.average(resize_time)}")
+                logging.info(f"frame_to_np_time: {np.average(frame_to_np_time)}")
+                format_conversion_time = []
+                np_copy_time = []
+                crop_time = []
+                resize_time = []
+                frame_to_np_time = []
 
             logging.debug(
                 f"Sending input frame. Scaled from {width}x{height} to {frame.size[0]}x{frame.size[1]}"
