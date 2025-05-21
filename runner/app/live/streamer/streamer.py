@@ -168,7 +168,7 @@ class PipelineStreamer(StreamerCallbacks):
                 frame = frame.convert("RGBA")
 
             target_width = self.output_width
-            target_height = self.output_width
+            target_height = self.output_height
 
             # # Scale image to target size
             width, height = frame.size
