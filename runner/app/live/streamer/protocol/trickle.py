@@ -3,7 +3,8 @@ import logging
 import queue
 import json
 from typing import AsyncGenerator, Optional
-import time
+
+from PIL import Image
 
 from trickle import media, TricklePublisher, TrickleSubscriber, InputFrame, OutputFrame, AudioFrame, AudioOutput
 
@@ -74,12 +75,8 @@ class TrickleProtocol(StreamProtocol):
 
             return frame
 
-        dequeue_latency = []
-        yield_latency = []
         while not done.is_set():
-            start_time = time.time()
             image = await asyncio.to_thread(dequeue_frame)
-            dequeue_latency.append(time.time() - start_time)
             if not image:
                 break
             # TEMP: Put audio immediately into the publish queue
@@ -87,15 +84,7 @@ class TrickleProtocol(StreamProtocol):
             if isinstance(image, AudioFrame):
                 publish_queue.put(AudioOutput([image]))
                 continue
-            yield_time = time.time()
             yield image
-            yield_latency.append(time.time() - yield_time)
-
-            if len(dequeue_latency) % 600 == 0:
-                logging.info(f"Ingress loop: Dequeue latency: {sum(dequeue_latency) / len(dequeue_latency):.5f}s")
-                logging.info(f"Ingress loop: Yield latency: {sum(yield_latency) / len(yield_latency):.5f}s")
-                dequeue_latency = []
-                yield_latency = []
 
     async def egress_loop(self, output_frames: AsyncGenerator[OutputFrame, None]):
         publish_queue = self.publish_queue

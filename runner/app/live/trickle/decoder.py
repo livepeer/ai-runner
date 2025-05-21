@@ -3,13 +3,11 @@ from av.video.reformatter import VideoReformatter
 from av.container import InputContainer
 import time
 import logging
-from typing import cast, List
-import copy
-from fractions import Fraction
-from .frame import InputFrame, AudioFrame, VideoFrame
+from typing import cast
 
-MAX_FRAMERATE=500
-TARGET_FRAMERATE=120
+from .frame import InputFrame
+
+MAX_FRAMERATE=24
 
 def decode_av(pipe_input, frame_callback, put_metadata):
     """
@@ -70,16 +68,8 @@ def decode_av(pipe_input, frame_callback, put_metadata):
     reformatter = VideoReformatter()
     frame_interval = 1.0 / MAX_FRAMERATE
     next_pts_time = 0.0
-
-    # Store frames for looping
-    stored_video_frames: List[VideoFrame] = []
-    stored_audio_frames: List[AudioFrame] = []
-    max_time = 5.0  # seconds
-    decoding = True
     try:
         for packet in container.demux():
-            if not decoding:
-                break
             if packet.dts is None:
                 continue
 
@@ -89,15 +79,11 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                     aframe = cast(av.AudioFrame, aframe)
                     if aframe.pts is None:
                         continue
+
                     avframe = InputFrame.from_av_audio(aframe)
-                    pts_time = aframe.pts * aframe.time_base
-                    if pts_time <= max_time:
-                        stored_audio_frames.append(copy.deepcopy(avframe))
-                        avframe.log_timestamps["frame_init"] = time.time()
-                        frame_callback(avframe)
-                    else:
-                        decoding = False
-                        break
+                    avframe.log_timestamps["frame_init"] = time.time()
+                    frame_callback(avframe)
+                    continue
 
             elif video_stream and packet.stream == video_stream:
                 # Decode video frames
@@ -126,13 +112,10 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         h = int((512 * frame.height / frame.width) / 2) * 2
                     frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
                     avframe = InputFrame.from_av_video(frame)
-                    if pts_time <= max_time:
-                        stored_video_frames.append(copy.deepcopy(avframe))
-                        avframe.log_timestamps["frame_init"] = time.time()
-                        frame_callback(avframe)
-                    else:
-                        decoding = False
-                        break
+                    avframe.log_timestamps["frame_init"] = time.time()
+                    frame_callback(avframe)
+                    continue
+
     except Exception as e:
         logging.error(f"Exception while decoding: {e}")
         raise # should be caught upstream
@@ -140,64 +123,4 @@ def decode_av(pipe_input, frame_callback, put_metadata):
     finally:
         container.close()
 
-    logging.info(f"Decoder: Collected {len(stored_video_frames)} video and {len(stored_audio_frames)} audio frames for looping.")
-
-    # If no frames, just return
-    if not stored_video_frames and not stored_audio_frames:
-        logging.error("No frames collected for looping.")
-        return
-
-    # Loop and replay frames with updated timestamps
-    start_time = time.time()
-    video_idx = 0
-    audio_idx = 0
-    last_pts = stored_video_frames[-1].timestamp * stored_video_frames[-1].time_base
-    frames_sent = 0
-    frame_callback_latency = []
-    sleep_latency = []
-    TARGET_FRAME_DURATION_SECONDS = 1.0 / TARGET_FRAMERATE
-    while True:
-        now = time.time()
-        elapsed = now - start_time
-        # Video
-        if stored_video_frames:
-            vframe = copy.deepcopy(stored_video_frames[video_idx])
-            # Update timestamp to simulate real-time
-            pts_time = last_pts + Fraction(elapsed)
-            vframe.timestamp = int(pts_time / vframe.time_base)
-            vframe.log_timestamps = {"frame_init": now}
-            frame_callback(vframe)
-            frame_callback_latency.append(time.time() - now)
-            video_idx = (video_idx + 1) % len(stored_video_frames)
-            frames_sent += 1
-            # Sleep to maintain frame rate
-            target_completion_time_for_this_frame_iteration = start_time + ((frames_sent + 1) * TARGET_FRAME_DURATION_SECONDS)
-            current_wall_time_before_sleep = time.time()
-            sleep_duration_needed = target_completion_time_for_this_frame_iteration - current_wall_time_before_sleep
-
-            actual_sleep_taken = 0.0
-            if sleep_duration_needed > 0:
-                time_before_sleep_call = time.time()
-                time.sleep(sleep_duration_needed)
-                actual_sleep_taken = time.time() - time_before_sleep_call
-
-            sleep_latency.append(actual_sleep_taken)
-        if frames_sent % 600 == 0:
-            logging.info(f"Decoder: Sent {frames_sent} frames in {elapsed}s fps={frames_sent / elapsed:.2f}")
-            logging.info(f"Decoder: Frame callback latency: {sum(frame_callback_latency) / len(frame_callback_latency):.5f}s")
-            avg_sleep_duration = sum(sleep_latency) / len(sleep_latency) if sleep_latency else 0.0
-            logging.info(f"Decoder: Avg Pacing Sleep: {avg_sleep_duration:.5f}s")
-            frame_callback_latency = []
-            sleep_latency = []
-        # Audio (optional: you may want to sync audio more precisely)
-        # if stored_audio_frames:
-        #     aframe = copy.deepcopy(stored_audio_frames[audio_idx])
-        #     aframe.timestamp = int((elapsed / aframe.time_base))
-        #     aframe.log_timestamps = {"frame_init": now}
-        #     frame_callback(aframe)
-        #     audio_idx = (audio_idx + 1) % len(stored_audio_frames)
-        # If neither, break
-        if not stored_video_frames and not stored_audio_frames:
-            break
-
-    logging.info("Decoder stopped (looping mode)")
+    logging.info("Decoder stopped")
