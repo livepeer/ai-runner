@@ -319,28 +319,34 @@ class ProcessGuardian:
 
 class FPSCounter:
     def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """
+        Reset the counter to initial state. Should only be called in between streams.
+        """
         self.frame_count = 0
         self.start_time = None
 
     def inc(self):
-        self.frame_count += 1
-        if self.start_time is None:
+        if not self.start_time:
+            # first frame of the stream only sets the measurement window start time
             self.start_time = time.time()
+            self.frame_count = 0
+        else:
+            self.frame_count += 1
 
     def fps(self, now = time.time()) -> float:
-        if self.frame_count < 2 or not self.start_time:
+        if not self.frame_count or not self.start_time:
             fps = 0
         else:
-            fps = (self.frame_count - 1) / (now - self.start_time)
+            fps = self.frame_count / (now - self.start_time)
 
+        # start next measuring window immediately, do not wait for the next frame
+        self.start_time = now
         self.frame_count = 0
-        self.start_time = now # do not wait for next frame to start calculating next window
 
         return fps
-
-    def reset(self):
-        self.frame_count = 0
-        self.start_time = None
 
 class _NoopStreamerCallbacks(StreamerCallbacks):
     def is_stream_running(self) -> bool:
