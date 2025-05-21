@@ -23,26 +23,31 @@ class TrickleProtocol(StreamProtocol):
         self.events_publisher = None
         self.subscribe_task = None
         self.publish_task = None
-        self.output_width = 512
-        self.output_height = 512
 
     async def start(self, params: dict = None):
         self.subscribe_queue = queue.Queue[InputFrame]()
         self.publish_queue = queue.Queue[OutputFrame]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
-        
-        # Get resolution from params if available
-        if params:
-            self.output_width = params.get('width', self.output_width)
-            self.output_height = params.get('height', self.output_height)
+
+        #TODO fix this default value issue
+        output_width = params.get('width', 512)
+        output_height = params.get('height', 512)
         
         self.subscribe_task = asyncio.create_task(
-            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, 
-                              output_width=self.output_width, output_height=self.output_height)
+            media.run_subscribe(self.subscribe_url, 
+                                self.subscribe_queue.put, 
+                                metadata_cache.put, 
+                                self.emit_monitoring_event,
+                                output_width, 
+                                output_height)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, 
-                            output_width=self.output_width, output_height=self.output_height)
+            media.run_publish(self.publish_url, 
+                              self.publish_queue.get, 
+                              metadata_cache.get, 
+                              self.emit_monitoring_event, 
+                              output_width, 
+                              output_height)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)

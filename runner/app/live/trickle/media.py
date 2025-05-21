@@ -16,7 +16,7 @@ DECODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 MAX_ENCODER_RETRIES = 3
 ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 
-async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback, output_width=512, output_height=512):
+async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback, output_width, output_height):
     # TODO add some pre-processing parameters, eg image size
     try:
         in_pipe, out_pipe = os.pipe()
@@ -112,7 +112,7 @@ async def decode_in(in_pipe, frame_callback, put_metadata, write_fd, output_widt
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, decode_runner)
 
-def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadata, output_width=512, output_height=512, **kwargs):
+def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadata, output_width, output_height, **kwargs):
     # encode_av has a tendency to crash, so restart as necessary
     retryCount = 0
     last_retry_time = time.time()
@@ -146,7 +146,7 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
                         logging.exception("Error closing pipe on task list", stack_info=True)
             logging.info(f"Closed pipes - {pipe_count}/{total_pipes}")
 
-async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback, output_width=512, output_height=512):
+async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback, output_width, output_height):
     first_segment = True
 
     publisher = None

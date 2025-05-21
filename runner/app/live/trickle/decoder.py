@@ -9,15 +9,15 @@ from .frame import InputFrame
 
 MAX_FRAMERATE=24
 
-def decode_av(pipe_input, frame_callback, put_metadata, output_width=512, output_height=512):
+def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_height):
     """
     Reads from a pipe (or file-like object).
 
     :param pipe_input: File path, 'pipe:', sys.stdin, or another file-like object.
     :param frame_callback: A function that accepts an InputFrame object
     :param put_metadata: A function that accepts audio/video metadata
-    :param output_width: Desired output width (default: 512)
-    :param output_height: Desired output height (default: 512)
+    :param output_width: Desired output width
+    :param output_height: Desired output height
     """
     container = cast(InputContainer, av.open(pipe_input, 'r'))
 

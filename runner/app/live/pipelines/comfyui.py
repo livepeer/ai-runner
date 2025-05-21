@@ -51,6 +51,49 @@ class ComfyUIParams(BaseModel):
         raise ValueError("Prompt must be either a JSON object or such JSON object serialized as a string")
 
 
+class ComfyUtils:
+    @staticmethod
+    def get_latent_image_dimensions(workflow: dict) -> tuple[int, int]:
+        """Get dimensions from the EmptyLatentImage node in the workflow.
+        
+        Args:
+            workflow: The workflow JSON dictionary
+            
+        Returns:
+            Tuple of (width, height) from the latent image, or (None, None) if not found
+        """
+        for node_id, node in workflow.items():
+            if node.get("class_type") == "EmptyLatentImage":
+                try:
+                    inputs = node.get("inputs", {})
+                    return inputs.get("width"), inputs.get("height")
+                except Exception as e:
+                    logging.warning(f"Failed to extract dimensions from latent image: {e}")
+                    return None, None
+        return None, None
+
+    @staticmethod
+    def update_latent_image_dimensions(workflow: dict, width: int, height: int) -> dict | None:
+        """Update the EmptyLatentImage node dimensions in the workflow.
+        
+        Args:
+            workflow: The workflow JSON dictionary
+            width: Width to set
+            height: Height to set
+        """
+        for node_id, node in workflow.items():
+            if node.get("class_type") == "EmptyLatentImage":
+                try:
+                    if "inputs" not in node:
+                        node["inputs"] = {}
+                    node["inputs"]["width"] = width
+                    node["inputs"]["height"] = height
+                    logging.info(f"Updated latent image dimensions to {width}x{height}")
+                except Exception as e:
+                    logging.warning(f"Failed to update latent image dimensions: {e}")
+                break
+
+
 class ComfyUI(Pipeline):
     def __init__(self):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
@@ -61,14 +104,30 @@ class ComfyUI(Pipeline):
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
-        # TODO: currently its a single prompt, but need to support multiple prompts
+        
+        # Get dimensions from workflow if it's a dict
+        
+        if width is None or height is None:
+            if isinstance(new_params.prompt, dict):
+                # If dimensions not provided in params, get them from latent image
+                latent_width, latent_height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+                new_params.width = width or latent_width or new_params.width
+                new_params.height = height or latent_height or new_params.height
+            else:
+                # If dimensions provided in params, update the latent image
+                ComfyUtils.update_latent_image_dimensions(new_params.prompt, width, height)
+
+        # TODO clean up extra vars
+        width = width or new_params.width
+        height = height or new_params.height
+    
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
 
-        # Warm up the pipeline
-        logging.info(f"Warming up pipeline with dimensions: {new_params.width}x{new_params.height}")
+        # Warm up the pipeline with the final dimensions
+        logging.info(f"Warming up pipeline with dimensions: {width}x{height}")
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, new_params.height, new_params.width, 3)
+        dummy_frame.side_data.input = torch.randn(1, height, width, 3)
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)
