@@ -29,6 +29,9 @@ class TrickleProtocol(StreamProtocol):
         self.publish_queue = queue.Queue[OutputFrame]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
 
+        if params is None:
+            params = {}
+
         #TODO fix this default value issue
         output_width = params.get('width', 512)
         output_height = params.get('height', 512)

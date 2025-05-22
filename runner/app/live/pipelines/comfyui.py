@@ -106,6 +106,8 @@ class ComfyUI(Pipeline):
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
         
         # Get dimensions from workflow if it's a dict
+        width = params.get('width')
+        height = params.get('height')
         
         if width is None or height is None:
             if isinstance(new_params.prompt, dict):
