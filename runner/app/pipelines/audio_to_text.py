@@ -65,6 +65,24 @@ class AudioToTextPipeline(Pipeline):
 
         torch_device = get_torch_device()
 
+        # Enable FlashAttention based on device compatibility.
+        attn_implementation = "eager"
+        if torch_device.type == "cuda":
+            device = torch.cuda.get_device_properties(0)
+            major, minor = device.major, device.minor
+            # FlashAttention requires CUDA Compute Capability >= 8.0.
+            if (major, minor) >= (8, 0):
+                attn_implementation = "flash_attention_2"
+            else:
+                attn_implementation = "sdpa"
+                logger.warning(
+                    f"GPU {device.name} (Compute Capability {major}.{minor}) is not "
+                    "compatible with FlashAttention, so scaled_dot_product_attention "
+                    "is being used instead."
+                )
+        else:
+            logger.warning("FlashAttention disabled since it requires a CUDA device.")
+
         # Get model specific configuration parameters.
         model_enum = ModelName.from_value(model_id)
         self._model_cfg: ModelConfig = MODEL_CONFIGS.get(model_enum, ModelConfig())
@@ -81,9 +99,10 @@ class AudioToTextPipeline(Pipeline):
             low_cpu_mem_usage=True,
             use_safetensors=True,
             cache_dir=get_model_dir(),
-            attn_implementation="eager",  # TODO: enable flash attention.
+            attn_implementation=attn_implementation,
+            device_map="auto",
             **kwargs,
-        ).to(torch_device)
+        )
 
         processor = AutoProcessor.from_pretrained(model_id, cache_dir=get_model_dir())
 
@@ -93,7 +112,7 @@ class AudioToTextPipeline(Pipeline):
             tokenizer=processor.tokenizer,
             feature_extractor=processor.feature_extractor,
             max_new_tokens=128,
-            device=torch_device,
+            device_map="auto",
             **kwargs,
         )
 
@@ -101,13 +120,11 @@ class AudioToTextPipeline(Pipeline):
 
     def __call__(self, audio: UploadFile, duration: float, **kwargs) -> List[File]:
         audioBytes = audio.file.read()
-
-        # Convert M4A/MP4 files for pipeline compatibility.
-        if (
-            os.path.splitext(audio.filename)[1].lower().lstrip(".")
-            in INCOMPATIBLE_EXTENSIONS
-        ):
-            audioBytes = self._audio_converter.convert(audioBytes, "mp3")
+        #re-encode audio to match pre-processing done in transformers.
+        # pipeline accepts np.ndarray and does not convert it again. String file path and bytes are converted to np.ndarray in the pipeline.
+        #https://github.com/huggingface/transformers/blob/47c29ccfaf56947d845971a439cbe75a764b63d7/src/transformers/pipelines/automatic_speech_recognition.py#L353
+        #https://github.com/huggingface/transformers/blob/47c29ccfaf56947d845971a439cbe75a764b63d7/src/transformers/pipelines/audio_utils.py#L10
+        audio_array = self._audio_converter.to_ndarray(audioBytes)
 
         # Adjust batch size and chunk length based on timestamps and duration.
         # NOTE: Done to prevent CUDA OOM errors for large audio files.
@@ -131,7 +148,7 @@ class AudioToTextPipeline(Pipeline):
         )
 
         try:
-            outputs = self.tm(audioBytes, **kwargs)
+            outputs = self.tm(audio_array, **kwargs)
             outputs.setdefault("chunks", [])
         except torch.cuda.OutOfMemoryError as e:
             raise e

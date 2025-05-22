@@ -6,46 +6,98 @@ import signal
 import sys
 import os
 import traceback
+import threading
 from typing import List
-import logging
 
-from streamer import PipelineStreamer
-from trickle import TrickleSubscriber
+from streamer import PipelineStreamer, ProcessGuardian
 
 # loads neighbouring modules with absolute paths
 infer_root = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, infer_root)
 
-from params_api import start_http_server
-from streamer.trickle import TrickleStreamer
-from streamer.zeromq import ZeroMQStreamer
+from api import start_http_server
+from log import config_logging, log_timing
+from streamer.protocol.trickle import TrickleProtocol
+from streamer.protocol.zeromq import ZeroMQProtocol
 
 
-async def main(http_port: int, stream_protocol: str, subscribe_url: str, publish_url: str, control_url: str, pipeline: str, params: dict, input_timeout: int):
-    if stream_protocol == "trickle":
-        handler = TrickleStreamer(subscribe_url, publish_url, pipeline, input_timeout, params or {})
-    elif stream_protocol == "zeromq":
-        handler = ZeroMQStreamer(subscribe_url, publish_url, pipeline, input_timeout, params or {})
-    else:
-        raise ValueError(f"Unsupported protocol: {stream_protocol}")
+def asyncio_exception_handler(loop, context):
+    """
+    Handles unhandled exceptions in asyncio tasks, logging the error and terminating the application.
+    """
+    exception = context.get('exception')
+    logging.error(f"Terminating process due to unhandled exception in asyncio task", exc_info=exception)
+    os._exit(1)
 
-    runner = None
+
+def thread_exception_hook(original_hook):
+    """
+    Creates a custom exception hook for threads that logs the error and terminates the application.
+    """
+    def custom_hook(args):
+        logging.error("Terminating process due to unhandled exception in thread", exc_info=args.exc_value)
+        original_hook(args) # this is most likely a noop
+        os._exit(1)
+    return custom_hook
+
+
+async def main(
+    *,
+    http_port: int,
+    stream_protocol: str,
+    subscribe_url: str,
+    publish_url: str,
+    control_url: str,
+    events_url: str,
+    pipeline: str,
+    params: dict,
+    request_id: str,
+    stream_id: str,
+):
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(asyncio_exception_handler)
+
+    process = ProcessGuardian(pipeline, params or {})
+    # Only initialize the streamer if we have a protocol and URLs to connect to
+    streamer = None
+    if stream_protocol and subscribe_url and publish_url:
+        if stream_protocol == "trickle":
+            protocol = TrickleProtocol(
+                subscribe_url, publish_url, control_url, events_url
+            )
+        elif stream_protocol == "zeromq":
+            protocol = ZeroMQProtocol(subscribe_url, publish_url)
+        else:
+            raise ValueError(f"Unsupported protocol: {stream_protocol}")
+        streamer = PipelineStreamer(protocol, process, request_id, stream_id)
+
+    api = None
     try:
-        handler.start()
-        runner = await start_http_server(handler, http_port)
-        signal_task = asyncio.create_task(block_until_signal([signal.SIGINT, signal.SIGTERM]))
-        handler_task = asyncio.create_task(start_control_subscriber(handler.wait(), control_url))
+        with log_timing("starting ProcessGuardian"):
+            await process.start()
+            if streamer:
+                await streamer.start(params)
+            api = await start_http_server(http_port, process, streamer)
 
-        await asyncio.wait([signal_task, handler_task],
-            return_when=asyncio.FIRST_COMPLETED
+        tasks: List[asyncio.Task] = []
+        if streamer:
+            tasks.append(asyncio.create_task(streamer.wait()))
+        tasks.append(
+            asyncio.create_task(block_until_signal([signal.SIGINT, signal.SIGTERM]))
         )
+
+        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     except Exception as e:
         logging.error(f"Error starting socket handler or HTTP server: {e}")
         logging.error(f"Stack trace:\n{traceback.format_exc()}")
         raise e
     finally:
-        await runner.cleanup()
-        await handler.stop()
+        if streamer:
+            streamer.trigger_stop_stream()
+            await streamer.wait(timeout=5)
+        if api:
+            await api.cleanup()
+        await process.stop()
 
 
 async def block_until_signal(sigs: List[signal.Signals]):
@@ -60,57 +112,61 @@ async def block_until_signal(sigs: List[signal.Signals]):
         signal.signal(sig, signal_handler)
     return await future
 
-async def start_control_subscriber(handler: PipelineStreamer, control_url: str):
-    if control_url is None or control_url.strip() == "":
-        logging.warning("No control-url provided, inference won't get updates from the control trickle subscription")
-        return
-    logging.info("Starting Control subscriber at %s", control_url)
-    subscriber = TrickleSubscriber(url=control_url)
-    while True:
-        segment = await subscriber.next()
-        if segment.eos():
-            return
-        params = await segment.read()
-        logging.info("Received control message, updating model with params: %s", params)
-        handler.update_params(**json.loads(params))
 
 if __name__ == "__main__":
+    threading.excepthook = thread_exception_hook(threading.excepthook)
+
     parser = argparse.ArgumentParser(description="Infer process to run the AI pipeline")
     parser.add_argument(
         "--http-port", type=int, default=8888, help="Port for the HTTP server"
     )
     parser.add_argument(
-        "--pipeline", type=str, default="streamdiffusion", help="Pipeline to use"
+        "--pipeline", type=str, default="comfyui", help="Pipeline to use"
     )
     parser.add_argument(
-        "--initial-params", type=str, default="{}", help="Initial parameters for the pipeline"
+        "--initial-params",
+        type=str,
+        default="{}",
+        help="Initial parameters for the pipeline",
     )
     parser.add_argument(
         "--stream-protocol",
         type=str,
         choices=["trickle", "zeromq"],
-        default="trickle",
-        help="Protocol to use for streaming frames in and out. One of: trickle, zeromq"
+        default=os.getenv("STREAM_PROTOCOL", "trickle"),
+        help="Protocol to use for streaming frames in and out. One of: trickle, zeromq",
     )
     parser.add_argument(
-        "--subscribe-url", type=str, required=True, help="URL to subscribe for the input frames (trickle). For zeromq this is the input socket address"
+        "--subscribe-url",
+        type=str,
+        help="URL to subscribe for the input frames (trickle). For zeromq this is the input socket address",
     )
     parser.add_argument(
-        "--publish-url", type=str, required=True, help="URL to publish output frames (trickle). For zeromq this is the output socket address"
+        "--publish-url",
+        type=str,
+        help="URL to publish output frames (trickle). For zeromq this is the output socket address",
     )
     parser.add_argument(
-        "--control-url", type=str, help="URL to subscribe for Control API JSON messages to update inference params"
+        "--control-url",
+        type=str,
+        help="URL to subscribe for Control API JSON messages to update inference params",
     )
     parser.add_argument(
-        "--input-timeout",
-        type=int,
-        default=60,
-        help="Timeout in seconds to wait after input frames stop before shutting down. Set to 0 to disable."
+        "--events-url",
+        type=str,
+        help="URL to publish events about pipeline status and logs.",
     )
     parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enable verbose (debug) logging"
+        "-v", "--verbose", action="store_true", help="Enable verbose (debug) logging"
+    )
+    parser.add_argument(
+        "--request-id",
+        type=str,
+        default="",
+        help="The Livepeer request ID associated with this video stream",
+    )
+    parser.add_argument(
+        "--stream-id", type=str, default="", help="The Livepeer stream ID"
     )
     args = parser.parse_args()
     try:
@@ -119,20 +175,34 @@ if __name__ == "__main__":
         logging.error(f"Error parsing --initial-params: {e}")
         sys.exit(1)
 
-    log_level = logging.DEBUG if args.verbose else logging.INFO
-    logging.basicConfig(
-        format='%(asctime)s %(levelname)-8s %(message)s',
-        level=log_level,
-        datefmt='%Y-%m-%d %H:%M:%S')
     if args.verbose:
-        os.environ['VERBOSE_LOGGING'] = '1' # enable verbose logging in subprocesses
+        os.environ["VERBOSE_LOGGING"] = "1"  # enable verbose logging in sub-processes
+
+    config_logging(
+        log_level=logging.DEBUG if os.getenv("VERBOSE_LOGGING")=="1" else logging.INFO,
+        request_id=args.request_id,
+        stream_id=args.stream_id,
+    )
 
     try:
         asyncio.run(
-            main(args.http_port, args.stream_protocol, args.subscribe_url, args.publish_url, args.control_url, args.pipeline, params, args.input_timeout)
+            main(
+                http_port=args.http_port,
+                stream_protocol=args.stream_protocol,
+                subscribe_url=args.subscribe_url,
+                publish_url=args.publish_url,
+                control_url=args.control_url,
+                events_url=args.events_url,
+                pipeline=args.pipeline,
+                params=params,
+                request_id=args.request_id,
+                stream_id=args.stream_id,
+            )
         )
+        # We force an exit here to ensure that the process terminates. If any asyncio tasks or
+        # sub-processes failed to shutdown they'd block the main process from exiting.
+        os._exit(0)
     except Exception as e:
         logging.error(f"Fatal error in main: {e}")
         logging.error(f"Traceback:\n{''.join(traceback.format_tb(e.__traceback__))}")
-        sys.exit(1)
-
+        os._exit(1)

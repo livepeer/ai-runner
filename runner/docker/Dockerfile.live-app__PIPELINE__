@@ -1,6 +1,8 @@
-ARG PIPELINE=streamdiffusion
+ARG PIPELINE=comfyui
 ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
+ARG PIPELINE
+ENV PIPELINE=${PIPELINE}
 
 # Install latest stable Go version and system dependencies
 RUN apt-get update && apt-get install -y \
@@ -12,7 +14,9 @@ RUN apt-get update && apt-get install -y \
 
 # Install any additional Python packages
 COPY requirements.live-ai.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# Also install in conda env
+RUN conda run -n comfystream pip install -r /app/requirements.txt --root-user-action ignore
 
 # Set environment variables
 ENV MAX_WORKERS=1
@@ -27,4 +31,9 @@ COPY bench.py /app/bench.py
 
 WORKDIR /app
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "0.0.0.0", "--port", "8000"]
+ARG GIT_SHA
+ENV GIT_SHA="$GIT_SHA"
+ARG VERSION="undefined"
+ENV VERSION="${VERSION}"
+
+CMD ["/workspace/miniconda3/envs/comfystream/bin/uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

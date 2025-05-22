@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import psutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -365,3 +366,25 @@ class LoraLoader:
         if not self.loras_enabled:
             self.pipeline.enable_lora()
             self.loras_enabled = True
+
+
+class MemoryInfo:
+    def __init__(self, gpu_memory, cpu_memory, num_gpus):
+        self.gpu_memory = gpu_memory
+        self.cpu_memory = cpu_memory
+        self.num_gpus = num_gpus
+
+    def __repr__(self):
+        return f"<MemoryInfo: GPUs={self.num_gpus}, CPU Memory={self.cpu_memory}, GPU Memory={self.gpu_memory}>"
+
+
+def get_max_memory() -> MemoryInfo:
+    num_gpus = torch.cuda.device_count()
+    gpu_memory = {
+        i: f"{torch.cuda.get_device_properties(i).total_memory // 1024**3}GiB" for i in range(num_gpus)}
+    cpu_memory = f"{psutil.virtual_memory().available // 1024**3}GiB"
+
+    memory_info = MemoryInfo(gpu_memory=gpu_memory,
+                             cpu_memory=cpu_memory, num_gpus=num_gpus)
+
+    return memory_info

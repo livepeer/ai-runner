@@ -13,7 +13,7 @@ Leverage the [VSCode DevContainer](https://code.visualstudio.com/docs/remote/con
 - [VSCode](https://code.visualstudio.com/download)
 - [Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
 - [Docker](https://docs.docker.com/get-docker/)
-- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+- [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
 
 **Quickstart with DevContainer:**
 

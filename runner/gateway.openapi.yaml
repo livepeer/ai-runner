@@ -3,7 +3,7 @@ openapi: 3.1.0
 info:
   title: Livepeer AI Runner
   description: An application to run AI pipelines
-  version: 0.0.0
+  version: 0.1.0
 servers:
 - url: https://dream-gateway.livepeer.cloud
   description: Livepeer Cloud Community Gateway
@@ -319,9 +319,9 @@ paths:
       operationId: genLLM
       requestBody:
         content:
-          application/x-www-form-urlencoded:
+          application/json:
             schema:
-              $ref: '#/components/schemas/Body_genLLM'
+              $ref: '#/components/schemas/LLMRequest'
         required: true
       responses:
         '200':
@@ -714,40 +714,6 @@ components:
       - image
       - model_id
       title: Body_genImageToVideo
-    Body_genLLM:
-      properties:
-        prompt:
-          type: string
-          title: Prompt
-        model_id:
-          type: string
-          title: Model Id
-          default: ''
-        system_msg:
-          type: string
-          title: System Msg
-          default: ''
-        temperature:
-          type: number
-          title: Temperature
-          default: 0.7
-        max_tokens:
-          type: integer
-          title: Max Tokens
-          default: 256
-        history:
-          type: string
-          title: History
-          default: '[]'
-        stream:
-          type: boolean
-          title: Stream
-          default: false
-      type: object
-      required:
-      - prompt
-      - model_id
-      title: Body_genLLM
     Body_genSegmentAnything2:
       properties:
         image:
@@ -902,19 +868,116 @@ components:
       - text
       title: ImageToTextResponse
       description: Response model for text generation.
-    LLMResponse:
+    LLMChoice:
       properties:
-        response:
-          type: string
-          title: Response
-        tokens_used:
+        index:
           type: integer
-          title: Tokens Used
+          title: Index
+        finish_reason:
+          type: string
+          title: Finish Reason
+          default: ''
+        delta:
+          allOf:
+          - $ref: '#/components/schemas/LLMMessage'
+        message:
+          allOf:
+          - $ref: '#/components/schemas/LLMMessage'
       type: object
       required:
-      - response
-      - tokens_used
+      - index
+      title: LLMChoice
+    LLMMessage:
+      properties:
+        role:
+          type: string
+          title: Role
+        content:
+          type: string
+          title: Content
+      type: object
+      required:
+      - role
+      - content
+      title: LLMMessage
+    LLMRequest:
+      properties:
+        messages:
+          items:
+            $ref: '#/components/schemas/LLMMessage'
+          type: array
+          title: Messages
+        model:
+          type: string
+          title: Model
+          default: ''
+        temperature:
+          type: number
+          title: Temperature
+          default: 0.7
+        max_tokens:
+          type: integer
+          title: Max Tokens
+          default: 256
+        top_p:
+          type: number
+          title: Top P
+          default: 1.0
+        top_k:
+          type: integer
+          title: Top K
+          default: -1
+        stream:
+          type: boolean
+          title: Stream
+          default: false
+      type: object
+      required:
+      - messages
+      title: LLMRequest
+    LLMResponse:
+      properties:
+        id:
+          type: string
+          title: Id
+        model:
+          type: string
+          title: Model
+        created:
+          type: integer
+          title: Created
+        usage:
+          $ref: '#/components/schemas/LLMTokenUsage'
+        choices:
+          items:
+            $ref: '#/components/schemas/LLMChoice'
+          type: array
+          title: Choices
+      type: object
+      required:
+      - id
+      - model
+      - created
+      - usage
+      - choices
       title: LLMResponse
+    LLMTokenUsage:
+      properties:
+        prompt_tokens:
+          type: integer
+          title: Prompt Tokens
+        completion_tokens:
+          type: integer
+          title: Completion Tokens
+        total_tokens:
+          type: integer
+          title: Total Tokens
+      type: object
+      required:
+      - prompt_tokens
+      - completion_tokens
+      - total_tokens
+      title: LLMTokenUsage
     LiveVideoToVideoParams:
       properties:
         subscribe_url:
@@ -931,6 +994,12 @@ components:
           description: URL for subscribing via Trickle protocol for updates in the
             live video-to-video generation params.
           default: ''
+        events_url:
+          type: string
+          title: Events Url
+          description: URL for publishing events via Trickle protocol for pipeline
+            status and logs.
+          default: ''
         model_id:
           type: string
           title: Model Id
@@ -945,6 +1014,16 @@ components:
           title: Params
           description: Initial parameters for the pipeline.
           default: {}
+        gateway_request_id:
+          type: string
+          title: Gateway Request Id
+          description: The ID of the Gateway request (for logging purposes).
+          default: ''
+        stream_id:
+          type: string
+          title: Stream Id
+          description: The Stream ID (for logging purposes).
+          default: ''
       type: object
       required:
       - subscribe_url
@@ -965,11 +1044,21 @@ components:
           type: string
           title: Control Url
           description: URL for updating the live video-to-video generation
+          default: ''
+        events_url:
+          type: string
+          title: Events Url
+          description: URL for subscribing to events for pipeline status and logs
+          default: ''
+        request_id:
+          type: string
+          title: Request Id
+          description: The ID generated for this request
+          default: ''
       type: object
       required:
       - subscribe_url
       - publish_url
-      - control_url
       title: LiveVideoToVideoResponse
       description: Response model for live video-to-video generation.
     MasksResponse:

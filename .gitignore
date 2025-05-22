@@ -8,6 +8,7 @@ output
 aiModels.json
 models
 checkpoints
+runner/run-lv2v.log
 
 # IDE
 .vscode

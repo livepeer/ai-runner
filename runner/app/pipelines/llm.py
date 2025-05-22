@@ -1,201 +1,327 @@
 import asyncio
 import logging
 import os
-import psutil
-from typing import Dict, Any, List, Optional, AsyncGenerator, Union
+import time
+import uuid
+from dataclasses import dataclass
+from typing import Dict, Any, List, AsyncGenerator, Union, Optional
 
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, TextIteratorStreamer, BitsAndBytesConfig
-from accelerate import init_empty_weights, load_checkpoint_and_dispatch
 from app.pipelines.base import Pipeline
-from app.pipelines.utils import get_model_dir, get_torch_device
-from huggingface_hub import file_download, snapshot_download
-from threading import Thread
+from app.pipelines.utils import get_model_dir, get_max_memory
+from vllm import AsyncLLMEngine, AsyncEngineArgs, SamplingParams
+from huggingface_hub import file_download
+from transformers import AutoConfig
+from app.routes.utils import LLMResponse, LLMChoice, LLMMessage, LLMTokenUsage
 
 logger = logging.getLogger(__name__)
 
 
-def get_max_memory():
-    num_gpus = torch.cuda.device_count()
-    gpu_memory = {i: f"{torch.cuda.get_device_properties(i).total_memory // 1024**3}GiB" for i in range(num_gpus)}
-    cpu_memory = f"{psutil.virtual_memory().available // 1024**3}GiB"
-    max_memory = {**gpu_memory, "cpu": cpu_memory}
+@dataclass
+class GenerationConfig:
+    max_tokens: int = 256
+    temperature: float = 0.7
+    top_p: float = 1.0
+    top_k: int = -1
+    presence_penalty: float = 0.0
+    frequency_penalty: float = 0.0
 
-    logger.info(f"Max memory configuration: {max_memory}")
-    return max_memory
-
-
-def load_model_8bit(model_id: str, **kwargs):
-    max_memory = get_max_memory()
-
-    quantization_config = BitsAndBytesConfig(
-        load_in_8bit=True,
-        llm_int8_threshold=6.0,
-        llm_int8_has_fp16_weight=False,
-    )
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, **kwargs)
-
-    model = AutoModelForCausalLM.from_pretrained(
-        model_id,
-        quantization_config=quantization_config,
-        device_map="auto",
-        max_memory=max_memory,
-        offload_folder="offload",
-        low_cpu_mem_usage=True,
-        **kwargs
-    )
-
-    return tokenizer, model
-
-
-def load_model_fp16(model_id: str, **kwargs):
-    device = get_torch_device()
-    max_memory = get_max_memory()
-
-    # Check for fp16 variant
-    local_model_path = os.path.join(
-        get_model_dir(), file_download.repo_folder_name(repo_id=model_id, repo_type="model"))
-    has_fp16_variant = any(".fp16.safetensors" in fname for _, _,
-                           files in os.walk(local_model_path) for fname in files)
-
-    if device != "cpu" and has_fp16_variant:
-        logger.info("Loading fp16 variant for %s", model_id)
-        kwargs["torch_dtype"] = torch.float16
-        kwargs["variant"] = "fp16"
-    elif device != "cpu":
-        kwargs["torch_dtype"] = torch.bfloat16
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, **kwargs)
-
-    config = AutoModelForCausalLM.from_pretrained(model_id, **kwargs).config
-
-    with init_empty_weights():
-        model = AutoModelForCausalLM.from_config(config)
-
-    checkpoint_dir = snapshot_download(
-        model_id, cache_dir=get_model_dir(), local_files_only=True)
-
-    model = load_checkpoint_and_dispatch(
-        model,
-        checkpoint_dir,
-        device_map="auto",
-        max_memory=max_memory,
-        # Adjust based on your model architecture
-        no_split_module_classes=["LlamaDecoderLayer"],
-        dtype=kwargs.get("torch_dtype", torch.float32),
-        offload_folder="offload",
-        offload_state_dict=True,
-    )
-
-    return tokenizer, model
+    def validate(self):
+        """Validate generation parameters"""
+        if not 0 <= self.temperature <= 2:
+            raise ValueError("Temperature must be between 0 and 2")
+        if not 0 <= self.top_p <= 1:
+            raise ValueError("Top_p must be between 0 and 1")
+        if self.max_tokens < 1:
+            raise ValueError("Max_tokens must be positive")
+        if not -2.0 <= self.presence_penalty <= 2.0:
+            raise ValueError("Presence penalty must be between -2.0 and 2.0")
+        if not -2.0 <= self.frequency_penalty <= 2.0:
+            raise ValueError("Frequency penalty must be between -2.0 and 2.0")
 
 
 class LLMPipeline(Pipeline):
-    def __init__(self, model_id: str):
+    def __init__(
+        self,
+        model_id: str,
+    ):
+        """
+        Initialize the LLM Pipeline.
+
+        Args:
+            model_id: The identifier for the model to load
+            use_8bit: Whether to use 8-bit quantization
+            max_batch_size: Maximum batch size for inference
+            max_num_seqs: Maximum number of sequences
+            mem_utilization: GPU memory utilization target
+            max_num_batched_tokens: Maximum number of batched tokens
+        """
+        logger.info("Initializing LLM pipeline")
+
         self.model_id = model_id
-        kwargs = {
-            "cache_dir": get_model_dir(),
-            "local_files_only": True,
-        }
-        self.device = get_torch_device()
-
-        # Generate the correct folder name
-        folder_path = file_download.repo_folder_name(
+        folder_name = file_download.repo_folder_name(
             repo_id=model_id, repo_type="model")
-        self.local_model_path = os.path.join(get_model_dir(), folder_path)
-        self.checkpoint_dir = snapshot_download(
-            model_id, cache_dir=get_model_dir(), local_files_only=True)
+        base_path = os.path.join(get_model_dir(), folder_name)
 
-        logger.info(f"Local model path: {self.local_model_path}")
-        logger.info(f"Directory contents: {os.listdir(self.local_model_path)}")
+        # Find the actual model path
+        self.local_model_path = self._find_model_path(base_path)
+
+        if not self.local_model_path:
+            raise ValueError(f"Could not find model files for {model_id}")
 
         use_8bit = os.getenv("USE_8BIT", "").strip().lower() == "true"
+        max_num_batched_tokens = int(os.getenv("MAX_NUM_BATCHED_TOKENS", "8192"))
+        max_num_seqs = int(os.getenv("MAX_NUM_SEQS", "128"))
+        max_model_len = int(os.getenv("MAX_MODEL_LEN", "8192"))
+        mem_utilization = float(os.getenv("GPU_MEMORY_UTILIZATION", "0.85"))
+        tensor_parallel_size = int(os.getenv("TENSOR_PARALLEL_SIZE", "1"))
+        pipeline_parallel_size = int(os.getenv("PIPELINE_PARALLEL_SIZE", "1"))
 
-        if use_8bit:
-            logger.info("Using 8-bit quantization")
-            self.tokenizer, self.model = load_model_8bit(model_id, **kwargs)
-        else:
-            logger.info("Using fp16/bf16 precision")
-            self.tokenizer, self.model = load_model_fp16(model_id, **kwargs)
-
-        logger.info(
-            f"Model loaded and distributed. Device map: {self.model.hf_device_map}"
-        )
-
-        # Set up generation config
-        self.generation_config = self.model.generation_config
-
-        self.terminators = [
-            self.tokenizer.eos_token_id,
-            self.tokenizer.convert_tokens_to_ids("<|eot_id|>")
-        ]
-
-        # Optional: Add optimizations
-        sfast_enabled = os.getenv("SFAST", "").strip().lower() == "true"
-        if sfast_enabled:
+        if max_num_batched_tokens < max_model_len:
+            max_num_batched_tokens = max_model_len
             logger.info(
-                "LLMPipeline will be dynamically compiled with stable-fast for %s",
-                model_id,
-            )
-            from app.pipelines.optim.sfast import compile_model
-            self.model = compile_model(self.model)
+                f"max_num_batched_tokens ({max_num_batched_tokens}) is smaller than max_model_len ({max_model_len}). This effectively limits the maximum sequence length to max_num_batched_tokens and makes vLLM reject longer sequences.")
+            logger.info(f"setting 'max_model_len' to equal 'max_num_batched_tokens'")
 
-    async def __call__(self, prompt: str, history: Optional[List[tuple]] = None, system_msg: Optional[str] = None, **kwargs) -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
-        conversation = []
-        if system_msg:
-            conversation.append({"role": "system", "content": system_msg})
-        if history:
-            conversation.extend(history)
-        conversation.append({"role": "user", "content": prompt})
-
-        input_ids = self.tokenizer.apply_chat_template(
-            conversation, return_tensors="pt").to(self.model.device)
-        attention_mask = torch.ones_like(input_ids)
-
-        max_new_tokens = kwargs.get("max_tokens", 256)
-        temperature = kwargs.get("temperature", 0.7)
-
-        streamer = TextIteratorStreamer(
-            self.tokenizer, timeout=10.0, skip_prompt=True, skip_special_tokens=True)
-
-        generate_kwargs = self.generation_config.to_dict()
-        generate_kwargs.update({
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "streamer": streamer,
-            "max_new_tokens": max_new_tokens,
-            "do_sample": temperature > 0,
-            "temperature": temperature,
-            "eos_token_id": self.tokenizer.eos_token_id,
-            "pad_token_id": self.tokenizer.eos_token_id,
-        })
-
-        thread = Thread(target=self.model_generate_wrapper, kwargs=generate_kwargs)
-        thread.start()
-
-        total_tokens = 0
+    # Load config to check model compatibility
         try:
-            for text in streamer:
-                total_tokens += 1
-                yield text
-                await asyncio.sleep(0)  # Allow other tasks to run
+            config = AutoConfig.from_pretrained(self.local_model_path)
+            num_heads = config.num_attention_heads
+            num_layers = config.num_hidden_layers
+            logger.info(
+                f"Model has {num_heads} attention heads and {num_layers} layers")
+
+            # Validate tensor parallelism
+            if num_heads % tensor_parallel_size != 0:
+                raise ValueError(
+                    f"Total number of attention heads ({num_heads}) must be divisible "
+                    f"by tensor parallel size ({tensor_parallel_size})."
+                )
+
+            # Validate pipeline parallelism
+            if num_layers < pipeline_parallel_size:
+                raise ValueError(
+                    f"Pipeline parallel size ({pipeline_parallel_size}) cannot be larger "
+                    f"than number of layers ({num_layers})."
+                )
+
+            # Validate total GPU requirement
+            total_gpus_needed = tensor_parallel_size * pipeline_parallel_size
+            max_memory = get_max_memory()
+            if total_gpus_needed > max_memory.num_gpus:
+                raise ValueError(
+                    f"Total GPUs needed ({total_gpus_needed}) exceeds available GPUs "
+                    f"({max_memory.num_gpus}). Reduce tensor_parallel_size ({tensor_parallel_size}) "
+                    f"or pipeline_parallel_size ({pipeline_parallel_size})."
+                )
+
+            logger.info(f"Using tensor parallel size: {tensor_parallel_size}")
+            logger.info(f"Using pipeline parallel size: {pipeline_parallel_size}")
+            logger.info(f"Total GPUs used: {total_gpus_needed}")
+
         except Exception as e:
-            logger.error(f"Error during streaming: {str(e)}")
+            logger.error(f"Error in parallelism configuration: {e}")
             raise
 
-        input_length = input_ids.size(1)
-        yield {"tokens_used": input_length + total_tokens}
+        engine_args = AsyncEngineArgs(
+            model=self.local_model_path,
+            tokenizer=self.local_model_path,
+            trust_remote_code=True,
+            dtype="auto",  # This specifies BFloat16 precision, TODO: Check GPU capabilities to set best type
+            kv_cache_dtype="auto",  # or "fp16" if you want to force it
+            tensor_parallel_size=tensor_parallel_size,
+            pipeline_parallel_size=pipeline_parallel_size,
+            max_num_batched_tokens=max_num_batched_tokens,
+            gpu_memory_utilization=mem_utilization,
+            max_num_seqs=max_num_seqs,
+            enforce_eager=False,
+            enable_prefix_caching=True,
+            max_model_len=max_model_len
+        )
 
-    def model_generate_wrapper(self, **kwargs):
+        if use_8bit:
+            engine_args.quantization = "bitsandbytes"
+            engine_args.load_format = "bitsandbytes"
+            logger.info("Using 8-bit quantization")
+        else:
+            logger.info("Using BFloat16 precision")
+
+        self.engine_args = engine_args
+        self.engine = AsyncLLMEngine.from_engine_args(engine_args)
+
+        logger.info(f"Model loaded: {self.model_id}")
+        logger.info(f"Using GPU memory utilization: {mem_utilization}")
+
+    @staticmethod
+    def _get_model_dir() -> str:
+        """Get the model directory from environment or default"""
+        return os.getenv("MODEL_DIR", "/models")
+
+    def validate_messages(self, messages: List[Dict[str, str]]):
+        """Validate message format"""
+        if not messages:
+            raise ValueError("Messages cannot be empty")
+
+        for msg in messages:
+            if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
+                raise ValueError(f"Invalid message format: {msg}")
+            if msg['role'] not in ['system', 'user', 'assistant']:
+                raise ValueError(f"Invalid role in message: {msg['role']}")
+
+    async def generate(
+        self,
+        messages: List[Dict[str, str]],
+        generation_config: Optional[GenerationConfig] = None,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Internal generation method"""
+        start_time = time.time()
+        config = generation_config or GenerationConfig()
+        tokenizer = await self.engine.get_tokenizer()
+
         try:
-            logger.debug("Entering model.generate")
-            with torch.cuda.amp.autocast():  # Use automatic mixed precision
-                self.model.generate(**kwargs)
-            logger.debug("Exiting model.generate")
+            full_prompt = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False
+            )
         except Exception as e:
-            logger.error(f"Error in model.generate: {str(e)}", exc_info=True)
+            logger.error(f"Error applying chat template: {e}")
+            raise
+
+        sampling_params = SamplingParams(
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            top_p=config.top_p,
+            top_k=config.top_k,
+            presence_penalty=config.presence_penalty,
+            frequency_penalty=config.frequency_penalty,
+        )
+
+        request_id = f"chatcmpl-{uuid.uuid4()}"
+
+        results_generator = self.engine.generate(
+            prompt=full_prompt, sampling_params=sampling_params, request_id=request_id)
+
+        input_tokens = len(tokenizer.encode(full_prompt))
+        if input_tokens > self.engine_args.max_model_len:
+            raise ValueError(
+                f"Input sequence length ({input_tokens}) exceeds maximum allowed ({self.engine_args.max_model_len})")
+
+        total_tokens = 0
+        current_response = ""
+        first_token_time = None
+
+        try:
+            async for output in results_generator:
+                if output.outputs:
+                    if first_token_time is None:
+                        first_token_time = time.time()
+
+                    generated_text = output.outputs[0].text
+                    delta = generated_text[len(current_response):]
+                    current_response = generated_text
+                    total_tokens += len(tokenizer.encode(delta))
+
+                    yield LLMResponse(
+                        choices=[
+                            LLMChoice(
+                                delta=LLMMessage(
+                                    role="assistant",
+                                    content=delta
+                                ),
+                                index=0
+                            )
+                        ],
+                        usage=LLMTokenUsage(
+                            prompt_tokens=input_tokens,
+                            completion_tokens=total_tokens,
+                            total_tokens=input_tokens + total_tokens
+                        ),
+                        id=request_id,
+                        model=self.model_id,
+                        created=int(time.time())
+                    )
+
+                    await asyncio.sleep(0)
+
+            # Final message
+            end_time = time.time()
+            duration = end_time - start_time
+            logger.info(f"Generation completed in {duration:.2f}s")
+            logger.info(
+                f"  Time to first token: {(first_token_time - start_time):.2f} seconds")
+            logger.info(f"  Total tokens: {total_tokens}")
+            logger.info(f"  Prompt tokens: {input_tokens}")
+            logger.info(f"  Generated tokens: {total_tokens}")
+            generation_time = end_time - first_token_time if first_token_time else 0
+            logger.info(f"  Tokens per second: {total_tokens / generation_time:.2f}")
+
+            yield LLMResponse(
+                choices=[
+                    LLMChoice(
+                        delta=LLMMessage(
+                            role="assistant",
+                            content=""
+                        ),
+                        index=0,
+                        finish_reason="stop"
+                    )
+                ],
+                usage=LLMTokenUsage(
+                    prompt_tokens=input_tokens,
+                    completion_tokens=total_tokens,
+                    total_tokens=input_tokens + total_tokens
+                ),
+                id=request_id,
+                model=self.model_id,
+                created=int(time.time())
+            )
+
+        except Exception as e:
+            if "CUDA out of memory" in str(e):
+                logger.error(
+                    "GPU memory exhausted, consider reducing batch size or model parameters")
+            elif "tokenizer" in str(e).lower():
+                logger.error("Tokenizer error, check input text format")
+            else:
+                logger.error(f"Error generating response: {e}")
+            raise
+
+    async def __call__(
+        self,
+        messages: List[Dict[str, str]],
+        **kwargs
+    ) -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
+        """
+        Generate responses for messages.
+
+        Args:
+            messages: List of message dictionaries in OpenAI format
+            **kwargs: Generation parameters
+        """
+        logger.debug(f"Generating response for messages: {messages}")
+        start_time = time.time()
+
+        try:
+            # Validate inputs
+            self.validate_messages(messages)
+            config = GenerationConfig(**kwargs)
+            config.validate()
+
+            async for response in self.generate(messages, config):
+                yield response
+
+        except Exception as e:
+            logger.error(f"Error in pipeline: {e}")
             raise
 
     def __str__(self):
         return f"LLMPipeline(model_id={self.model_id})"
+
+    def _find_model_path(self, base_path):
+        # Check if the model files are directly in the base path
+        if any(file.endswith('.bin') or file.endswith('.safetensors') for file in os.listdir(base_path)):
+            return base_path
+
+        # If not, look in subdirectories
+        for root, dirs, files in os.walk(base_path):
+            if any(file.endswith('.bin') or file.endswith('.safetensors') for file in files):
+                return root

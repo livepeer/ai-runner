@@ -1,0 +1,25 @@
+ARG BASE_IMAGE=livepeer/ai-runner:base
+FROM ${BASE_IMAGE}
+
+# Install CUDA Toolkit to enable flash attention.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    cuda-toolkit-12-1 \
+    g++ && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    ninja \
+    transformers==4.43.3 \
+    peft \
+    deepcache \
+    flash_attn==2.5.6 \
+    pynvml
+
+# Override base working directory to ensure the correct working directory.
+WORKDIR /app
+
+# Copy app directory to avoid rebuilding the base image during development.
+COPY app/ /app/app
+
+CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
