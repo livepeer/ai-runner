@@ -1,7 +1,7 @@
 import os
 import asyncio
 import logging
-import multiprocessing as mp
+import torch.multiprocessing as mp
 import queue
 import sys
 import time
@@ -12,6 +12,8 @@ from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
 
+# Enable CUDA tensor sharing between processes
+mp.set_sharing_strategy('file_system')
 
 class PipelineProcess:
     @staticmethod
@@ -94,6 +96,8 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
+        if isinstance(frame, VideoFrame):
+            frame = frame.replace_tensor(frame.tensor.clone().cuda().share_memory_())
         self._queue_put_fifo(self.input_queue, frame)
 
     async def recv_output(self) -> OutputFrame | None:
@@ -103,6 +107,9 @@ class PipelineProcess:
         while not self.is_done():
             try:
                 output = self.output_queue.get_nowait()
+                if isinstance(output, VideoOutput):
+                    # pre-compute image and clear tensor
+                    output.frame = output.frame.replace_image(output.image)
                 return output
             except queue.Empty:
                 await asyncio.sleep(0.005)
@@ -227,6 +234,8 @@ class PipelineProcess:
         while not self.is_done():
             try:
                 output_frame = await pipeline.get_processed_video_frame()
+                if isinstance(output_frame, VideoFrame):
+                    output_frame = output_frame.replace_tensor(output_frame.tensor.clone().cuda().share_memory_())
                 output_frame.log_timestamps["post_process_frame"] = time.time()
                 self._queue_put_fifo(self.output_queue, output_frame)
             except Exception as e:

@@ -3,6 +3,7 @@ import av
 from PIL import Image
 from typing import List
 import numpy as np
+import torch
 
 class SideData:
     """
@@ -32,18 +33,54 @@ class InputFrame:
         return AudioFrame(frame)
 
 class VideoFrame(InputFrame):
-    image: Image.Image
+    _image: Image.Image | None
+    _tensor: torch.Tensor | None = None
 
-    def __init__(self, image: Image.Image, timestamp: int, time_base: Fraction, log_timestamps: dict[str, float] = {}):
-        self.image = image
+    def __init__(self, image: Image.Image | None, timestamp: int, time_base: Fraction, log_timestamps: dict[str, float] = {}):
+        self._image = image
         self.timestamp = timestamp
         self.time_base = time_base
         self.log_timestamps = log_timestamps
 
+    @property
+    def tensor(self):
+        if self._tensor is not None:
+            return self._tensor
+
+        image = self._image
+        if image is None:
+            raise ValueError("No tensor or image")
+
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        image_np = np.array(image).astype(np.float32) / 255.0
+        self._tensor = torch.tensor(image_np).unsqueeze(0)
+        return self._tensor
+
+    @property
+    def image(self):
+        if self._image is not None:
+            return self._image
+
+        tensor = self._tensor
+        if tensor is None:
+            raise ValueError("No tensor or image")
+
+        tensor = tensor.squeeze(0)
+        image_np = (tensor * 255).byte().cpu().numpy()
+        self._image = Image.fromarray(image_np)
+        return self._image
+
     # Returns a copy of an existing VideoFrame with its image replaced
-    def replace_image(self, image: Image.Image):
+    def replace_image(self, image: Image.Image | None):
         new_frame = VideoFrame(image, self.timestamp, self.time_base, self.log_timestamps)
+        new_frame._tensor = None
         new_frame.side_data = self.side_data
+        return new_frame
+
+    def replace_tensor(self, tensor: torch.Tensor):
+        new_frame = self.replace_image(None)
+        new_frame._tensor = tensor
         return new_frame
 
 class AudioFrame(InputFrame):
@@ -73,9 +110,15 @@ class OutputFrame:
 class VideoOutput(OutputFrame):
     frame: VideoFrame
     request_id: str
+    output_tensor: torch.Tensor | None = None
+
     def __init__(self, frame: VideoFrame, request_id: str = ''):
         self.frame = frame
         self.request_id = request_id
+
+    def replace_tensor(self, tensor: torch.Tensor):
+        new_frame = self.frame.replace_tensor(tensor)
+        return VideoOutput(new_frame, self.request_id)
 
     def replace_image(self, image: Image.Image):
         new_frame = self.frame.replace_image(image)

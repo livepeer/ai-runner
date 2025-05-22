@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import torch
 import asyncio
@@ -56,6 +57,9 @@ class ComfyUI(Pipeline):
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
 
+        self.input_tensor_transform_times = []
+        self.output_tensor_transform_times = []
+
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
@@ -73,8 +77,13 @@ class ComfyUI(Pipeline):
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
-        frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
+        start_time = time.time()
+        frame.side_data.input = frame.tensor
+        self.input_tensor_transform_times.append(time.time() - start_time)
+        if len(self.input_tensor_transform_times) > 300:
+            logging.info(f"Input tensor transform time: {np.average(self.input_tensor_transform_times)}")
+            self.input_tensor_transform_times = []
+
         frame.side_data.skipped = True
         self.client.put_video_input(frame)
         await self.video_incoming_frames.put(VideoOutput(frame, request_id))
@@ -85,10 +94,14 @@ class ComfyUI(Pipeline):
         while out.frame.side_data.skipped:
             out = await self.video_incoming_frames.get()
 
-        result_tensor = result_tensor.squeeze(0)
-        result_image_np = (result_tensor * 255).byte()
-        result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return out.replace_image(result_image)
+        start_time = time.time()
+        out = out.replace_tensor(result_tensor)
+        self.output_tensor_transform_times.append(time.time() - start_time)
+        if len(self.output_tensor_transform_times) > 300:
+            logging.info(f"Output tensor transform time: {np.average(self.output_tensor_transform_times)}")
+            self.output_tensor_transform_times = []
+
+        return out
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
@@ -96,6 +109,8 @@ class ComfyUI(Pipeline):
         # TODO: currently its a single prompt, but need to support multiple prompts
         await self.client.update_prompts([new_params.prompt])
         self.params = new_params
+        self.last_input_tensor = None
+        self.last_output_image = None
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
