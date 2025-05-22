@@ -157,33 +157,6 @@ class PipelineStreamer(StreamerCallbacks):
                 logging.warning("Unknown frame type received, dropping")
                 continue
 
-            frame = av_frame.image
-            if not frame:
-                continue
-
-            if frame.mode != "RGBA":
-                frame = frame.convert("RGBA")
-
-            # Scale image to 512x512 as most models expect this size, especially when using tensorrt
-            width, height = frame.size
-            if (width, height) != (512, 512):
-                # Crop to the center square if image not already square
-                square_size = min(width, height)
-                if width != height:
-                    start_x = width // 2 - square_size // 2
-                    start_y = height // 2 - square_size // 2
-                    frame = frame.crop((start_x, start_y, start_x + square_size, start_y + square_size))
-
-                # Resize using cv2 (much faster than PIL)
-                if square_size != 512:
-                    frame_array = np.array(frame)
-                    frame_array = cv2.resize(frame_array, (512, 512))
-                    frame = Image.fromarray(frame_array)
-
-            logging.debug(
-                f"Sending input frame. Scaled from {width}x{height} to {frame.size[0]}x{frame.size[1]}"
-            )
-            av_frame = av_frame.replace_image(frame)
             self.process.send_input(av_frame)
         logging.info("Ingress loop ended")
 
@@ -219,7 +192,7 @@ class PipelineStreamer(StreamerCallbacks):
                     )
                     continue
                 logging.debug(
-                    f"Output image received outputRequestId={output.request_id} ts={output.timestamp} time_base={output.time_base} resolution={output.image.width}x{output.image.height} mode={output.image.mode}"
+                    f"Output image received outputRequestId={output.request_id} ts={output.timestamp} time_base={output.time_base}"
                 )
 
                 yield output

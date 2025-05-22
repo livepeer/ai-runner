@@ -2,8 +2,6 @@ import os
 import json
 import torch
 import asyncio
-import numpy as np
-from PIL import Image
 from typing import Union
 from pydantic import BaseModel, field_validator
 import pathlib
@@ -73,8 +71,11 @@ class ComfyUI(Pipeline):
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
-        frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
+        tensor = frame.tensor
+        if tensor.is_cuda:
+            # Clone the tensor to be able to send it on comfystream internal queue
+            tensor = tensor.clone()
+        frame.side_data.input = tensor
         frame.side_data.skipped = True
         self.client.put_video_input(frame)
         await self.video_incoming_frames.put(VideoOutput(frame, request_id))
@@ -84,11 +85,7 @@ class ComfyUI(Pipeline):
         out = await self.video_incoming_frames.get()
         while out.frame.side_data.skipped:
             out = await self.video_incoming_frames.get()
-
-        result_tensor = result_tensor.squeeze(0)
-        result_image_np = (result_tensor * 255).byte()
-        result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return out.replace_image(result_image)
+        return out.replace_tensor(result_tensor)
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)

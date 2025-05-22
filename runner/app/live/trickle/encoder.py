@@ -1,4 +1,3 @@
-import asyncio
 import av
 import time
 import datetime
@@ -7,6 +6,7 @@ import os
 from typing import Optional
 from fractions import Fraction
 from collections import deque
+from PIL import Image
 
 from .frame import VideoOutput, AudioOutput, InputFrame
 
@@ -91,7 +91,12 @@ def encode_av(
                 continue
             avframe.log_timestamps["frame_end"] = time.time()
             log_frame_timestamps("Video", avframe.frame)
-            frame = av.video.frame.VideoFrame.from_image(avframe.image)
+
+            tensor = avframe.tensor.squeeze(0)
+            image_np = (tensor * 255).byte().cpu().numpy()
+            image = Image.fromarray(image_np)
+
+            frame = av.video.frame.VideoFrame.from_image(image)
             frame.pts = rescale_ts(avframe.timestamp, avframe.time_base, output_video_stream.codec_context.time_base)
             frame.time_base = output_video_stream.codec_context.time_base
             current = avframe.timestamp * avframe.time_base
