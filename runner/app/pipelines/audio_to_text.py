@@ -116,8 +116,6 @@ class AudioToTextPipeline(Pipeline):
                                                 word_timestamps=True if kwargs["return_timestamps"] == "word" else False)
             text = ""
             chunks = []
-            import time
-            start = time.time()
             for segment in segments:
                 text += segment.text
                 if kwargs["return_timestamps"] == "word":
@@ -132,11 +130,8 @@ class AudioToTextPipeline(Pipeline):
                         "text": segment.text
                     })
                 
-            logger.info(f"Transcription took {time.time()-start} seconds")
             return {"text": text, "chunks": chunks}
         else:
-            import time
-            start = time.time()
             audioBytes = audio.file.read()
             #re-encode audio to match pre-processing done in transformers.
             # pipeline accepts np.ndarray and does not convert it again. String file path and bytes are converted to np.ndarray in the pipeline.
@@ -172,9 +167,7 @@ class AudioToTextPipeline(Pipeline):
                 raise e
             except Exception as e:
                 raise InferenceError(original_exception=e)
-            logger.info(
-                f"AudioToTextPipeline: Inference completed in {time.time()-start} seconds"
-            )
+
             return outputs
 
     def __str__(self) -> str:
