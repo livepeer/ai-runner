@@ -74,3 +74,4 @@ RUN mkdir -p /workspace/ComfyUI
 RUN rm -rf /workspace/ComfyUI/models && ln -s /models/ComfyUI--models /workspace/ComfyUI/models
 RUN rm -rf /workspace/ComfyUI/output && ln -s /models/ComfyUI--output /workspace/ComfyUI/output
 
+COPY --from=livepeer/ai-runner-models:latest-tensorrt-rtx-4090 /models /models
