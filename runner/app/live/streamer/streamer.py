@@ -183,22 +183,18 @@ class PipelineStreamer(ProcessCallbacks):
             # Scale image to 512x512 as most models expect this size, especially when using tensorrt
             width, height = frame.size
             if (width, height) != (512, 512):
-                frame_array = np.array(frame)
-
                 # Crop to the center square if image not already square
                 square_size = min(width, height)
                 if width != height:
                     start_x = width // 2 - square_size // 2
                     start_y = height // 2 - square_size // 2
-                    frame_array = frame_array[
-                        start_y : start_y + square_size, start_x : start_x + square_size
-                    ]
+                    frame = frame.crop((start_x, start_y, start_x + square_size, start_y + square_size))
 
                 # Resize using cv2 (much faster than PIL)
                 if square_size != 512:
+                    frame_array = np.array(frame)
                     frame_array = cv2.resize(frame_array, (512, 512))
-
-                frame = Image.fromarray(frame_array)
+                    frame = Image.fromarray(frame_array)
 
             logging.debug(
                 f"Sending input frame. Scaled from {width}x{height} to {frame.size[0]}x{frame.size[1]}"
