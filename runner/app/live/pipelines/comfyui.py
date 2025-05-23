@@ -62,9 +62,19 @@ class ComfyUI(Pipeline):
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
 
-        # Warm up the pipeline
+        # Get dimensions from the workflow
+        if isinstance(new_params.prompt, dict):
+            width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+            if width is None or height is None:
+                width, height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT  # Default dimensions if not found in workflow
+                logging.warning(f"Could not find dimensions in workflow, using default {width}x{height}")
+    
+        width, height = width or ComfyUtils.DEFAULT_WIDTH, height or ComfyUtils.DEFAULT_HEIGHT
+        
+        # Warm up the pipeline with the workflow dimensions
+        logging.info(f"Warming up pipeline with dimensions: {width}x{height}")
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 704, 384, 3)
+        dummy_frame.side_data.input = torch.randn(1, height, width, 3)
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)
@@ -103,3 +113,34 @@ class ComfyUI(Pipeline):
         logging.info("Stopping ComfyUI pipeline")
         await self.client.cleanup()
         logging.info("ComfyUI pipeline stopped")
+
+class ComfyUtils:
+    DEFAULT_WIDTH = 512
+    DEFAULT_HEIGHT = 512
+    
+    @staticmethod
+    def get_latent_image_dimensions(workflow: dict) -> tuple[int, int]:
+        """Get dimensions from the EmptyLatentImage node in the workflow.
+        
+        Args:
+            workflow: The workflow JSON dictionary
+            
+        Returns:
+            Tuple of (width, height) from the latent image. Returns default dimensions if not found or on error.
+        """
+        try:
+            for node_id, node in workflow.items():
+                if node.get("class_type") == "EmptyLatentImage":
+                    inputs = node.get("inputs", {})
+                    width = inputs.get("width")
+                    height = inputs.get("height")
+                    if width is not None and height is not None:
+                        return width, height
+                    logging.warning("Incomplete dimensions in latent image node")
+                    break
+        except Exception as e:
+            logging.warning(f"Failed to extract dimensions from workflow: {e}")
+        
+        # Return defaults if dimensions not found or on any error
+        logging.info(f"Using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}")
+        return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
