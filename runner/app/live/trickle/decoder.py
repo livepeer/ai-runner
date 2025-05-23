@@ -9,13 +9,15 @@ from .frame import InputFrame
 
 MAX_FRAMERATE=24
 
-def decode_av(pipe_input, frame_callback, put_metadata):
+def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_height):
     """
     Reads from a pipe (or file-like object).
 
     :param pipe_input: File path, 'pipe:', sys.stdin, or another file-like object.
     :param frame_callback: A function that accepts an InputFrame object
     :param put_metadata: A function that accepts audio/video metadata
+    :param output_width: Desired output width
+    :param output_height: Desired output height
     """
     container = cast(InputContainer, av.open(pipe_input, 'r'))
 
@@ -105,12 +107,10 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
 
-                    h = 512
-                    w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
-                    if frame.height > frame.width:
-                        w = 512
-                        h = int((512 * frame.height / frame.width) / 2) * 2
-                    frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
+                    # Resize to specified dimensions without maintaining aspect ratio
+                    frame = reformatter.reformat(frame, format='rgba', 
+                                               width=output_width, 
+                                               height=output_height)
                     avframe = InputFrame.from_av_video(frame)
                     avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)

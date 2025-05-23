@@ -39,6 +39,8 @@ class PipelineStreamer(ProcessCallbacks):
         self.request_id = request_id
         self.manifest_id = manifest_id
         self.stream_id = stream_id
+        self.output_width = 512
+        self.output_height = 512
 
     async def start(self, params: dict):
         if self.tasks_supervisor_task:
@@ -48,8 +50,14 @@ class PipelineStreamer(ProcessCallbacks):
             self.request_id, self.manifest_id, self.stream_id, params, self
         )
 
+        if params is None:
+            params = {}
+            
+        params['width'] = params.get('width', self.output_width)
+        params['height'] = params.get('height', self.output_height)
+
         self.stop_event.clear()
-        await self.protocol.start()
+        await self.protocol.start(params)
 
         # We need a bunch of concurrent tasks to run the streamer. So we start them all in background and then also start
         # a supervisor task that will stop everything if any of the main tasks return or the stop event is set.
@@ -57,11 +65,12 @@ class PipelineStreamer(ProcessCallbacks):
             run_in_background("ingress_loop", self.run_ingress_loop()),
             run_in_background("egress_loop", self.run_egress_loop()),
             run_in_background("report_status_loop", self.report_status_loop()),
-            run_in_background("control_loop", self.run_control_loop()),
         ]
         # auxiliary tasks that are not critical to the supervisor, but which we want to run
         # TODO: maybe remove this since we had to move the control loop to main tasks
-        self.auxiliary_tasks: list[asyncio.Task] = []
+        self.auxiliary_tasks: list[asyncio.Task] = [
+            run_in_background("control_loop", self.run_control_loop()),
+        ]
         self.tasks_supervisor_task = run_in_background(
             "tasks_supervisor", self.tasks_supervisor()
         )
@@ -180,24 +189,16 @@ class PipelineStreamer(ProcessCallbacks):
             if frame.mode != "RGBA":
                 frame = frame.convert("RGBA")
 
-            # Scale image to 512x512 as most models expect this size, especially when using tensorrt
+            target_width = self.output_width
+            target_height = self.output_height
+
+            # # Scale image to target size
             width, height = frame.size
-            if (width, height) != (512, 512):
+            if (width, height) != (target_width, target_height):
                 frame_array = np.array(frame)
 
-                # Crop to the center square if image not already square
-                square_size = min(width, height)
-                if width != height:
-                    start_x = width // 2 - square_size // 2
-                    start_y = height // 2 - square_size // 2
-                    frame_array = frame_array[
-                        start_y : start_y + square_size, start_x : start_x + square_size
-                    ]
-
                 # Resize using cv2 (much faster than PIL)
-                if square_size != 512:
-                    frame_array = cv2.resize(frame_array, (512, 512))
-
+                frame_array = cv2.resize(frame_array, (target_width, target_height))
                 frame = Image.fromarray(frame_array)
 
             logging.debug(

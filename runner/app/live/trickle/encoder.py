@@ -26,7 +26,9 @@ def encode_av(
     output_callback,
     get_metadata,
     video_codec: Optional[str] ='libx264',
-    audio_codec: Optional[str] ='libfdk_aac'
+    audio_codec: Optional[str] ='libfdk_aac',
+    output_width: int = 512,
+    output_height: int = 512
 ):
     logging.info("Starting encoder")
 
@@ -38,7 +40,7 @@ def encode_av(
     video_meta = decoded_metadata['video']
     audio_meta = decoded_metadata['audio']
 
-    logging.info(f"Encoder recevied metadata video={video_meta is not None} audio={audio_meta is not None}")
+    logging.info(f"Encoder received metadata video={video_meta is not None} audio={audio_meta is not None}")
 
     def custom_io_open(url: str, flags: int, options: dict):
         read_fd, write_fd = os.pipe()
@@ -56,11 +58,16 @@ def encode_av(
 
     if video_meta and video_codec:
         # Add a new stream to the output using the desired video codec
-        video_opts = { 'video_size':'512x512', 'bf':'0' }
+        video_opts = { 
+            'video_size': f'{output_width}x{output_height}',
+            'bf': '0'
+        }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
         output_video_stream = output_container.add_stream(video_codec, options=video_opts)
         output_video_stream.time_base = OUT_TIME_BASE
+        output_video_stream.width = output_width
+        output_video_stream.height = output_height
 
     if audio_meta and audio_codec:
         # Add a new stream to the output using the desired audio codec
@@ -92,6 +99,11 @@ def encode_av(
             avframe.log_timestamps["frame_end"] = time.time()
             log_frame_timestamps("Video", avframe.frame)
             frame = av.video.frame.VideoFrame.from_image(avframe.image)
+            
+            # Resize frame to output dimensions if needed
+            if frame.width != output_width or frame.height != output_height:
+                frame = frame.reformat(width=output_width, height=output_height)
+            
             frame.pts = rescale_ts(avframe.timestamp, avframe.time_base, output_video_stream.codec_context.time_base)
             frame.time_base = output_video_stream.codec_context.time_base
             current = avframe.timestamp * avframe.time_base
