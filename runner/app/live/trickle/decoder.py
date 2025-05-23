@@ -105,12 +105,13 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
 
-                    h = 512
-                    w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
-                    if frame.height > frame.width:
-                        w = 512
-                        h = int((512 * frame.height / frame.width) / 2) * 2
-                    frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
+                    # h = 512
+                    # w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
+                    # if frame.height > frame.width:
+                    #     w = 512
+                    #     h = int((512 * frame.height / frame.width) / 2) * 2
+                        
+                    frame = reformatter.reformat(frame, format='rgba', width=384, height=704)
                     avframe = InputFrame.from_av_video(frame)
                     avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)

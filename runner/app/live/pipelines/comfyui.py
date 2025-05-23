@@ -1,5 +1,6 @@
 import os
 import json
+import PIL
 import torch
 import asyncio
 import numpy as np
@@ -65,7 +66,7 @@ class ComfyUI(Pipeline):
 
         # Warm up the pipeline
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
+        dummy_frame.side_data.input = torch.randn(1, 704, 384, 3)
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)

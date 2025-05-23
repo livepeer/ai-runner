@@ -53,11 +53,11 @@ class PipelineStreamer(StreamerCallbacks):
             run_in_background("ingress_loop", self.run_ingress_loop()),
             run_in_background("egress_loop", self.run_egress_loop()),
             run_in_background("report_status_loop", self.report_status_loop()),
-            run_in_background("control_loop", self.run_control_loop()),
-        ]
+            ]
         # auxiliary tasks that are not critical to the supervisor, but which we want to run
         # TODO: maybe remove this since we had to move the control loop to main tasks
-        self.auxiliary_tasks: list[asyncio.Task] = []
+        self.auxiliary_tasks: list[asyncio.Task] = [run_in_background("control_loop", self.run_control_loop()),
+        ]
         self.tasks_supervisor_task = run_in_background(
             "tasks_supervisor", self.tasks_supervisor()
         )
@@ -164,21 +164,19 @@ class PipelineStreamer(StreamerCallbacks):
 
             # Scale image to 512x512 as most models expect this size, especially when using tensorrt
             width, height = frame.size
-            if (width, height) != (512, 512):
+            if (width, height) != (384, 704):
                 frame_array = np.array(frame)
 
-                # Crop to the center square if image not already square
-                square_size = min(width, height)
-                if width != height:
-                    start_x = width // 2 - square_size // 2
-                    start_y = height // 2 - square_size // 2
-                    frame_array = frame_array[
-                        start_y : start_y + square_size, start_x : start_x + square_size
-                    ]
+                # # Crop to the center square if image not already square
+                # square_size = min(width, height)
+                # if width != height:
+                #     start_x = width // 2 - square_size // 2
+                #     start_y = height // 2 - square_size // 2
+                #     frame_array = frame_array[
+                #         start_y : start_y + square_size, start_x : start_x + square_size
+                #     ]
 
-                # Resize using cv2 (much faster than PIL)
-                if square_size != 512:
-                    frame_array = cv2.resize(frame_array, (512, 512))
+                # frame_array = cv2.resize(frame_array, (384, 704))
 
                 frame = Image.fromarray(frame_array)
 

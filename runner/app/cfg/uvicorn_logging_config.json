@@ -29,17 +29,17 @@
             "handlers": [
                 "default"
             ],
-            "level": "INFO",
+            "level": "DEBUG",
             "propagate": false
         },
         "uvicorn.error": {
-            "level": "INFO"
+            "level": "DEBUG"
         },
         "uvicorn.access": {
             "handlers": [
                 "access"
             ],
-            "level": "INFO",
+            "level": "DEBUG",
             "propagate": false
         }
     }
