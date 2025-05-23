@@ -89,7 +89,7 @@ def parse_return_timestamps(value: str) -> Union[bool, str]:
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def audio_to_text(
+def audio_to_text(
     audio: Annotated[
         UploadFile, File(description="Uploaded audio file to be transcribed.")
     ],
