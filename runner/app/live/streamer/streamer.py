@@ -9,7 +9,7 @@ from asyncio import Lock
 import cv2
 from PIL import Image
 
-from .process_guardian import ProcessGuardian, StreamerCallbacks
+from .process_guardian import ProcessGuardian, ProcessCallbacks
 from .protocol.protocol import StreamProtocol
 from .status import timestamp_to_ms
 from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
@@ -17,16 +17,18 @@ from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutpu
 fps_log_interval = 10
 status_report_interval = 10
 
-class PipelineStreamer(StreamerCallbacks):
+class PipelineStreamer(ProcessCallbacks):
     def __init__(
         self,
         protocol: StreamProtocol,
+        input_timeout: int,
         process: ProcessGuardian,
         request_id: str,
         manifest_id: str,
         stream_id: str,
     ):
         self.protocol = protocol
+        self.input_timeout = input_timeout  # 0 means disabled
         self.process = process
 
         self.stop_event = asyncio.Event()
@@ -85,7 +87,7 @@ class PipelineStreamer(StreamerCallbacks):
             raise RuntimeError("Process not started")
 
         # make sure the stop event is set and give running tasks a chance to exit cleanly
-        self.trigger_stop_stream()
+        self.stop_event.set()
         _, pending = await asyncio.wait(
             self.main_tasks + self.auxiliary_tasks,
             return_when=asyncio.ALL_COMPLETED,
@@ -99,28 +101,21 @@ class PipelineStreamer(StreamerCallbacks):
         self.main_tasks = []
         self.auxiliary_tasks = []
         self.tasks_supervisor_task = None
+        self.process.stop_stream()
 
-    def is_stream_running(self) -> bool:
-        return self.tasks_supervisor_task is not None
-
-    async def wait(self, *, timeout: float = 0):
-        """Wait for the streamer to stop with an optional timeout. This is a blocking call."""
+    async def wait(self):
         if not self.tasks_supervisor_task:
             raise RuntimeError("Streamer not started")
-
-        awaitable: Awaitable = asyncio.shield(self.tasks_supervisor_task)
-        if timeout > 0:
-            awaitable = asyncio.wait_for(awaitable, timeout)
-        return await awaitable
+        return await self.tasks_supervisor_task
 
     def is_running(self):
         return self.tasks_supervisor_task is not None
 
-    def trigger_stop_stream(self) -> bool:
-        if not self.stop_event.is_set():
-            self.stop_event.set()
-            return True
-        return False
+    async def stop(self, *, timeout: float):
+        if not self.tasks_supervisor_task:
+            raise RuntimeError("Streamer not started")
+        self.stop_event.set()
+        await asyncio.wait_for(asyncio.shield(self.tasks_supervisor_task), timeout)
 
     async def report_status_loop(self):
         next_report = time.time() + status_report_interval
@@ -135,6 +130,22 @@ class PipelineStreamer(StreamerCallbacks):
 
             status = self.process.get_status(clear_transient=True)
             await self.emit_monitoring_event(status.model_dump())
+
+            last_input_time = max(
+                status.input_status.last_input_time or 0, status.start_time
+            )
+            time_since_last_input = time.time() - last_input_time
+            if self.input_timeout > 0 and time_since_last_input > self.input_timeout:
+                logging.info(
+                    f"Input stream stopped for {time_since_last_input} seconds. Shutting down..."
+                )
+                self.stop_event.set()
+
+    def on_before_process_restart(self, restart_count: int) -> None:
+        # Restarting the process will take a couple of time, so we stop the stream
+        # before it happens so the gateway/app can switch to a functioning O ASAP.
+        logging.info(f"Stopping streamer due to process restart restart_count={restart_count}")
+        self.stop_event.set()
 
     async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         """Protected method to emit monitoring event with lock"""
