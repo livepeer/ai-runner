@@ -89,7 +89,7 @@ def parse_return_timestamps(value: str) -> Union[bool, str]:
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def audio_to_text(
+def audio_to_text(
     audio: Annotated[
         UploadFile, File(description="Uploaded audio file to be transcribed.")
     ],
@@ -158,6 +158,7 @@ async def audio_to_text(
         return pipeline(
             audio=audio, return_timestamps=return_timestamps, duration=duration
         )
+        
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.
