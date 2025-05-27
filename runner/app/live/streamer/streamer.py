@@ -35,12 +35,15 @@ class PipelineStreamer(StreamerCallbacks):
         self.tasks_supervisor_task: asyncio.Task | None = None
         self.request_id = request_id
         self.stream_id = stream_id
-        self.width = 384  # Default values
+        self.width = 384
         self.height = 704
 
-    async def start(self, params: dict, stream_params: dict):
-        self.width = stream_params.get('width', self.width)
-        self.height = stream_params.get('height', self.height)
+    async def start(self, params: dict):
+        
+        #TODO: parse from request params
+        #if params.get('prompt'):
+       #     prompt = params.get('prompt')
+       #     self.width, self.height = ComfyUtils.get_latent_image_dimensions(prompt)
 
         if self.tasks_supervisor_task:
             raise RuntimeError("Streamer already started")
