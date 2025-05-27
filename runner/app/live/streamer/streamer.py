@@ -13,6 +13,7 @@ from .process_guardian import ProcessGuardian, StreamerCallbacks
 from .protocol.protocol import StreamProtocol
 from .status import timestamp_to_ms
 from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
+from utils import ComfyUtils
 
 fps_log_interval = 10
 status_report_interval = 10
@@ -37,15 +38,18 @@ class PipelineStreamer(StreamerCallbacks):
         self.request_id = request_id
         self.manifest_id = manifest_id
         self.stream_id = stream_id
-        self.width = 384
-        self.height = 704
+        self.width = ComfyUtils.DEFAULT_WIDTH
+        self.height = ComfyUtils.DEFAULT_HEIGHT
 
     async def start(self, params: dict):
-        
-        #TODO: parse from request params
-        #if params.get('prompt'):
-       #     prompt = params.get('prompt')
-       #     self.width, self.height = ComfyUtils.get_latent_image_dimensions(prompt)
+        # Parse expected input resolution from workflow prompt
+        try:
+            if params.get('prompt'):
+                prompt = params.get('prompt')
+                self.width, self.height = ComfyUtils.get_latent_image_dimensions(prompt)
+        except Exception as e:
+            logging.error(f"Error parsing resolution from prompt, using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}: {e}")
+            self.width, self.height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
 
         if self.tasks_supervisor_task:
             raise RuntimeError("Streamer already started")
