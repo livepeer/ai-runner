@@ -31,10 +31,10 @@ class TrickleProtocol(StreamProtocol):
         self.publish_queue = queue.Queue[OutputFrame]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
-            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event)
+            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, self.width, self.height)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, width=self.width, height=self.height)
+            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)
@@ -127,24 +127,25 @@ class TrickleProtocol(StreamProtocol):
                     continue
 
                 # Handle resolution changes
-                if 'width' in data or 'height' in data:
-                    new_width = data.get('width', self.width)
-                    new_height = data.get('height', self.height)
-                    if new_width != self.width or new_height != self.height:
-                        logging.info(f"Updating resolution from {self.width}x{self.height} to {new_width}x{new_height}")
-                        self.width = new_width
-                        self.height = new_height
-                        # Restart publish task with new resolution
-                        if self.publish_task:
-                            self.publish_task.cancel()
-                            try:
-                                await self.publish_task
-                            except asyncio.CancelledError:
-                                pass
-                            metadata_cache = LastValueCache[dict]()
-                            self.publish_task = asyncio.create_task(
-                                media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, width=self.width, height=self.height)
-                            )
+                # TODO: This should be on the input (encode, subscribe), not output
+                # if 'width' in data or 'height' in data:
+                #     new_width = data.get('width', self.width)
+                #     new_height = data.get('height', self.height)
+                #     if new_width != self.width or new_height != self.height:
+                #         logging.info(f"Updating resolution from {self.width}x{self.height} to {new_width}x{new_height}")
+                #         self.width = new_width
+                #         self.height = new_height
+                #         # Restart publish task with new resolution
+                #         if self.publish_task:
+                #             self.publish_task.cancel()
+                #             try:
+                #                 await self.publish_task
+                #             except asyncio.CancelledError:
+                #                 pass
+                #             metadata_cache = LastValueCache[dict]()
+                #             self.publish_task = asyncio.create_task(
+                #                 media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event)
+                #             )
 
                 logging.info("Received control message with params: %s", data)
                 yield data
