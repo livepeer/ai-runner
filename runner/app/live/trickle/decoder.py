@@ -115,7 +115,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
                     #     w = 512
                     #     h = int((512 * frame.height / frame.width) / 2) * 2
                         
-                    frame = reformatter.reformat(frame, format='rgba', width=384, height=704)
+                    frame = reformatter.reformat(frame, format='rgba', width=output_width, height=output_height)
                     avframe = InputFrame.from_av_video(frame)
                     avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)
