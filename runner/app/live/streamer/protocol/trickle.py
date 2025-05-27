@@ -7,7 +7,7 @@ from typing import AsyncGenerator, Optional
 from PIL import Image
 
 from trickle import media, TricklePublisher, TrickleSubscriber, InputFrame, OutputFrame, AudioFrame, AudioOutput
-
+from utils import ComfyUtils
 from .protocol import StreamProtocol
 from .last_value_cache import LastValueCache
 
@@ -23,8 +23,8 @@ class TrickleProtocol(StreamProtocol):
         self.events_publisher = None
         self.subscribe_task = None
         self.publish_task = None
-        self.width = 384  # Default values
-        self.height = 704
+        self.width = ComfyUtils.DEFAULT_WIDTH
+        self.height = ComfyUtils.DEFAULT_HEIGHT
 
     async def start(self):
         self.subscribe_queue = queue.Queue[InputFrame]()
@@ -126,26 +126,7 @@ class TrickleProtocol(StreamProtocol):
                     # Ignore periodic keepalive messages
                     continue
 
-                # Handle resolution changes
-                # TODO: This should be on the input (encode, subscribe), not output
-                # if 'width' in data or 'height' in data:
-                #     new_width = data.get('width', self.width)
-                #     new_height = data.get('height', self.height)
-                #     if new_width != self.width or new_height != self.height:
-                #         logging.info(f"Updating resolution from {self.width}x{self.height} to {new_width}x{new_height}")
-                #         self.width = new_width
-                #         self.height = new_height
-                #         # Restart publish task with new resolution
-                #         if self.publish_task:
-                #             self.publish_task.cancel()
-                #             try:
-                #                 await self.publish_task
-                #             except asyncio.CancelledError:
-                #                 pass
-                #             metadata_cache = LastValueCache[dict]()
-                #             self.publish_task = asyncio.create_task(
-                #                 media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event)
-                #             )
+                # TODO: handle prompt changes with differing resolution
 
                 logging.info("Received control message with params: %s", data)
                 yield data
