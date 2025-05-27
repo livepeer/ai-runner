@@ -23,6 +23,8 @@ class TrickleProtocol(StreamProtocol):
         self.events_publisher = None
         self.subscribe_task = None
         self.publish_task = None
+        self.width = 384  # Default values
+        self.height = 704
 
     async def start(self):
         self.subscribe_queue = queue.Queue[InputFrame]()
@@ -32,7 +34,7 @@ class TrickleProtocol(StreamProtocol):
             media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event)
+            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, width=self.width, height=self.height)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)
@@ -123,6 +125,26 @@ class TrickleProtocol(StreamProtocol):
                 if data == keepalive_message:
                     # Ignore periodic keepalive messages
                     continue
+
+                # Handle resolution changes
+                if 'width' in data or 'height' in data:
+                    new_width = data.get('width', self.width)
+                    new_height = data.get('height', self.height)
+                    if new_width != self.width or new_height != self.height:
+                        logging.info(f"Updating resolution from {self.width}x{self.height} to {new_width}x{new_height}")
+                        self.width = new_width
+                        self.height = new_height
+                        # Restart publish task with new resolution
+                        if self.publish_task:
+                            self.publish_task.cancel()
+                            try:
+                                await self.publish_task
+                            except asyncio.CancelledError:
+                                pass
+                            metadata_cache = LastValueCache[dict]()
+                            self.publish_task = asyncio.create_task(
+                                media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, width=self.width, height=self.height)
+                            )
 
                 logging.info("Received control message with params: %s", data)
                 yield data
