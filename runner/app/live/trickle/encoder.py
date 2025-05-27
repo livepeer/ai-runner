@@ -26,7 +26,9 @@ def encode_av(
     output_callback,
     get_metadata,
     video_codec: Optional[str] ='libx264',
-    audio_codec: Optional[str] ='libfdk_aac'
+    audio_codec: Optional[str] ='libfdk_aac',
+    width: Optional[int] = 384,
+    height: Optional[int] = 704
 ):
     logging.info("Starting encoder")
 
@@ -56,7 +58,7 @@ def encode_av(
 
     if video_meta and video_codec:
         # Add a new stream to the output using the desired video codec
-        video_opts = { 'video_size':'384x704', 'bf':'0' }
+        video_opts = { 'video_size':f'{width}x{height}', 'bf':'0' }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
         output_video_stream = output_container.add_stream(video_codec, options=video_opts)

@@ -37,8 +37,13 @@ class PipelineStreamer(StreamerCallbacks):
         self.request_id = request_id
         self.manifest_id = manifest_id
         self.stream_id = stream_id
+        self.width = 384  # Default values
+        self.height = 704
 
-    async def start(self, params: dict):
+    async def start(self, params: dict, stream_params: dict):
+        self.width = stream_params.get('width', self.width)
+        self.height = stream_params.get('height', self.height)
+
         if self.tasks_supervisor_task:
             raise RuntimeError("Streamer already started")
 
