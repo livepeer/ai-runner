@@ -11,6 +11,7 @@ import torch
 from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
+from utils import ComfyUtils
 
 class PipelineProcess:
     @staticmethod
@@ -166,20 +167,9 @@ class PipelineProcess:
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
-                if params.get('prompt') is None:
-                    # Parse resolution from the default workflow
-                    width, height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
-                else:
-                    # Parse resolution from the provided workflow
-                    prompt = params.get('prompt')
-                    if prompt is type(dict):
-                        width, height = ComfyUtils.get_latent_image_dimensions(prompt)
 
-                # TODO pass through to streamer
-                # params.update({
-                #     'width': width,
-                #     'height': height
-                # })
+                # TODO: We may need to call reset_stream when resolution is changed and start the pipeline again
+                # Changing the engine causes issues, maybe cleanup related
                 await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:
@@ -346,38 +336,3 @@ def clear_queue(queue):
             queue.get_nowait()  # Remove items without blocking
         except Exception as e:
             logging.error(f"Error while clearing queue: {e}")
-
-class ComfyUtils:
-    DEFAULT_WIDTH = 384
-    DEFAULT_HEIGHT = 704
-    
-    @staticmethod
-    def get_latent_image_dimensions(workflow: dict | None) -> tuple[int, int]:
-        """Get dimensions from the EmptyLatentImage node in the workflow.
-        
-        Args:
-            workflow: The workflow JSON dictionary
-            
-        Returns:
-            Tuple of (width, height) from the latent image. Returns default dimensions if not found or on error.
-        """
-
-        if workflow is None:
-            return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
-        
-        try:
-            for node_id, node in workflow.items():
-                if node.get("class_type") == "EmptyLatentImage":
-                    inputs = node.get("inputs", {})
-                    width = inputs.get("width")
-                    height = inputs.get("height")
-                    if width is not None and height is not None:
-                        return width, height
-                    logging.warning("Incomplete dimensions in latent image node")
-                    break
-        except Exception as e:
-            logging.warning(f"Failed to extract dimensions from workflow: {e}")
-        
-        # Return defaults if dimensions not found or on any error
-        logging.info(f"Using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}")
-        return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
