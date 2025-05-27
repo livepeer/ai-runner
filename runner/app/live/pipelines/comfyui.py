@@ -1,6 +1,5 @@
 import os
 import json
-import PIL
 import torch
 import asyncio
 from typing import Union
@@ -15,19 +14,54 @@ import logging
 
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
 WARMUP_RUNS = 1
+class ComfyUtils:
+    DEFAULT_WIDTH = 384
+    DEFAULT_HEIGHT = 704
+    @staticmethod
+    def get_default_workflow_json():
+        _default_workflow_path = pathlib.Path(__file__).parent.absolute() / "comfyui_default_workflow.json"
+        with open(_default_workflow_path, 'r') as f:
+            return json.load(f)
+        
+    @staticmethod
+    def get_latent_image_dimensions(workflow: dict | None) -> tuple[int, int]:
+        """Get dimensions from the EmptyLatentImage node in the workflow.
+        
+        Args:
+            workflow: The workflow JSON dictionary
+            
+        Returns:
+            Tuple of (width, height) from the latent image. Returns default dimensions if not found or on error.
+        """
 
-_default_workflow_path = pathlib.Path(__file__).parent.absolute() / "comfyui_default_workflow.json"
-with open(_default_workflow_path, 'r') as f:
-    DEFAULT_WORKFLOW_JSON = json.load(f)
+        if workflow is None:
+            return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
+        
+        try:
+            for node_id, node in workflow.items():
+                if node.get("class_type") == "EmptyLatentImage":
+                    inputs = node.get("inputs", {})
+                    width = inputs.get("width")
+                    height = inputs.get("height")
+                    if width is not None and height is not None:
+                        return width, height
+                    logging.warning("Incomplete dimensions in latent image node")
+                    break
+        except Exception as e:
+            logging.warning(f"Failed to extract dimensions from workflow: {e}")
+        
+        # Return defaults if dimensions not found or on any error
+        logging.info(f"Using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}")
+        return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
 
+# Get the default workflow json during startup
+DEFAULT_WORKFLOW_JSON = ComfyUtils.get_default_workflow_json()
 
 class ComfyUIParams(BaseModel):
     class Config:
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
-    width: int = 384
-    height: int = 704
 
     @field_validator('prompt')
     @classmethod
@@ -56,6 +90,8 @@ class ComfyUI(Pipeline):
         self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
+        self.width = ComfyUtils.DEFAULT_WIDTH
+        self.height = ComfyUtils.DEFAULT_HEIGHT
 
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
@@ -63,7 +99,7 @@ class ComfyUI(Pipeline):
         # TODO: currently its a single prompt, but need to support multiple prompts
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
-
+        
         # Get dimensions from the workflow
         if isinstance(new_params.prompt, dict):
             width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
@@ -116,33 +152,28 @@ class ComfyUI(Pipeline):
         await self.client.cleanup()
         logging.info("ComfyUI pipeline stopped")
 
-class ComfyUtils:
-    DEFAULT_WIDTH = 512
-    DEFAULT_HEIGHT = 512
-    
-    @staticmethod
-    def get_latent_image_dimensions(workflow: dict) -> tuple[int, int]:
-        """Get dimensions from the EmptyLatentImage node in the workflow.
+    # async def get_latent_image_dimensions(self, workflow: dict) -> tuple[int, int] | None:
+    #     """Get dimensions from the EmptyLatentImage node in the workflow.
         
-        Args:
-            workflow: The workflow JSON dictionary
+    #     Args:
+    #         workflow: The workflow JSON dictionary
             
-        Returns:
-            Tuple of (width, height) from the latent image. Returns default dimensions if not found or on error.
-        """
-        try:
-            for node_id, node in workflow.items():
-                if node.get("class_type") == "EmptyLatentImage":
-                    inputs = node.get("inputs", {})
-                    width = inputs.get("width")
-                    height = inputs.get("height")
-                    if width is not None and height is not None:
-                        return width, height
-                    logging.warning("Incomplete dimensions in latent image node")
-                    break
-        except Exception as e:
-            logging.warning(f"Failed to extract dimensions from workflow: {e}")
+    #     Returns:
+    #         Tuple of (width, height) from the latent image. Returns default dimensions if not found or on error.
+    #     """
+    #     try:
+    #         for node_id, node in workflow.items():
+    #             if node.get("class_type") == "EmptyLatentImage":
+    #                 inputs = node.get("inputs", {})
+    #                 width = inputs.get("width")
+    #                 height = inputs.get("height")
+    #                 if width is not None and height is not None:
+    #                     return width, height
+    #                 logging.warning("Incomplete dimensions in latent image node")
+    #                 break
+    #     except Exception as e:
+    #         logging.warning(f"Failed to extract dimensions from workflow: {e}")
         
-        # Return defaults if dimensions not found or on any error
-        logging.info(f"Using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}")
-        return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
+    #     # Return defaults if dimensions not found or on any error
+    #     logging.info(f"Using default dimensions {DEFAULT_WIDTH}x{DEFAULT_HEIGHT}")
+    #     return DEFAULT_WIDTH, DEFAULT_HEIGHT
