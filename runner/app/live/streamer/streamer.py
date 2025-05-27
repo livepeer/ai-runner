@@ -35,8 +35,13 @@ class PipelineStreamer(StreamerCallbacks):
         self.tasks_supervisor_task: asyncio.Task | None = None
         self.request_id = request_id
         self.stream_id = stream_id
+        self.width = 384  # Default values
+        self.height = 704
 
-    async def start(self, params: dict):
+    async def start(self, params: dict, stream_params: dict):
+        self.width = stream_params.get('width', self.width)
+        self.height = stream_params.get('height', self.height)
+
         if self.tasks_supervisor_task:
             raise RuntimeError("Streamer already started")
 
@@ -162,22 +167,10 @@ class PipelineStreamer(StreamerCallbacks):
             if frame.mode != "RGBA":
                 frame = frame.convert("RGBA")
 
-            # Scale image to 512x512 as most models expect this size, especially when using tensorrt
+            # Scale image to target resolution
             width, height = frame.size
-            if (width, height) != (384, 704):
+            if (width, height) != (self.width, self.height):
                 frame_array = np.array(frame)
-
-                # # Crop to the center square if image not already square
-                # square_size = min(width, height)
-                # if width != height:
-                #     start_x = width // 2 - square_size // 2
-                #     start_y = height // 2 - square_size // 2
-                #     frame_array = frame_array[
-                #         start_y : start_y + square_size, start_x : start_x + square_size
-                #     ]
-
-                # frame_array = cv2.resize(frame_array, (384, 704))
-
                 frame = Image.fromarray(frame_array)
 
             logging.debug(

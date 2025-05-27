@@ -131,7 +131,17 @@ async def handle_start_stream(request: web.Request):
             params.stream_id,
         )
 
-        await streamer.start(params.params)
+        # Get resolution from params dictionary with defaults
+        stream_params = {
+            'width': params.params.get('width', 384),
+            'height': params.params.get('height', 704)
+        }
+
+        # Merge with any other params
+        stream_params.update(params.params)
+        logging.info(f"Starting stream with params: {stream_params}")
+
+        await streamer.start(params.params, stream_params)
         request.app["streamer"] = streamer
         await protocol.emit_monitoring_event({
             "type": "runner_receive_stream_request",
