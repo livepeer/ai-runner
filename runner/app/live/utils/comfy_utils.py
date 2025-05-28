@@ -1,11 +1,12 @@
 import logging
+import json
 
 class ComfyUtils:
     DEFAULT_WIDTH = 512
     DEFAULT_HEIGHT = 512
     
     @staticmethod
-    def get_latent_image_dimensions(workflow: dict | None) -> tuple[int, int]:
+    def get_latent_image_dimensions(workflow: dict | str | None) -> tuple[int, int]:
         """Get dimensions from the EmptyLatentImage node in the workflow.
         
         Args:
@@ -17,6 +18,9 @@ class ComfyUtils:
 
         if workflow is None:
             return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
+        
+        if isinstance(workflow, str):
+            workflow = json.loads(workflow)
         
         try:
             for node_id, node in workflow.items():
