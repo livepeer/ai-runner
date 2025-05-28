@@ -2,8 +2,8 @@ import logging
 import json
 
 class ComfyUtils:
-    DEFAULT_WIDTH = 512
-    DEFAULT_HEIGHT = 512
+    DEFAULT_WIDTH = 384
+    DEFAULT_HEIGHT = 704
     
     @staticmethod
     def get_latent_image_dimensions(workflow: dict | str | None) -> tuple[int, int]:
