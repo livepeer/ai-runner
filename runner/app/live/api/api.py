@@ -15,7 +15,6 @@ from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
 
 MAX_FILE_AGE = 86400  # 1 day
-STREAMER_INPUT_TIMEOUT = 60  # 60s
 
 # File to store the last params that a stream was started with. Used to cleanup
 # left over resources (e.g. trickle channels) left by a crashed process.
@@ -106,7 +105,8 @@ async def handle_start_stream(request: web.Request):
             # Stop the previous streamer before starting a new one
             try:
                 logging.info("Stopping previous streamer")
-                await prev_streamer.stop(timeout=10)
+                prev_streamer.trigger_stop_stream()
+                await prev_streamer.wait(timeout=10)
             except asyncio.TimeoutError as e:
                 logging.error(f"Timeout stopping streamer: {e}")
                 raise web.HTTPBadRequest(text="Timeout stopping previous streamer")
@@ -130,7 +130,6 @@ async def handle_start_stream(request: web.Request):
         )
         streamer = PipelineStreamer(
             protocol,
-            STREAMER_INPUT_TIMEOUT,
             process,
             params.request_id,
             params.manifest_id,

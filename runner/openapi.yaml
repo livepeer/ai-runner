@@ -992,6 +992,7 @@ components:
         status:
           type: string
           enum:
+          - LOADING
           - OK
           - ERROR
           - IDLE

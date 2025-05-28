@@ -93,7 +93,8 @@ class LiveVideoToVideoPipeline(Pipeline):
             pipe_status = PipelineStatus(**json.loads(response.read().decode()))
             return HealthCheck(
                 status=(
-                    "IDLE" if pipe_status.state == "OFFLINE"
+                    "LOADING" if pipe_status.state == "LOADING"
+                    else "IDLE" if pipe_status.state == "OFFLINE"
                     else "ERROR" if pipe_status.state == "ERROR"
                     else "OK"
                 ),

@@ -51,7 +51,6 @@ async def main(
     events_url: str,
     pipeline: str,
     params: dict,
-    input_timeout: int,
     request_id: str,
     manifest_id: str,
     stream_id: str,
@@ -71,9 +70,7 @@ async def main(
             protocol = ZeroMQProtocol(subscribe_url, publish_url)
         else:
             raise ValueError(f"Unsupported protocol: {stream_protocol}")
-        streamer = PipelineStreamer(
-            protocol, input_timeout, process, request_id, stream_id
-        )
+        streamer = PipelineStreamer(protocol, process, request_id, stream_id)
 
     api = None
     try:
@@ -97,7 +94,8 @@ async def main(
         raise e
     finally:
         if streamer:
-            await streamer.stop(timeout=5)
+            streamer.trigger_stop_stream()
+            await streamer.wait(timeout=5)
         if api:
             await api.cleanup()
         await process.stop()
@@ -160,12 +158,6 @@ if __name__ == "__main__":
         help="URL to publish events about pipeline status and logs.",
     )
     parser.add_argument(
-        "--input-timeout",
-        type=int,
-        default=60,
-        help="Timeout in seconds to wait after input frames stop before shutting down. Set to 0 to disable.",
-    )
-    parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose (debug) logging"
     )
     parser.add_argument(
@@ -208,7 +200,6 @@ if __name__ == "__main__":
                 events_url=args.events_url,
                 pipeline=args.pipeline,
                 params=params,
-                input_timeout=args.input_timeout,
                 request_id=args.request_id,
                 manifest_id=args.manifest_id,
                 stream_id=args.stream_id,
