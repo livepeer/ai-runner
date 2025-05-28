@@ -12,7 +12,7 @@ from .protocol import StreamProtocol
 from .last_value_cache import LastValueCache
 
 class TrickleProtocol(StreamProtocol):
-    def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None):
+    def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None, width: Optional[int] = ComfyUtils.DEFAULT_WIDTH, height: Optional[int] = ComfyUtils.DEFAULT_HEIGHT):
         self.subscribe_url = subscribe_url
         self.publish_url = publish_url
         self.control_url = control_url
@@ -23,8 +23,8 @@ class TrickleProtocol(StreamProtocol):
         self.events_publisher = None
         self.subscribe_task = None
         self.publish_task = None
-        self.width = ComfyUtils.DEFAULT_WIDTH
-        self.height = ComfyUtils.DEFAULT_HEIGHT
+        self.width = width
+        self.height = height
 
     async def start(self):
         self.subscribe_queue = queue.Queue[InputFrame]()
