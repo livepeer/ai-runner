@@ -44,16 +44,6 @@ class PipelineStreamer(StreamerCallbacks):
         self.height = height
 
     async def start(self, params: dict):
-        # Parse expected input resolution from workflow prompt
-        try:
-            if params.get('prompt'):
-                prompt = params.get('prompt')
-                self.width, self.height = ComfyUtils.get_latent_image_dimensions(prompt)
-                params.update({"width": self.width, "height": self.height})
-                logging.info(f"Streamer: Using dimensions {self.width}x{self.height} from workflow")
-        except Exception as e:
-            logging.error(f"Error parsing resolution from prompt, using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}: {e}")
-            self.width, self.height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
 
         if self.tasks_supervisor_task:
             raise RuntimeError("Streamer already started")
