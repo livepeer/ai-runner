@@ -26,6 +26,8 @@ class PipelineStreamer(StreamerCallbacks):
         request_id: str,
         manifest_id: str,
         stream_id: str,
+        width: int = ComfyUtils.DEFAULT_WIDTH,
+        height: int = ComfyUtils.DEFAULT_HEIGHT,
     ):
         self.protocol = protocol
         self.process = process
@@ -38,8 +40,8 @@ class PipelineStreamer(StreamerCallbacks):
         self.request_id = request_id
         self.manifest_id = manifest_id
         self.stream_id = stream_id
-        self.width = ComfyUtils.DEFAULT_WIDTH
-        self.height = ComfyUtils.DEFAULT_HEIGHT
+        self.width = width
+        self.height = height
 
     async def start(self, params: dict):
         # Parse expected input resolution from workflow prompt
@@ -47,6 +49,8 @@ class PipelineStreamer(StreamerCallbacks):
             if params.get('prompt'):
                 prompt = params.get('prompt')
                 self.width, self.height = ComfyUtils.get_latent_image_dimensions(prompt)
+                params.update({"width": self.width, "height": self.height})
+                logging.info(f"Streamer: Using dimensions {self.width}x{self.height} from workflow")
         except Exception as e:
             logging.error(f"Error parsing resolution from prompt, using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}: {e}")
             self.width, self.height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
@@ -58,7 +62,14 @@ class PipelineStreamer(StreamerCallbacks):
             self.request_id, self.manifest_id, self.stream_id, params, self
         )
 
+        # Update dimensions from process after reset_stream
+        self.width = self.process.width
+        self.height = self.process.height
+        logging.info(f"Streamer: Updated dimensions to {self.width}x{self.height} from process")
+
         self.stop_event.clear()
+        self.protocol.width = self.width
+        self.protocol.height = self.height
         await self.protocol.start()
 
         # We need a bunch of concurrent tasks to run the streamer. So we start them all in background and then also start
