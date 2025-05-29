@@ -6,12 +6,20 @@ import logging
 import os
 from typing import Optional
 from fractions import Fraction
+from collections import deque
 
 from .frame import VideoOutput, AudioOutput, InputFrame
 
 # use mpegts default time base
 OUT_TIME_BASE=Fraction(1, 90_000)
-GOP_SECS=3
+GOP_SECS=2
+
+# maximum buffer duration in seconds
+AUDIO_BUFFER_SECS=2
+# maximum buffer size in number of packets. Roughly 2s at 20ms / frame
+AUDIO_BUFFER_LEN=100
+# how many out-of-sync video packets to drop. Roughly 4s at 25fps
+MAX_DROPPED_VIDEO=100
 
 def encode_av(
     input_queue,
@@ -66,7 +74,12 @@ def encode_av(
     # Now read packets from the input, decode, then re-encode, and mux.
     start = datetime.datetime.now()
     last_kf = None
-    video_received = False
+    audio_received = False
+    first_video_ts = None
+    dropped_video = 0
+    dropped_audio = 0
+    audio_buffer = deque()
+
     while True:
         avframe = input_queue()
         if avframe is None:
@@ -82,28 +95,87 @@ def encode_av(
             frame.pts = rescale_ts(avframe.timestamp, avframe.time_base, output_video_stream.codec_context.time_base)
             frame.time_base = output_video_stream.codec_context.time_base
             current = avframe.timestamp * avframe.time_base
+
+            # if there is pending audio, check whether video is too far behind
+            if len(audio_buffer) > 0:
+                audio_ts = audio_buffer[0].timestamp * audio_buffer[0].time_base
+                delta = audio_ts - current
+                if delta > AUDIO_BUFFER_SECS:
+                    # video is too far behind audio, drop the frame to try and catch up
+                    dropped_video += 1
+                    if dropped_video > MAX_DROPPED_VIDEO:
+                        # dropped too many frames, may be unlikely to catch up so stop the stream
+                        logging.error(f"A/V is out of sync, exiting from video audio_ts={float(audio_ts)} video_ts={float(current)} delta={float(delta)}")
+                        break
+                    # drop the frame by skipping the rest of the following code
+                    continue
+
             if not last_kf or float(current - last_kf) >= GOP_SECS:
                 frame.pict_type = av.video.frame.PictureType.I
                 last_kf = current
+                if first_video_ts is None:
+                    first_video_ts = current
             encoded_packets = output_video_stream.encode(frame)
             for ep in encoded_packets:
                 output_container.mux(ep)
-            video_received = True
             continue
 
         if isinstance(avframe, AudioOutput):
             if not output_audio_stream:
                 # received audio but no audio output, so drop
                 continue
-            if output_video_stream and not video_received:
-                # Wait until we receive video to start sending audio
+            if output_video_stream and first_video_ts is None:
+                # Buffer up audio until we receive video, up to a point
                 # because video could be extremely delayed and we don't
                 # want to send out audio-only segments since that confuses
                 # downstream tools
+
+                # shortcut to assume len(audio_buffer) is at least 1
+                if len(avframe.frames) <= 0:
+                    continue
+                for af in avframe.frames:
+                    audio_buffer.append(af)
+                while len(audio_buffer) > AUDIO_BUFFER_LEN:
+                    af = audio_buffer.popleft()
+                    dropped_audio += 1
                 continue
+
+            while len(audio_buffer) > 0:
+                # if we hit this point then we have a video frame
+                # Check whether audio is too far behind first video packet.
+                af = audio_buffer[0]
+                first_audio_ts = af.timestamp * af.time_base
+                if first_video_ts - first_audio_ts > AUDIO_BUFFER_SECS:
+                    audio_buffer.popleft()
+                    dropped_audio += 1
+                    continue
+
+                # NB: video being too far behind audio is handled within the video code
+                #     so we can drop video frames if necessary
+
+                break
+
+            if len(audio_buffer) > 0:
+                first_ts = float(audio_buffer[0].timestamp * audio_buffer[0].time_base)
+                last_ts = float(audio_buffer[-1].timestamp * audio_buffer[-1].time_base)
+                avframe.frames[:0] = audio_buffer
+                logging.info(f"Flushing {len(audio_buffer)} audio frames from={first_ts} to={last_ts} dropped_audio={dropped_audio} dropped_video={dropped_video}")
+                audio_buffer.clear()
+
+            av_broken = False
             for af in avframe.frames:
                 af.log_timestamps["frame_end"] = time.time()
                 log_frame_timestamps("Audio", af)
+                if not audio_received and first_video_ts is not None:
+                    first_audio_ts = af.timestamp * af.time_base
+                    delta = first_audio_ts - first_video_ts
+                    if abs(delta) > AUDIO_BUFFER_SECS:
+                        # A/V is out of sync badly enough so exit for now
+                        av_broken = True
+                        logging.error(f"A/V is out of sync, exiting from audio audio_ts={float(first_audio_ts)} video_ts={float(first_video_ts)} delta={float(delta)}")
+                        break
+                    logging.info(f"Received first audio_ts={float(first_audio_ts)} video_ts={float(first_video_ts)} delta={float(delta)}")
+                    audio_received = True
                 frame = av.audio.frame.AudioFrame.from_ndarray(af.samples, format=af.format, layout=af.layout)
                 frame.sample_rate = af.rate
                 frame.pts = rescale_ts(af.timestamp, af.time_base, output_audio_stream.codec_context.time_base)
@@ -111,6 +183,9 @@ def encode_av(
                 encoded_packets = output_audio_stream.encode(frame)
                 for ep in encoded_packets:
                     output_container.mux(ep)
+            if av_broken:
+                # too far out of sync, so stop encoding
+                break
             continue
 
         logging.warning(f"Unsupported output frame type {type(avframe)}")

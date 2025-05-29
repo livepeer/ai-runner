@@ -4,7 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 class HealthCheck(BaseModel):
-    status: Literal["OK", "ERROR", "IDLE"] = Field(..., description="The health status of the pipeline")
+    status: Literal["LOADING", "OK", "ERROR", "IDLE"] = Field(..., description="The health status of the pipeline")
 
 class Version(BaseModel):
     pipeline: str
