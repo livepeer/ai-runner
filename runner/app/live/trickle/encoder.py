@@ -26,7 +26,7 @@ def encode_av(
     output_callback,
     get_metadata,
     video_codec: Optional[str] ='libx264',
-    audio_codec: Optional[str] ='libfdk_aac',
+    audio_codec: Optional[str] ='libfdk_aac'
 ):
     logging.info("Starting encoder")
 
