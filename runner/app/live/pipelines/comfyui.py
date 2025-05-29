@@ -94,7 +94,13 @@ class ComfyUI(Pipeline):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
-        await self.client.update_prompts([new_params.prompt])
+        # fallback when update fails, also only works for single prompt for now
+        try:
+            await self.client.update_prompts([new_params.prompt])
+        except Exception as e:
+            await self.client.set_prompts([self.params.prompt]) # reverting back to previous params
+            logging.error(f"Error updating ComfyUI Pipeline Prompt: {e}")
+            raise e
         self.params = new_params
 
     async def stop(self):
