@@ -4,9 +4,9 @@ import logging
 import sys
 
 class TrickleSubscriber:
-    def __init__(self, url: str, max_retries=5):
+    def __init__(self, url: str, start_seq=-2, max_retries=5):
         self.base_url = url
-        self.idx = -1  # Start with -1 for 'latest' index
+        self.idx = start_seq
         self.pending_get: aiohttp.ClientResponse | None = None  # Pre-initialized GET request
         self.lock = asyncio.Lock()  # Lock to manage concurrent access
         self.session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False))
@@ -56,8 +56,8 @@ class TrickleSubscriber:
                 resp.release()
                 logging.error(f"Trickle sub Failed GET {url} status code: {resp.status}, msg: {body}")
 
-            except aiohttp.ClientError as e:
-                logging.error(f"Trickle sub Failed to complete GET {url} error: {e}")
+            except Exception:
+                logging.exception(f"Trickle sub Failed to complete GET {url}", stack_info=True)
 
             if attempt < self.max_retries - 1:
                 await asyncio.sleep(0.5)
@@ -72,7 +72,7 @@ class TrickleSubscriber:
         async with self.lock:
 
             if self.errored:
-                logging.info("Trickle subscription closed or errored for {url}")
+                logging.info(f"Trickle subscription closed or errored for {self.base_url}")
                 return None
 
             # If we don't have a pending GET request, preconnect
@@ -105,7 +105,6 @@ class TrickleSubscriber:
 
     async def _preconnect_next_segment(self):
         """Preconnect to the next segment in the background."""
-        logging.info(f"Trickle sub setting up next connection for index {self.idx}")
         async with self.lock:
             if self.pending_get is not None:
                 return
@@ -159,5 +158,5 @@ class Segment:
         if self.response is None:
             return
         if not self.response.closed:
-            await self.response.release()
-            await self.response.close()
+            self.response.release()
+            self.response.close()

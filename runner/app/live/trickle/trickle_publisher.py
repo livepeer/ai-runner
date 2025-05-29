@@ -33,7 +33,7 @@ class TricklePublisher:
             asyncio.create_task(self._run_post(url, queue))
             return queue
         except aiohttp.ClientError as e:
-            logging.error(f"Failed to complete POST for {self.streamIdx()}: {e}")
+            logging.error(f"Failed to complete POST for {url}: {e}")
             return None
 
     async def _run_post(self, url, queue):

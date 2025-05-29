@@ -1,0 +1,11 @@
+**/.git
+**/.github
+**/.gitignore
+**/.vscode
+**/Dockerfile.*
+**/*.pyc
+**/*.pyo
+**/__pycache__/
+
+.devcontainer/
+docs/

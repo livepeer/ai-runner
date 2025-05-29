@@ -3,7 +3,7 @@ openapi: 3.1.0
 info:
   title: Livepeer AI Runner
   description: An application to run AI pipelines
-  version: 0.0.0
+  version: 0.13.5
 servers:
 - url: https://dream-gateway.livepeer.cloud
   description: Livepeer Cloud Community Gateway
@@ -419,27 +419,12 @@ paths:
       description: Apply transformations to a live video streamed to the returned
         endpoints.
       operationId: genLiveVideoToVideo
-      security:
-      - HTTPBearer: []
-      parameters:
-      - name: requestID
-        in: header
-        required: false
-        schema:
-          type: string
-          title: Requestid
-      - name: streamID
-        in: header
-        required: false
-        schema:
-          type: string
-          title: Streamid
       requestBody:
-        required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/LiveVideoToVideoParams'
+        required: true
       responses:
         '200':
           description: Successful Response
@@ -449,29 +434,31 @@ paths:
                 $ref: '#/components/schemas/LiveVideoToVideoResponse'
                 x-speakeasy-name-override: data
         '400':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPError'
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
         '401':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HTTPError'
           description: Unauthorized
-        '500':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPError'
+        '500':
           description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPError'
         '422':
           description: Validation Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
       x-speakeasy-name-override: liveVideoToVideo
   /text-to-speech:
     post:
@@ -555,6 +542,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HardwareStats'
+  /version:
+    get:
+      summary: Version
+      operationId: version
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Version'
 components:
   schemas:
     APIError:
@@ -1011,6 +1009,7 @@ components:
         status:
           type: string
           enum:
+          - LOADING
           - OK
           - ERROR
           - IDLE
@@ -1195,6 +1194,11 @@ components:
           title: Gateway Request Id
           description: The ID of the Gateway request (for logging purposes).
           default: ''
+        manifest_id:
+          type: string
+          title: Manifest Id
+          description: The manifest ID from the orchestrator (for logging purposes).
+          default: ''
         stream_id:
           type: string
           title: Stream Id
@@ -1229,6 +1233,11 @@ components:
           type: string
           title: Request Id
           description: The ID generated for this request
+          default: ''
+        manifest_id:
+          type: string
+          title: Manifest Id
+          description: Orchestrator manifest ID for this request
           default: ''
       type: object
       required:
@@ -1414,6 +1423,24 @@ components:
       - msg
       - type
       title: ValidationError
+    Version:
+      properties:
+        pipeline:
+          type: string
+          title: Pipeline
+        model_id:
+          type: string
+          title: Model Id
+        version:
+          type: string
+          title: Version
+          description: The version of the Runner
+      type: object
+      required:
+      - pipeline
+      - model_id
+      - version
+      title: Version
     VideoResponse:
       properties:
         frames:

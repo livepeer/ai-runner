@@ -2,7 +2,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from app.routes import health, hardware
+from app.routes import health, hardware, version
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from app.utils.hardware import HardwareInfo
@@ -10,7 +10,7 @@ from app.live.log import config_logging
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 
-config_logging()
+config_logging(log_level=logging.DEBUG if os.getenv("VERBOSE_LOGGING")=="1" else logging.INFO)
 logger = logging.getLogger(__name__)
 
 VERSION = Gauge('version', 'Runner version', ['app', 'version'])
@@ -22,6 +22,7 @@ async def lifespan(app: FastAPI):
 
     app.include_router(health.router)
     app.include_router(hardware.router)
+    app.include_router(version.router)
 
     pipeline = os.environ["PIPELINE"]
     model_id = os.environ["MODEL_ID"]
@@ -32,7 +33,9 @@ async def lifespan(app: FastAPI):
     app.hardware_info_service.log_gpu_compute_info()
     logger.info(f"Started up with pipeline {app.pipeline}")
 
-    VERSION.labels(app="ai-runner", version=os.getenv("GIT_SHA", "unknown")).set(1)
+    runner_version=os.getenv("VERSION", "undefined")
+    VERSION.labels(app="ai-runner", version=runner_version).set(1)
+    logger.info("Runner version: %s", runner_version)
 
     yield
 

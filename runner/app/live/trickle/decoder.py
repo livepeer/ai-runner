@@ -1,6 +1,9 @@
 import av
+from av.video.reformatter import VideoReformatter
+from av.container import InputContainer
 import time
 import logging
+from typing import cast
 
 from .frame import InputFrame
 
@@ -14,16 +17,15 @@ def decode_av(pipe_input, frame_callback, put_metadata):
     :param frame_callback: A function that accepts an InputFrame object
     :param put_metadata: A function that accepts audio/video metadata
     """
-    container = av.open(pipe_input)
+    container = cast(InputContainer, av.open(pipe_input, 'r'))
 
     # Locate the first video and first audio stream (if they exist)
     video_stream = None
     audio_stream = None
-    for s in container.streams:
-        if s.type == 'video' and video_stream is None:
-            video_stream = s
-        elif s.type == 'audio' and audio_stream is None:
-            audio_stream = s
+    if container.streams.video:
+        video_stream = container.streams.video[0]
+    if container.streams.audio:
+        audio_stream = container.streams.audio[0]
 
     # Prepare audio-related metadata (if audio is present)
     audio_metadata = None
@@ -63,7 +65,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
     logging.info(f"Metadata: {metadata}")
     put_metadata(metadata)
 
-    reformatter = av.video.reformatter.VideoReformatter()
+    reformatter = VideoReformatter()
     frame_interval = 1.0 / MAX_FRAMERATE
     next_pts_time = 0.0
     try:
@@ -74,6 +76,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
             if audio_stream and packet.stream == audio_stream:
                 # Decode audio frames
                 for aframe in packet.decode():
+                    aframe = cast(av.AudioFrame, aframe)
                     if aframe.pts is None:
                         continue
 
@@ -85,6 +88,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
             elif video_stream and packet.stream == video_stream:
                 # Decode video frames
                 for frame in packet.decode():
+                    frame = cast(av.VideoFrame, frame)
                     if frame.pts is None:
                         continue
 
@@ -101,11 +105,11 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
 
-                    w = 512
-                    h = int((512 * frame.height / frame.width) / 2) * 2 # force divisible by 2
+                    h = 512
+                    w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
                     if frame.height > frame.width:
-                        h = 512
-                        w = int((512 * frame.width / frame.height) / 2) * 2
+                        w = 512
+                        h = int((512 * frame.height / frame.width) / 2) * 2
                     frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
                     avframe = InputFrame.from_av_video(frame)
                     avframe.log_timestamps["frame_init"] = time.time()
@@ -114,6 +118,7 @@ def decode_av(pipe_input, frame_callback, put_metadata):
 
     except Exception as e:
         logging.error(f"Exception while decoding: {e}")
+        raise # should be caught upstream
 
     finally:
         container.close()

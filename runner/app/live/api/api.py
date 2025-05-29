@@ -1,13 +1,12 @@
 import asyncio
-import hashlib
 import logging
-import mimetypes
+import json
 import os
 import tempfile
 import time
 from typing import Optional, cast
 
-from aiohttp import BodyPartReader, web
+from aiohttp import web
 from pydantic import BaseModel, Field
 from typing import Annotated, Dict
 
@@ -15,10 +14,11 @@ from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
 
-TEMP_SUBDIR = "infer_temp"
 MAX_FILE_AGE = 86400  # 1 day
-STREAMER_INPUT_TIMEOUT = 60  # 60s
 
+# File to store the last params that a stream was started with. Used to cleanup
+# left over resources (e.g. trickle channels) left by a crashed process.
+last_params_file = os.path.join(tempfile.gettempdir(), "ai_runner_last_params.json")
 
 class StartStreamParams(BaseModel):
     subscribe_url: Annotated[
@@ -57,49 +57,41 @@ class StartStreamParams(BaseModel):
         str,
         Field(default="", description="Unique identifier for the request."),
     ]
+    manifest_id: Annotated[
+        str,
+        Field(default="", description="Orchestrator identifier for the request."),
+    ]
     stream_id: Annotated[
         str,
         Field(default="", description="Unique identifier for the stream."),
     ]
 
+async def cleanup_last_stream():
+    if not os.path.exists(last_params_file):
+        logging.debug("No last stream params found to cleanup")
+        return
 
-def cleanup_old_files(temp_dir):
-    current_time = time.time()
-    for filename in os.listdir(temp_dir):
-        file_path = os.path.join(temp_dir, filename)
-        if os.path.isfile(file_path):
-            file_age = current_time - os.path.getmtime(file_path)
-            if file_age > MAX_FILE_AGE:
-                os.remove(file_path)
-                logging.info(f"Removed old file: {file_path}")
+    try:
+        with open(last_params_file, "r") as f:
+            params = StartStreamParams(**json.load(f))
+        os.remove(last_params_file)
 
+        logging.info(f"Cleaning up last stream trickle channels for request_id={params.request_id} subscribe_url={params.subscribe_url} publish_url={params.publish_url} control_url={params.control_url} events_url={params.events_url}")
+        protocol = TrickleProtocol(
+            params.subscribe_url,
+            params.publish_url,
+            params.control_url,
+            params.events_url,
+        )
+        # Start and stop the protocol to immediately to make sure trickle channels are closed.
+        await protocol.start()
+        await protocol.stop()
+    except:
+        logging.exception(f"Error cleaning up last stream trickle channels")
 
-async def parse_request_data(request: web.Request, temp_dir: str) -> Dict:
+async def parse_request_data(request: web.Request) -> Dict:
     if request.content_type.startswith("application/json"):
         return await request.json()
-    elif request.content_type.startswith("multipart/"):
-        params_data = {}
-        reader = await request.multipart()
-        async for part in reader:
-            if not isinstance(part, BodyPartReader):
-                continue
-            elif part.name == "params":
-                part_data = await part.json()
-                if part_data:
-                    params_data.update(part_data)
-            else:
-                content = await part.read()
-                file_hash = hashlib.md5(content).hexdigest()
-                content_type = part.headers.get(
-                    "Content-Type", "application/octet-stream"
-                )
-                ext = mimetypes.guess_extension(content_type) or ""
-                new_filename = f"{file_hash}{ext}"
-                file_path = os.path.join(temp_dir, new_filename)
-                with open(file_path, "wb") as f:
-                    f.write(content)
-                params_data[part.name] = file_path
-        return params_data
     else:
         raise ValueError(f"Unknown content type: {request.content_type}")
 
@@ -113,19 +105,22 @@ async def handle_start_stream(request: web.Request):
             # Stop the previous streamer before starting a new one
             try:
                 logging.info("Stopping previous streamer")
-                await prev_streamer.stop(timeout=10)
+                prev_streamer.trigger_stop_stream()
+                await prev_streamer.wait(timeout=10)
             except asyncio.TimeoutError as e:
                 logging.error(f"Timeout stopping streamer: {e}")
                 raise web.HTTPBadRequest(text="Timeout stopping previous streamer")
 
-        temp_dir = os.path.join(tempfile.gettempdir(), TEMP_SUBDIR)
-        os.makedirs(temp_dir, exist_ok=True)
-        cleanup_old_files(temp_dir)
-
-        params_data = await parse_request_data(request, temp_dir)
+        params_data = await parse_request_data(request)
         params = StartStreamParams(**params_data)
 
-        config_logging(request_id=params.request_id, stream_id=params.stream_id)
+        try:
+            with open(last_params_file, "w") as f:
+                json.dump(params.model_dump(), f)
+        except Exception as e:
+            logging.error(f"Error saving last params to file: {e}")
+
+        config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
         protocol = TrickleProtocol(
             params.subscribe_url,
@@ -135,9 +130,9 @@ async def handle_start_stream(request: web.Request):
         )
         streamer = PipelineStreamer(
             protocol,
-            STREAMER_INPUT_TIMEOUT,
             process,
             params.request_id,
+            params.manifest_id,
             params.stream_id,
         )
 
@@ -156,11 +151,7 @@ async def handle_start_stream(request: web.Request):
 
 async def handle_params_update(request: web.Request):
     try:
-        temp_dir = os.path.join(tempfile.gettempdir(), TEMP_SUBDIR)
-        os.makedirs(temp_dir, exist_ok=True)
-        cleanup_old_files(temp_dir)
-
-        params = await parse_request_data(request, temp_dir)
+        params = await parse_request_data(request)
 
         process = cast(ProcessGuardian, request.app["process"])
         await process.update_params(params)
@@ -180,6 +171,8 @@ async def handle_get_status(request: web.Request):
 async def start_http_server(
     port: int, process: ProcessGuardian, streamer: Optional[PipelineStreamer] = None
 ):
+    asyncio.create_task(cleanup_last_stream())
+
     app = web.Application()
     app["process"] = process
     app["streamer"] = streamer

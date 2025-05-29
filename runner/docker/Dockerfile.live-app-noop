@@ -49,6 +49,9 @@ COPY app/ /app/app
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 
+ARG VERSION="undefined"
+ENV VERSION=${VERSION}
+
 WORKDIR /app
 
 CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

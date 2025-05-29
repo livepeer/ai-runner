@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=livepeer/comfyui-base:ai-runner-9166aa9
+ARG BASE_IMAGE=livepeer/comfyui-base@sha256:21ac5eb58c93d8b76514f23119e7a4f997db8bc5a89d3718e43cccde6195eb3d
 FROM ${BASE_IMAGE}
 
 # -----------------------------------------------------------------------------
@@ -8,13 +8,14 @@ FROM ${BASE_IMAGE}
 ENV DEBIAN_FRONTEND=noninteractive
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+ENV PATH="/workspace/miniconda3/bin:${PATH}"
 
 # Install prerequisites
 RUN apt-get update && \
     apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
     libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
     xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git runit libzmq3-dev && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Keep python installation from base image
 
@@ -23,7 +24,7 @@ RUN apt-get update && \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf automake build-essential cmake git-core libtool pkg-config wget \
     nasm yasm zlib1g-dev libpng-dev libx264-dev libopus-dev libfdk-aac-dev && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up environment variables
 ENV NV_CODEC_HEADERS=/usr/local/cuda/include/ffnvcodec/
@@ -34,10 +35,9 @@ RUN git clone -b n12.2.72.0 --depth 1 https://git.videolan.org/git/ffmpeg/nv-cod
     cd .. && rm -rf nv-codec-headers
 
 # Clone the FFmpeg repository and checkout the latest release
-RUN git clone --branch n7.1 --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg
-
-# Build FFmpeg with shared libraries and hardware acceleration
-RUN cd ffmpeg && \
+RUN git clone --branch n7.1 --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpeg && \
+    # Build FFmpeg with static linking and the desired hardware-accelerated features
+    cd ffmpeg && \
     ./configure --prefix=/compiled \
                 --extra-cflags="-I/ffmpeg_build/include -I/usr/local/cuda/include" \
                 --extra-ldflags="-L/ffmpeg_build/lib -L/usr/local/cuda/lib64" \
@@ -58,13 +58,11 @@ RUN cd ffmpeg && \
                 --disable-doc && \
     make -j$(nproc) && \
     make install && \
-    make distclean
-
-# Copy the compiled FFmpeg binaries to /usr/local
-RUN cp -R /compiled/* /usr/local/
-
-# Clean up APT cache to reduce image size
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+    make distclean && \
+    # Copy the compiled FFmpeg binaries to /usr/local
+    cp -R /compiled/* /usr/local/ && \
+    cd .. \
+    rm -rf ffmpeg
 
 # -----------------------------------------------------------------------------
 # live-base: End of section
@@ -72,15 +70,7 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up ComfyUI workspace
 ENV COMFY_UI_WORKSPACE="/workspace/ComfyUI"
-ENV PYTHONPATH=/workspace/ComfyUI:${PYTHONPATH:-}
 RUN mkdir -p /workspace/ComfyUI
 RUN rm -rf /workspace/ComfyUI/models && ln -s /models/ComfyUI--models /workspace/ComfyUI/models
 RUN rm -rf /workspace/ComfyUI/output && ln -s /models/ComfyUI--output /workspace/ComfyUI/output
 
-# Ensure all the next RUN commands are run in the comfystream conda environment
-RUN echo "source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> /conda_activate.sh && \
-    chmod +x /conda_activate.sh
-ENV BASH_ENV=/conda_activate.sh
-SHELL ["/bin/bash", "-c"]
-# Ensure the app run from CMD is also in the comfystream conda environment (just wrap in bash and it will run the .bashrc above)
-ENTRYPOINT ["bash", "-c", "exec /opt/nvidia/nvidia_entrypoint.sh \"$@\"", "--"]

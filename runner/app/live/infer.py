@@ -6,8 +6,8 @@ import signal
 import sys
 import os
 import traceback
+import threading
 from typing import List
-import logging
 
 from streamer import PipelineStreamer, ProcessGuardian
 
@@ -21,6 +21,26 @@ from streamer.protocol.trickle import TrickleProtocol
 from streamer.protocol.zeromq import ZeroMQProtocol
 
 
+def asyncio_exception_handler(loop, context):
+    """
+    Handles unhandled exceptions in asyncio tasks, logging the error and terminating the application.
+    """
+    exception = context.get('exception')
+    logging.error(f"Terminating process due to unhandled exception in asyncio task", exc_info=exception)
+    os._exit(1)
+
+
+def thread_exception_hook(original_hook):
+    """
+    Creates a custom exception hook for threads that logs the error and terminates the application.
+    """
+    def custom_hook(args):
+        logging.error("Terminating process due to unhandled exception in thread", exc_info=args.exc_value)
+        original_hook(args) # this is most likely a noop
+        os._exit(1)
+    return custom_hook
+
+
 async def main(
     *,
     http_port: int,
@@ -31,10 +51,13 @@ async def main(
     events_url: str,
     pipeline: str,
     params: dict,
-    input_timeout: int,
     request_id: str,
+    manifest_id: str,
     stream_id: str,
 ):
+    loop = asyncio.get_event_loop()
+    loop.set_exception_handler(asyncio_exception_handler)
+
     process = ProcessGuardian(pipeline, params or {})
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
@@ -47,13 +70,11 @@ async def main(
             protocol = ZeroMQProtocol(subscribe_url, publish_url)
         else:
             raise ValueError(f"Unsupported protocol: {stream_protocol}")
-        streamer = PipelineStreamer(
-            protocol, input_timeout, process, request_id, stream_id
-        )
+        streamer = PipelineStreamer(protocol, process, request_id, stream_id)
 
     api = None
     try:
-        with log_timing("ProcessGuardian started successfully"):
+        with log_timing("starting ProcessGuardian"):
             await process.start()
             if streamer:
                 await streamer.start(params)
@@ -73,7 +94,8 @@ async def main(
         raise e
     finally:
         if streamer:
-            await streamer.stop(timeout=5)
+            streamer.trigger_stop_stream()
+            await streamer.wait(timeout=5)
         if api:
             await api.cleanup()
         await process.stop()
@@ -93,12 +115,14 @@ async def block_until_signal(sigs: List[signal.Signals]):
 
 
 if __name__ == "__main__":
+    threading.excepthook = thread_exception_hook(threading.excepthook)
+
     parser = argparse.ArgumentParser(description="Infer process to run the AI pipeline")
     parser.add_argument(
         "--http-port", type=int, default=8888, help="Port for the HTTP server"
     )
     parser.add_argument(
-        "--pipeline", type=str, default="streamdiffusion", help="Pipeline to use"
+        "--pipeline", type=str, default="comfyui", help="Pipeline to use"
     )
     parser.add_argument(
         "--initial-params",
@@ -134,12 +158,6 @@ if __name__ == "__main__":
         help="URL to publish events about pipeline status and logs.",
     )
     parser.add_argument(
-        "--input-timeout",
-        type=int,
-        default=60,
-        help="Timeout in seconds to wait after input frames stop before shutting down. Set to 0 to disable.",
-    )
-    parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose (debug) logging"
     )
     parser.add_argument(
@@ -147,6 +165,9 @@ if __name__ == "__main__":
         type=str,
         default="",
         help="The Livepeer request ID associated with this video stream",
+    )
+    parser.add_argument(
+        "--manifest-id", type=str, default="", help="The orchestrator manifest ID"
     )
     parser.add_argument(
         "--stream-id", type=str, default="", help="The Livepeer stream ID"
@@ -159,11 +180,12 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if args.verbose:
-        os.environ["VERBOSE_LOGGING"] = "1"  # enable verbose logging in subprocesses
+        os.environ["VERBOSE_LOGGING"] = "1"  # enable verbose logging in sub-processes
 
     config_logging(
         log_level=logging.DEBUG if os.getenv("VERBOSE_LOGGING")=="1" else logging.INFO,
         request_id=args.request_id,
+        manifest_id=args.manifest_id,
         stream_id=args.stream_id,
     )
 
@@ -178,8 +200,8 @@ if __name__ == "__main__":
                 events_url=args.events_url,
                 pipeline=args.pipeline,
                 params=params,
-                input_timeout=args.input_timeout,
                 request_id=args.request_id,
+                manifest_id=args.manifest_id,
                 stream_id=args.stream_id,
             )
         )

@@ -98,20 +98,6 @@ class LLMResponse(BaseModel):
     usage: LLMTokenUsage
     choices: List[LLMChoice]
 
-
-# class LLMStreamChoice(LLMBaseChoice):
-#     delta: LLMMessage
-
-# class LLMNonStreamChoice(LLMBaseChoice):
-#     message: LLMMessage
-
-# class LLMStreamResponse(LLMBaseResponse):
-#     choices: List[LLMStreamChoice]
-
-# class LLMNonStreamResponse(LLMBaseResponse):
-#     choices: List[LLMNonStreamChoice]
-
-
 class LLMRequest(BaseModel):
     messages: List[LLMMessage]
     model: str = ""
@@ -148,6 +134,10 @@ class LiveVideoToVideoResponse(BaseModel):
     request_id: str = Field(
         default='',
         description="The ID generated for this request",
+    )
+    manifest_id: str = Field(
+        default='',
+        description="Orchestrator manifest ID for this request",
     )
 
 

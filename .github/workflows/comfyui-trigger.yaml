@@ -1,0 +1,60 @@
+name: Handle trigger from comfystream repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      comfyui-base-digest:
+        description: "SHA256 image digest for livepeer/comfyui-base docker image"
+        required: true
+        type: string
+      triggering-branch:
+        description: "Branch name or PR in comfystream triggering this workflow"
+        required: true
+        type: string
+      branch-prefix:
+        description: "Prefix for branch name to create PR here"
+        required: false
+        type: string
+        default: "comfyui/"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ !((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag') }}
+
+jobs:
+  trigger:
+    name: Trigger handler
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Update Dockerfile.live-base-comfyui
+        shell: bash
+        run: |
+          BASE_IMAGE="livepeer/comfyui-base@${{ inputs.comfyui-base-digest }}"
+          sed -i "1s~.*~ARG BASE_IMAGE=$BASE_IMAGE~" runner/docker/Dockerfile.live-base-comfyui
+          head runner/docker/Dockerfile.live-base-comfyui
+
+      - name: Commit and push changes
+        id: branch-commit
+        uses: devops-infra/action-commit-push@v0.10.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_GITHUB_TOKEN  }}
+        with:
+          github_token: ${{ secrets.CI_GITHUB_TOKEN }}
+          target_branch: "${{ inputs.branch-prefix }}${{ inputs.triggering-branch }}"
+          commit_prefix: "[AUTO-COMMIT] "
+          commit_message: "Update `Dockerfile.live-base-comfyui` with new BASE_IMAGE"
+          force: true
+
+      - name: Create pull request
+        uses: devops-infra/action-pull-request@v0.6.0
+        with:
+          github_token: ${{ secrets.CI_GITHUB_TOKEN }}
+          source_branch: ${{ steps.branch-commit.outputs.branch_name }}
+          target_branch: main
+          title: "[BOT] Update BASE_IMAGE to trigger ai-runner rebuild for comfyui (${{ inputs.triggering-branch }})"
+          assignee: "${{ github.actor }}"
+          get_diff: true
+          allow_no_diff: false

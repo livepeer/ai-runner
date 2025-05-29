@@ -9,7 +9,7 @@ from asyncio import Lock
 import cv2
 from PIL import Image
 
-from .process_guardian import ProcessGuardian
+from .process_guardian import ProcessGuardian, StreamerCallbacks
 from .protocol.protocol import StreamProtocol
 from .status import timestamp_to_ms
 from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
@@ -17,17 +17,16 @@ from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutpu
 fps_log_interval = 10
 status_report_interval = 10
 
-class PipelineStreamer:
+class PipelineStreamer(StreamerCallbacks):
     def __init__(
         self,
         protocol: StreamProtocol,
-        input_timeout: int,
         process: ProcessGuardian,
         request_id: str,
+        manifest_id: str,
         stream_id: str,
     ):
         self.protocol = protocol
-        self.input_timeout = input_timeout  # 0 means disabled
         self.process = process
 
         self.stop_event = asyncio.Event()
@@ -36,6 +35,7 @@ class PipelineStreamer:
         self.main_tasks: list[asyncio.Task] = []
         self.tasks_supervisor_task: asyncio.Task | None = None
         self.request_id = request_id
+        self.manifest_id = manifest_id
         self.stream_id = stream_id
 
     async def start(self, params: dict):
@@ -43,7 +43,7 @@ class PipelineStreamer:
             raise RuntimeError("Streamer already started")
 
         await self.process.reset_stream(
-            self.request_id, self.stream_id, params, self._emit_monitoring_event
+            self.request_id, self.manifest_id, self.stream_id, params, self
         )
 
         self.stop_event.clear()
@@ -58,8 +58,8 @@ class PipelineStreamer:
             run_in_background("control_loop", self.run_control_loop()),
         ]
         # auxiliary tasks that are not critical to the supervisor, but which we want to run
-        self.auxiliary_tasks = [
-        ]
+        # TODO: maybe remove this since we had to move the control loop to main tasks
+        self.auxiliary_tasks: list[asyncio.Task] = []
         self.tasks_supervisor_task = run_in_background(
             "tasks_supervisor", self.tasks_supervisor()
         )
@@ -85,7 +85,7 @@ class PipelineStreamer:
             raise RuntimeError("Process not started")
 
         # make sure the stop event is set and give running tasks a chance to exit cleanly
-        self.stop_event.set()
+        self.trigger_stop_stream()
         _, pending = await asyncio.wait(
             self.main_tasks + self.auxiliary_tasks,
             return_when=asyncio.ALL_COMPLETED,
@@ -100,19 +100,27 @@ class PipelineStreamer:
         self.auxiliary_tasks = []
         self.tasks_supervisor_task = None
 
-    async def wait(self):
+    def is_stream_running(self) -> bool:
+        return self.tasks_supervisor_task is not None
+
+    async def wait(self, *, timeout: float = 0):
+        """Wait for the streamer to stop with an optional timeout. This is a blocking call."""
         if not self.tasks_supervisor_task:
             raise RuntimeError("Streamer not started")
-        return await self.tasks_supervisor_task
+
+        awaitable: Awaitable = asyncio.shield(self.tasks_supervisor_task)
+        if timeout > 0:
+            awaitable = asyncio.wait_for(awaitable, timeout)
+        return await awaitable
 
     def is_running(self):
         return self.tasks_supervisor_task is not None
 
-    async def stop(self, *, timeout: float):
-        if not self.tasks_supervisor_task:
-            raise RuntimeError("Streamer not started")
-        self.stop_event.set()
-        await asyncio.wait_for(asyncio.shield(self.tasks_supervisor_task), timeout)
+    def trigger_stop_stream(self) -> bool:
+        if not self.stop_event.is_set():
+            self.stop_event.set()
+            return True
+        return False
 
     async def report_status_loop(self):
         next_report = time.time() + status_report_interval
@@ -126,19 +134,9 @@ class PipelineStreamer:
                 next_report += status_report_interval
 
             status = self.process.get_status(clear_transient=True)
-            await self._emit_monitoring_event(status.model_dump())
+            await self.emit_monitoring_event(status.model_dump())
 
-            last_input_time = max(
-                status.input_status.last_input_time or 0, status.start_time
-            )
-            time_since_last_input = time.time() - last_input_time
-            if self.input_timeout > 0 and time_since_last_input > self.input_timeout:
-                logging.info(
-                    f"Input stream stopped for {time_since_last_input} seconds. Shutting down..."
-                )
-                self.stop_event.set()
-
-    async def _emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
+    async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         """Protected method to emit monitoring event with lock"""
         event["timestamp"] = timestamp_to_ms(time.time())
         logging.info(f"Emitting monitoring event: {event}")
@@ -149,12 +147,7 @@ class PipelineStreamer:
                 logging.error(f"Failed to emit monitoring event: {e}")
 
     async def run_ingress_loop(self):
-        frame_count = 0
-        start_time = 0.0
         async for av_frame in self.protocol.ingress_loop(self.stop_event):
-            if not start_time:
-                start_time = time.time()
-
             # TODO any necessary accounting here for audio
             if isinstance(av_frame, AudioFrame):
                 self.process.send_input(av_frame)
@@ -171,80 +164,65 @@ class PipelineStreamer:
             if frame.mode != "RGBA":
                 frame = frame.convert("RGBA")
 
-            # crop the max square from the center of the image and scale to 512x512
-            # most models expect this size especially when using tensorrt
+            # Scale image to 512x512 as most models expect this size, especially when using tensorrt
             width, height = frame.size
             if (width, height) != (512, 512):
-                frame_array = np.array(frame)
-
+                # Crop to the center square if image not already square
+                square_size = min(width, height)
                 if width != height:
-                    square_size = min(width, height)
                     start_x = width // 2 - square_size // 2
                     start_y = height // 2 - square_size // 2
-                    frame_array = frame_array[
-                        start_y : start_y + square_size, start_x : start_x + square_size
-                    ]
+                    frame = frame.crop((start_x, start_y, start_x + square_size, start_y + square_size))
 
                 # Resize using cv2 (much faster than PIL)
-                frame_array = cv2.resize(frame_array, (512, 512))
-                frame = Image.fromarray(frame_array)
+                if square_size != 512:
+                    frame_array = np.array(frame)
+                    frame_array = cv2.resize(frame_array, (512, 512))
+                    frame = Image.fromarray(frame_array)
 
             logging.debug(
                 f"Sending input frame. Scaled from {width}x{height} to {frame.size[0]}x{frame.size[1]}"
             )
             av_frame = av_frame.replace_image(frame)
             self.process.send_input(av_frame)
-
-            # Increment frame count and measure FPS
-            frame_count += 1
-            elapsed_time = time.time() - start_time
-            if elapsed_time >= fps_log_interval:
-                status = self.process.get_status()
-                logging.info(f"Input FPS: {status.input_status.fps:.2f}")
-                frame_count = 0
-                start_time = time.time()
         logging.info("Ingress loop ended")
 
     async def run_egress_loop(self):
+        request_id = self.request_id
         async def gen_output_frames() -> AsyncGenerator[OutputFrame, None]:
-            frame_count = 0
-            start_time = 0.0
             while not self.stop_event.is_set():
-                output_frame = await self.process.recv_output()
-                if not output_frame:
+                output = await self.process.recv_output()
+                if not output:
                     continue
 
                 # TODO accounting for audio output
-                if isinstance(output_frame, AudioOutput):
-                    yield output_frame
+                if isinstance(output, AudioOutput):
+                    logging.debug(
+                        f"Output audio received outputRequestId={output.request_id} numFrames={len(output.frames)}"
+                    )
+                    if output.request_id != request_id:
+                        logging.warning(
+                            f"Output audio request ID mismatch: expected {request_id}, got {output.request_id}, skipping frame"
+                        )
+                        continue
+                    yield output
                     continue
 
-                if not isinstance(output_frame, VideoOutput):
+                if not isinstance(output, VideoOutput):
                     logging.warning(
-                        f"Unknown output frame type {type(output_frame)}, dropping"
+                        f"Unknown output frame type {type(output)}, dropping"
                     )
                     continue
-
-                output_image = output_frame.frame.image
-
-                if not start_time:
-                    # only start measuring output FPS after the first frame
-                    start_time = time.time()
-
+                if output.request_id != request_id:
+                    logging.warning(
+                        f"Output video request ID mismatch: expected {request_id}, got {output.request_id}, dropping frame"
+                    )
+                    continue
                 logging.debug(
-                    f"Output image received out_width: {output_image.width}, out_height: {output_image.height}"
+                    f"Output image received outputRequestId={output.request_id} ts={output.timestamp} time_base={output.time_base} resolution={output.image.width}x{output.image.height} mode={output.image.mode}"
                 )
 
-                yield output_frame
-
-                # Increment frame count and measure FPS
-                frame_count += 1
-                elapsed_time = time.time() - start_time
-                if elapsed_time >= fps_log_interval:
-                    status = self.process.get_status()
-                    logging.info(f"Output FPS: {status.inference_status.fps:.2f}")
-                    frame_count = 0
-                    start_time = time.time()
+                yield output
 
         await self.protocol.egress_loop(gen_output_frames())
         logging.info("Egress loop ended")

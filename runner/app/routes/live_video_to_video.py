@@ -79,6 +79,13 @@ class LiveVideoToVideoParams(BaseModel):
             description="The ID of the Gateway request (for logging purposes)."
         ),
     ]
+    manifest_id: Annotated[
+        str,
+        Field(
+            default="",
+            description="The manifest ID from the orchestrator (for logging purposes)."
+        ),
+    ]
     stream_id: Annotated[
         str,
         Field(
@@ -122,8 +129,6 @@ async def live_video_to_video(
     params: LiveVideoToVideoParams,
     pipeline: Pipeline = Depends(get_pipeline),
     token: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
-    requestID: str = Header(None),
-    streamID: str = Header(None),
 ):
     auth_token = os.environ.get("AUTH_TOKEN")
     if auth_token:
@@ -144,11 +149,7 @@ async def live_video_to_video(
         )
 
     try:
-        if requestID is None:
-            requestID = params.gateway_request_id
-        if streamID is not None and params.stream_id == "":
-            params.stream_id = streamID
-        pipeline(**params.model_dump(), request_id=requestID)
+        pipeline(**params.model_dump(), request_id=params.gateway_request_id)
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             torch.cuda.empty_cache()
