@@ -67,13 +67,13 @@ class ComfyUI(Pipeline):
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
         
-        # Get dimensions from the workflow
-        if isinstance(new_params.prompt, dict):
-            width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
-            if width is None or height is None:
-                width, height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT  # Default dimensions if not found in workflow
-                logging.warning(f"Could not find dimensions in workflow, using default {width}x{height}")
+        # Attempt to get dimensions from the workflow
+        width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+        if width is None or height is None:
+            width, height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT  # Default dimensions if not found in workflow
+            logging.warning(f"Could not find dimensions in workflow, using default {width}x{height}")
     
+        # Fallback to default dimensions if not found in workflow
         width, height = width or ComfyUtils.DEFAULT_WIDTH, height or ComfyUtils.DEFAULT_HEIGHT
         
         # Warm up the pipeline with the workflow dimensions
