@@ -107,6 +107,7 @@ class ProcessGuardian:
                 await self.stop()
                 # Create new process with current pipeline name and params
                 self.process = PipelineProcess.start(self.pipeline, params)
+                #self.process.update_params(params)
 
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
