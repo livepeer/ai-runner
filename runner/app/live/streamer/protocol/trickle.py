@@ -126,8 +126,6 @@ class TrickleProtocol(StreamProtocol):
                     # Ignore periodic keepalive messages
                     continue
 
-                # TODO: handle prompt changes with differing resolution
-
                 logging.info("Received control message with params: %s", data)
                 yield data
 
