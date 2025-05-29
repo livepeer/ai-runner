@@ -44,7 +44,6 @@ class PipelineStreamer(StreamerCallbacks):
         self.height = height
 
     async def start(self, params: dict):
-
         if self.tasks_supervisor_task:
             raise RuntimeError("Streamer already started")
 
