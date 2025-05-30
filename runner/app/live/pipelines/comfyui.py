@@ -9,16 +9,20 @@ import pathlib
 from .interface import Pipeline
 from comfystream.client import ComfyStreamClient
 from trickle import VideoFrame, VideoOutput
+from utils import ComfyUtils
 
 import logging
 
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
 WARMUP_RUNS = 1
 
-_default_workflow_path = pathlib.Path(__file__).parent.absolute() / "comfyui_default_workflow.json"
-with open(_default_workflow_path, 'r') as f:
-    DEFAULT_WORKFLOW_JSON = json.load(f)
+def get_default_workflow_json():
+    _default_workflow_path = pathlib.Path(__file__).parent.absolute() / "comfyui_default_workflow.json"
+    with open(_default_workflow_path, 'r') as f:
+        return json.load(f)
 
+# Get the default workflow json during startup
+DEFAULT_WORKFLOW_JSON = get_default_workflow_json()
 
 class ComfyUIParams(BaseModel):
     class Config:
@@ -53,6 +57,8 @@ class ComfyUI(Pipeline):
         self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
+        self.width = ComfyUtils.DEFAULT_WIDTH
+        self.height = ComfyUtils.DEFAULT_HEIGHT
 
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
@@ -60,10 +66,20 @@ class ComfyUI(Pipeline):
         # TODO: currently its a single prompt, but need to support multiple prompts
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
-
-        # Warm up the pipeline
+        
+        # Attempt to get dimensions from the workflow
+        width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+        if width is None or height is None:
+            width, height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT  # Default dimensions if not found in workflow
+            logging.warning(f"Could not find dimensions in workflow, using default {width}x{height}")
+    
+        # Fallback to default dimensions if not found in workflow
+        width, height = width or ComfyUtils.DEFAULT_WIDTH, height or ComfyUtils.DEFAULT_HEIGHT
+        
+        # Warm up the pipeline with the workflow dimensions
+        logging.info(f"Warming up pipeline with dimensions: {width}x{height}")
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
+        dummy_frame.side_data.input = torch.randn(1, height, width, 3)
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)

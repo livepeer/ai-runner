@@ -11,6 +11,7 @@ import torch
 from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
+from utils import ComfyUtils
 
 class PipelineProcess:
     @staticmethod
@@ -166,6 +167,9 @@ class PipelineProcess:
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
+
+                # TODO: We may need to call reset_stream when resolution is changed and start the pipeline again
+                # Changing the engine causes issues, maybe cleanup related
                 await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:

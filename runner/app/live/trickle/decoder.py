@@ -11,7 +11,7 @@ from .frame import InputFrame
 
 MAX_FRAMERATE=24
 
-def decode_av(pipe_input, frame_callback, put_metadata):
+def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_height):
     """
     Reads from a pipe (or file-like object).
 
@@ -56,6 +56,8 @@ def decode_av(pipe_input, frame_callback, put_metadata):
             "sar": video_stream.codec_context.sample_aspect_ratio,
             "dar": video_stream.codec_context.display_aspect_ratio,
             "format": str(video_stream.codec_context.format),
+            "output_width": output_width,
+            "output_height": output_height,
         }
 
     if video_metadata is None and audio_metadata is None:
@@ -107,28 +109,14 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
 
-                    h = 512
-                    w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
-                    if frame.height > frame.width:
-                        w = 512
-                        h = int((512 * frame.height / frame.width) / 2) * 2
-                    frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
-
-                    image = frame.to_image()
-                    if image.mode != "RGB":
-                        image = image.convert("RGB")
-                    width, height = image.size
-                    if (width, height) != (512, 512):
-                        # Crop to the center square if image not already square
-                        square_size = 512
-                        start_x = width // 2 - square_size // 2
-                        start_y = height // 2 - square_size // 2
-                        image = image.crop((start_x, start_y, start_x + square_size, start_y + square_size))
-
-                    image_np = np.array(image).astype(np.float32) / 255.0
-                    tensor = torch.tensor(image_np).unsqueeze(0)
-
-                    avframe = InputFrame.from_av_video(tensor, frame.pts, frame.time_base)
+                    # h = 512
+                    # w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
+                    # if frame.height > frame.width:
+                    #     w = 512
+                    #     h = int((512 * frame.height / frame.width) / 2) * 2
+                        
+                    frame = reformatter.reformat(frame, format='rgba', width=output_width, height=output_height)
+                    avframe = InputFrame.from_av_video(frame)
                     avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)
                     continue

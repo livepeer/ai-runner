@@ -13,6 +13,7 @@ from .process_guardian import ProcessGuardian, StreamerCallbacks
 from .protocol.protocol import StreamProtocol
 from .status import timestamp_to_ms
 from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
+from utils import ComfyUtils
 
 fps_log_interval = 10
 status_report_interval = 10
@@ -25,6 +26,8 @@ class PipelineStreamer(StreamerCallbacks):
         request_id: str,
         manifest_id: str,
         stream_id: str,
+        width: int = ComfyUtils.DEFAULT_WIDTH,
+        height: int = ComfyUtils.DEFAULT_HEIGHT,
     ):
         self.protocol = protocol
         self.process = process
@@ -37,6 +40,8 @@ class PipelineStreamer(StreamerCallbacks):
         self.request_id = request_id
         self.manifest_id = manifest_id
         self.stream_id = stream_id
+        self.width = width
+        self.height = height
 
     async def start(self, params: dict):
         if self.tasks_supervisor_task:
@@ -46,7 +51,14 @@ class PipelineStreamer(StreamerCallbacks):
             self.request_id, self.manifest_id, self.stream_id, params, self
         )
 
+        # Update dimensions from process after reset_stream
+        self.width = self.process.width
+        self.height = self.process.height
+        logging.info(f"Streamer: Updated dimensions to {self.width}x{self.height} from process")
+
         self.stop_event.clear()
+        self.protocol.width = self.width
+        self.protocol.height = self.height
         await self.protocol.start()
 
         # We need a bunch of concurrent tasks to run the streamer. So we start them all in background and then also start
@@ -55,11 +67,11 @@ class PipelineStreamer(StreamerCallbacks):
             run_in_background("ingress_loop", self.run_ingress_loop()),
             run_in_background("egress_loop", self.run_egress_loop()),
             run_in_background("report_status_loop", self.report_status_loop()),
-            run_in_background("control_loop", self.run_control_loop()),
-        ]
+            ]
         # auxiliary tasks that are not critical to the supervisor, but which we want to run
         # TODO: maybe remove this since we had to move the control loop to main tasks
-        self.auxiliary_tasks: list[asyncio.Task] = []
+        self.auxiliary_tasks: list[asyncio.Task] = [run_in_background("control_loop", self.run_control_loop()),
+        ]
         self.tasks_supervisor_task = run_in_background(
             "tasks_supervisor", self.tasks_supervisor()
         )
