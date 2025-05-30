@@ -93,7 +93,7 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
-        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda:
+        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
             frame = frame.replace_tensor(frame.tensor.cuda())
         self._try_queue_put(self.input_queue, frame)
 
@@ -227,7 +227,7 @@ class PipelineProcess:
         while not self.is_done():
             try:
                 output = await pipeline.get_processed_video_frame()
-                if isinstance(output, VideoOutput) and not output.tensor.is_cuda:
+                if isinstance(output, VideoOutput) and not output.tensor.is_cuda and torch.cuda.is_available():
                     output = output.replace_tensor(output.tensor.cuda())
                 output.log_timestamps["post_process_frame"] = time.time()
                 self._try_queue_put(self.output_queue, output)
