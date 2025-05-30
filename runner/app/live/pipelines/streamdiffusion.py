@@ -83,7 +83,7 @@ class StreamDiffusion(Pipeline):
             lora_dict=new_params.lora_dict,
             use_lcm_lora=new_params.use_lcm_lora,
             lcm_lora_id=new_params.lcm_lora_id,
-            t_index_list=new_params.t_index_list
+            t_index_list=new_params.t_index_list,
             frame_buffer_size=1,
             width=512,
             height=512,
