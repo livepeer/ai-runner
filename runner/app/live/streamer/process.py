@@ -83,7 +83,8 @@ class PipelineProcess:
         self.param_update_queue.put(params)
 
     def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
-        clear_queue(self.input_queue)
+        # we cannot clear the input_queue as we send CUDA tensors on it, which can't be received by the same process that sent it.
+        # So we clear only the other queues, and rely on the request_id checks to avoid using frames from previous sessions.
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
