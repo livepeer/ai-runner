@@ -98,7 +98,6 @@ class ComfyUI(Pipeline):
         try:
             await self.client.update_prompts([new_params.prompt])
         except Exception as e:
-            await self.client.set_prompts([self.params.prompt]) # reverting back to previous params
             logging.error(f"Error updating ComfyUI Pipeline Prompt: {e}")
             raise e
         self.params = new_params
