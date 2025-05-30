@@ -1,0 +1,32 @@
+ARG BASE_IMAGE=livepeer/ai-runner:live-base
+FROM ${BASE_IMAGE}
+
+# Install required Python version
+ARG PYTHON_VERSION=3.10
+RUN pyenv install $PYTHON_VERSION && \
+    pyenv global $PYTHON_VERSION && \
+    pyenv rehash
+
+# Upgrade pip and install required packages
+ARG PIP_VERSION=23.3.2
+ENV PIP_PREFER_BINARY=1
+RUN pip install --no-cache-dir --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0
+
+# Install StreamDiffusion dependencies
+RUN pip install --no-cache-dir \
+    torch==2.1.0 \
+    torchvision==0.16.0 \
+    xformers===0.0.22.post7 \
+    --index-url https://download.pytorch.org/whl/cu121
+
+# Install StreamDiffusion @ 765d71029b1404b94aee2865178d71c257c20318 (latest at time of writing)
+RUN pip install git+https://github.com/cumulo-autumn/StreamDiffusion.git@765d710#egg=streamdiffusion[tensorrt]
+
+# Install TensorRT extension (requires huggingface-hub)
+RUN pip install --no-cache-dir huggingface-hub==0.24.0 && \
+    python -m streamdiffusion.tools.install-tensorrt
+
+WORKDIR /app
+
+# Create symlink for where StreamDiffusion builds TensorRT engines at runtime
+RUN ln -s /models/StreamDiffusion--engines ./engines
