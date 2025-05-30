@@ -33,6 +33,9 @@ ARG PIP_VERSION=24.2
 RUN pip install --no-cache-dir --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0 && \
     pip install --no-cache-dir torch==2.4.0 torchvision torchaudio pip-tools
 
+ARG VERSION="undefined"
+ENV VERSION=${VERSION}
+
 WORKDIR /app
 
 COPY ./requirements.llm.in /app

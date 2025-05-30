@@ -40,7 +40,7 @@ To debug the AI runner when it operates within a container orchestrated by exter
 3. **Build the AI Runner Image**:
 
    ```bash
-   docker build -t livepeer/ai-runner:base .
+   docker build --build-arg VERSION=$(./print_version.sh) -t livepeer/ai-runner:base .
    ```
 
 4. **Build the Debug Image**:
@@ -89,7 +89,7 @@ To debug the AI runner when it operates within a container orchestrated by exter
 8. **Rebuild the Image**: Execute a rebuild of the image, ensuring to exclude the debug changes.
 
    ```bash
-   docker build -t livepeer/ai-runner:latest .
+   docker build --build-arg VERSION=$(./print_version.sh) -t livepeer/ai-runner:latest .
    ```
 
 ### Mocking the Pipelines

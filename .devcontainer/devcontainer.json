@@ -12,7 +12,8 @@
 			// "dockerfile": "../docker/Dockerfile.text_to_speech",
             "dockerfile": "../runner/docker/Dockerfile.live-app__PIPELINE__",
             "args": {
-                "PIPELINE": "comfyui"
+                "PIPELINE": "comfyui",
+                "VERSION": "0.0.0-dev"
             },
             "context": "../runner"
         },

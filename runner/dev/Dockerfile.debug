@@ -4,6 +4,9 @@ FROM livepeer/ai-runner:base
 
 RUN pip install debugpy
 
+ARG VERSION="undefined"
+ENV VERSION=${VERSION}
+
 # Expose the debugpy port and start the app as usual.
 CMD ["python", "-m", "debugpy", "--listen", "0.0.0.0:5678", "-m", "uvicorn", "app.main:app", "--host", "", "--port", "8000"]
 
