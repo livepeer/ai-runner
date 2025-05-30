@@ -210,7 +210,7 @@ class StreamDiffusionWrapper:
         self,
         image: Optional[Union[str, Image.Image, torch.Tensor]] = None,
         prompt: Optional[str] = None,
-    ) -> Union[Image.Image, List[Image.Image]]:
+    ) -> Union[torch.Tensor, List[torch.Tensor]]:
         """
         Performs img2img or txt2img based on the mode.
 
@@ -305,7 +305,7 @@ class StreamDiffusionWrapper:
 
         return image
 
-    def preprocess_image(self, image: Union[str, Image.Image]) -> torch.Tensor:
+    def preprocess_image(self, image: Union[str, Image.Image, torch.Tensor]) -> torch.Tensor:
         """
         Preprocesses the image.
 

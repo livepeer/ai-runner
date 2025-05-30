@@ -1,11 +1,13 @@
 import logging
-from typing import Dict, List, Literal, Optional
+import asyncio
+from typing import Dict, List, Literal, Optional, cast
 
 from PIL import Image
 from pydantic import BaseModel, Field
 from StreamDiffusionWrapper import StreamDiffusionWrapper
 
 from .interface import Pipeline
+from trickle import VideoFrame, VideoOutput
 
 
 class StreamDiffusionParams(BaseModel):
@@ -30,24 +32,40 @@ class StreamDiffusionParams(BaseModel):
 
 
 class StreamDiffusion(Pipeline):
-    def __init__(self, **params):
-        super().__init__(**params)
+    def __init__(self):
+        super().__init__()
         self.pipe: Optional[StreamDiffusionWrapper] = None
         self.first_frame = True
-        self.update_params(**params)
+        self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
 
-    def process_frame(self, image: Image.Image) -> Image.Image:
-        img_tensor = self.pipe.preprocess_image(image)
-        img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
+    async def initialize(self, **params):
+        logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
+        await self.update_params(**params)
+        logging.info("Pipeline initialization complete")
+
+    async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        if self.pipe is None:
+            raise RuntimeError("Pipeline not initialized")
+
+        img_tensor = self.pipe.preprocess_image(frame.tensor)
+        # img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
 
         if self.first_frame:
             self.first_frame = False
             for _ in range(self.pipe.batch_size):
-                self.pipe(image=img_tensor)
+                _ = await asyncio.to_thread(self.pipe, image=img_tensor)
 
-        return self.pipe(image=img_tensor)
+        out_tensor = await asyncio.to_thread(self.pipe, image=img_tensor)
+        if isinstance(out_tensor, list):
+            out_tensor = out_tensor[0]
 
-    def update_params(self, **params):
+        output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+        await self.frame_queue.put(output)
+
+    async def get_processed_video_frame(self) -> VideoOutput:
+        return await self.frame_queue.get()
+
+    async def update_params(self, **params):
         new_params = StreamDiffusionParams(**params)
         if self.pipe is not None:
             # avoid resetting the pipe if only the prompt changed
@@ -60,11 +78,12 @@ class StreamDiffusion(Pipeline):
 
         logging.info(f"Resetting diffuser for params change")
         pipe = StreamDiffusionWrapper(
+            output_type="pt",
             model_id_or_path=new_params.model_id,
             lora_dict=new_params.lora_dict,
             use_lcm_lora=new_params.use_lcm_lora,
             lcm_lora_id=new_params.lcm_lora_id,
-            t_index_list=new_params.t_index_list,
+            t_index_list=new_params.t_index_list
             frame_buffer_size=1,
             width=512,
             height=512,
@@ -72,7 +91,6 @@ class StreamDiffusion(Pipeline):
             acceleration=new_params.acceleration,
             do_add_noise=new_params.do_add_noise,
             mode="img2img",
-            # output_type="pt",
             enable_similar_image_filter=new_params.enable_similar_image_filter,
             similar_image_filter_threshold=new_params.similar_image_filter_threshold,
             use_denoising_batch=new_params.use_denoising_batch,
@@ -87,3 +105,7 @@ class StreamDiffusion(Pipeline):
         self.params = new_params
         self.pipe = pipe
         self.first_frame = True
+
+    async def stop(self):
+        logging.info("Stopping StreamDiffusion pipeline")
+        self.pipe = None
