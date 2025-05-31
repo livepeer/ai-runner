@@ -64,7 +64,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def image_to_text(
+def image_to_text(
     image: Annotated[
         UploadFile, File(description="Uploaded image to transform with the pipeline.")
     ],
