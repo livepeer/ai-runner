@@ -15,8 +15,7 @@ class Noop(Pipeline):
 
   async def get_processed_video_frame(self) -> VideoOutput:
     out = await self.frame_queue.get()
-    processed_frame = out.image.convert("RGB")
-    return out.replace_image(processed_frame)
+    return out.replace_tensor(out.tensor.clone())
 
   async def initialize(self, **params):
     logging.info(f"Initializing Noop pipeline with params: {params}")

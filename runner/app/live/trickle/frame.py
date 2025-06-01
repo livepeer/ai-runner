@@ -3,6 +3,7 @@ import av
 from PIL import Image
 from typing import List
 import numpy as np
+import torch
 
 class SideData:
     """
@@ -24,25 +25,25 @@ class InputFrame:
     side_data: SideData = SideData()
 
     @classmethod
-    def from_av_video(cls, frame: av.VideoFrame):
-        return VideoFrame(frame.to_image(), frame.pts, frame.time_base)
+    def from_av_video(cls, tensor: torch.Tensor, timestamp: int, time_base: Fraction):
+        return VideoFrame(tensor, timestamp, time_base)
 
     @classmethod
     def from_av_audio(cls, frame: av.AudioFrame):
         return AudioFrame(frame)
 
 class VideoFrame(InputFrame):
-    image: Image.Image
+    tensor: torch.Tensor
 
-    def __init__(self, image: Image.Image, timestamp: int, time_base: Fraction, log_timestamps: dict[str, float] = {}):
-        self.image = image
+    def __init__(self, tensor: torch.Tensor, timestamp: int, time_base: Fraction, log_timestamps: dict[str, float] = {}):
+        self.tensor = tensor
         self.timestamp = timestamp
         self.time_base = time_base
         self.log_timestamps = log_timestamps
 
-    # Returns a copy of an existing VideoFrame with its image replaced
-    def replace_image(self, image: Image.Image):
-        new_frame = VideoFrame(image, self.timestamp, self.time_base, self.log_timestamps)
+    # Returns a copy of an existing VideoFrame with its tensor replaced
+    def replace_tensor(self, tensor: torch.Tensor):
+        new_frame = VideoFrame(tensor, self.timestamp, self.time_base, self.log_timestamps)
         new_frame.side_data = self.side_data
         return new_frame
 
@@ -73,17 +74,18 @@ class OutputFrame:
 class VideoOutput(OutputFrame):
     frame: VideoFrame
     request_id: str
+
     def __init__(self, frame: VideoFrame, request_id: str = ''):
         self.frame = frame
         self.request_id = request_id
 
-    def replace_image(self, image: Image.Image):
-        new_frame = self.frame.replace_image(image)
+    def replace_tensor(self, tensor: torch.Tensor):
+        new_frame = self.frame.replace_tensor(tensor)
         return VideoOutput(new_frame, self.request_id)
 
     @property
-    def image(self):
-        return self.frame.image
+    def tensor(self):
+        return self.frame.tensor
 
     @property
     def timestamp(self):

@@ -1,7 +1,7 @@
 import os
 import asyncio
 import logging
-import multiprocessing as mp
+import torch.multiprocessing as mp
 import queue
 import sys
 import time
@@ -11,7 +11,6 @@ import torch
 from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
-
 
 class PipelineProcess:
     @staticmethod
@@ -27,7 +26,7 @@ class PipelineProcess:
         self.pipeline_name = pipeline_name
         self.ctx = mp.get_context("spawn")
 
-        self.input_queue = self.ctx.Queue(maxsize=5)
+        self.input_queue = self.ctx.Queue(maxsize=2)
         self.output_queue = self.ctx.Queue()
         self.param_update_queue = self.ctx.Queue()
         self.error_queue = self.ctx.Queue()
@@ -84,7 +83,8 @@ class PipelineProcess:
         self.param_update_queue.put(params)
 
     def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
-        clear_queue(self.input_queue)
+        # we cannot clear the input_queue as we send CUDA tensors on it, which can't be received by the same process that sent it.
+        # So we clear only the other queues, and rely on the request_id checks to avoid using frames from previous sessions.
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
@@ -94,7 +94,9 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
-        self._queue_put_fifo(self.input_queue, frame)
+        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
+            frame = frame.replace_tensor(frame.tensor.cuda())
+        self._try_queue_put(self.input_queue, frame)
 
     async def recv_output(self) -> OutputFrame | None:
         # we cannot do a long get with timeout as that would block the asyncio
@@ -102,10 +104,9 @@ class PipelineProcess:
         # TODO: use asyncio.to_thread instead
         while not self.is_done():
             try:
-                output = self.output_queue.get_nowait()
-                return output
+                return await asyncio.to_thread(self.output_queue.get, timeout=0.1)
             except queue.Empty:
-                await asyncio.sleep(0.005)
+                # Timeout ensures the non-daemon threads from to_thread can exit if task is cancelled
                 continue
         return None
 
@@ -216,7 +217,7 @@ class PipelineProcess:
                     input_frame.log_timestamps["pre_process_frame"] = time.time()
                     await pipeline.put_video_frame(input_frame, self.request_id)
                 elif isinstance(input_frame, AudioFrame):
-                    self._queue_put_fifo(self.output_queue, AudioOutput([input_frame], self.request_id))
+                    self._try_queue_put(self.output_queue, AudioOutput([input_frame], self.request_id))
             except queue.Empty:
                 # Timeout ensures the non-daemon threads from to_thread can exit if task is cancelled
                 continue
@@ -226,9 +227,11 @@ class PipelineProcess:
     async def _output_loop(self, pipeline: Pipeline):
         while not self.is_done():
             try:
-                output_frame = await pipeline.get_processed_video_frame()
-                output_frame.log_timestamps["post_process_frame"] = time.time()
-                self._queue_put_fifo(self.output_queue, output_frame)
+                output = await pipeline.get_processed_video_frame()
+                if isinstance(output, VideoOutput) and not output.tensor.is_cuda and torch.cuda.is_available():
+                    output = output.replace_tensor(output.tensor.cuda())
+                output.log_timestamps["post_process_frame"] = time.time()
+                self._try_queue_put(self.output_queue, output)
             except Exception as e:
                 self._report_error(f"Error processing output frame: {e}")
 
@@ -252,7 +255,7 @@ class PipelineProcess:
             "timestamp": time.time()
         }
         logging.error(error_msg)
-        self._queue_put_fifo(self.error_queue, error_event)
+        self._try_queue_put(self.error_queue, error_event)
 
     async def _cleanup_pipeline(self, pipeline):
         if pipeline is not None:
@@ -280,17 +283,12 @@ class PipelineProcess:
         config_logging(request_id=request_id, manifest_id=manifest_id, stream_id=stream_id)
         config_logging_fields(self.queue_handler, request_id, manifest_id, stream_id)
 
-    def _queue_put_fifo(self, _queue: mp.Queue, item: Any):
-        """Helper to put an item on a queue, dropping oldest items if needed"""
-        while not self.is_done():
-            try:
-                _queue.put_nowait(item)
-                break
-            except queue.Full:
-                try:
-                    _queue.get_nowait()  # remove oldest item
-                except queue.Empty:
-                    continue
+    def _try_queue_put(self, _queue: mp.Queue, item: Any):
+        """Helper to put an item on a queue, only if there's room"""
+        try:
+            _queue.put_nowait(item)
+        except queue.Full:
+            pass
 
     def get_last_error(self) -> tuple[str, float] | None:
         """Get the most recent error and its timestamp from the error queue, if any"""
@@ -312,7 +310,7 @@ class QueueTeeStream:
         self.original_stream.write(text)
         text = text.strip()  # Only queue non-empty lines
         if text:
-            self.process._queue_put_fifo(self.process.log_queue, text)
+            self.process._try_queue_put(self.process.log_queue, text)
 
     def flush(self):
         self.original_stream.flush()
@@ -325,7 +323,7 @@ class LogQueueHandler(logging.Handler):
 
     def emit(self, record):
         msg = self.format(record)
-        self.process._queue_put_fifo(self.process.log_queue, msg)
+        self.process._try_queue_put(self.process.log_queue, msg)
 
 # Function to clear the queue
 def clear_queue(queue):

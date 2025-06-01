@@ -4,6 +4,8 @@ from av.container import InputContainer
 import time
 import logging
 from typing import cast
+import numpy as np
+import torch
 
 from .frame import InputFrame
 
@@ -111,7 +113,22 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                         w = 512
                         h = int((512 * frame.height / frame.width) / 2) * 2
                     frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
-                    avframe = InputFrame.from_av_video(frame)
+
+                    image = frame.to_image()
+                    if image.mode != "RGB":
+                        image = image.convert("RGB")
+                    width, height = image.size
+                    if (width, height) != (512, 512):
+                        # Crop to the center square if image not already square
+                        square_size = 512
+                        start_x = width // 2 - square_size // 2
+                        start_y = height // 2 - square_size // 2
+                        image = image.crop((start_x, start_y, start_x + square_size, start_y + square_size))
+
+                    image_np = np.array(image).astype(np.float32) / 255.0
+                    tensor = torch.tensor(image_np).unsqueeze(0)
+
+                    avframe = InputFrame.from_av_video(tensor, frame.pts, frame.time_base)
                     avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)
                     continue
