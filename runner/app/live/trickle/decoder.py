@@ -95,7 +95,6 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
                     frame = cast(av.VideoFrame, frame)
                     if frame.pts is None:
                         continue
-
                     # drop frames that come in too fast
                     # TODO also check timing relative to wall clock
                     pts_time = frame.time
@@ -108,15 +107,27 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
                     else:
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
+                    # Convert frame to image
+                    image = frame.to_image()
+                    if image.mode != "RGB":
+                        image = image.convert("RGB")
+                    width, height = image.size
 
-                    # h = 512
-                    # w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
-                    # if frame.height > frame.width:
-                    #     w = 512
-                    #     h = int((512 * frame.height / frame.width) / 2) * 2
-                        
-                    frame = reformatter.reformat(frame, format='rgba', width=output_width, height=output_height)
-                    avframe = InputFrame.from_av_video(frame)
+                    if output_width == output_height and width != height:
+                        # Crop to center square if output is square but input isn't
+                        square_size = min(width, height)
+                        start_x = width // 2 - square_size // 2
+                        start_y = height // 2 - square_size // 2
+                        image = image.crop((start_x, start_y, start_x + square_size, start_y + square_size))
+                    elif (output_width, output_height) != (width, height):
+                        # Resize if dimensions don't match output
+                        image = image.resize((output_width, output_height))
+
+                    # Convert to tensor
+                    image_np = np.array(image).astype(np.float32) / 255.0
+                    tensor = torch.tensor(image_np).unsqueeze(0)
+
+                    avframe = InputFrame.from_av_video(tensor, frame.pts, frame.time_base)
                     avframe.log_timestamps["frame_init"] = time.time()
                     frame_callback(avframe)
                     continue
