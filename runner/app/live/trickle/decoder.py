@@ -113,14 +113,25 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
                         image = image.convert("RGB")
                     width, height = image.size
 
-                    if output_width == output_height and width != height:
-                        # Crop to center square if output is square but input isn't
-                        square_size = min(width, height)
-                        start_x = width // 2 - square_size // 2
-                        start_y = height // 2 - square_size // 2
-                        image = image.crop((start_x, start_y, start_x + square_size, start_y + square_size))
-                    elif (output_width, output_height) != (width, height):
-                        # Resize if dimensions don't match output
+                    # Calculate aspect ratios
+                    input_ratio = width / height
+                    output_ratio = output_width / output_height
+
+                    if input_ratio != output_ratio:
+                        # Need to crop to match output aspect ratio
+                        if input_ratio > output_ratio:
+                            # Input is wider than output - crop width
+                            new_width = int(height * output_ratio)
+                            start_x = (width - new_width) // 2
+                            image = image.crop((start_x, 0, start_x + new_width, height))
+                        else:
+                            # Input is taller than output - crop height
+                            new_height = int(width / output_ratio)
+                            start_y = (height - new_height) // 2
+                            image = image.crop((0, start_y, width, start_y + new_height))
+
+                    # Resize to final dimensions
+                    if (output_width, output_height) != image.size:
                         image = image.resize((output_width, output_height))
 
                     # Convert to tensor
