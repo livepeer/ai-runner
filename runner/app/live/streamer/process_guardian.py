@@ -96,24 +96,29 @@ class ProcessGuardian:
             if params.get('prompt'):
                 try:
                     new_width, new_height = ComfyUtils.get_latent_image_dimensions(params.get('prompt'))
+                    logging.info(f"Parsed dimensions from prompt: {new_width}x{new_height}")
                 except Exception as e:
                     logging.error(f"Error parsing resolution from prompt, using default dimensions: {e}")
 
-            # If resolution changed, we need to restart the process
+            # Update dimensions without restarting process
             if (new_width != self.width or new_height != self.height):
-                logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}, restarting process")
+                logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}")
+                if (new_width == self.height and new_height == self.width):
+                    logging.info("Dimensions flipped detected (90-degree rotation needed)")
                 self.width = new_width
                 self.height = new_height
-                await self.stop()
-                # Create new process with current pipeline name and params
-                self.process = PipelineProcess.start(self.pipeline, params)
-                #self.process.update_params(params)
+                # Add dimensions to params for pipeline update
+                self.process.width = new_width
+                self.process.height = new_height
+                self.process.input_queue.empty()
+                logging.info(f"Updated pipeline parameters with new dimensions: {params}")
 
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
         self.input_fps_counter.reset()
         self.output_fps_counter.reset()
         self.streamer = streamer or _NoopStreamerCallbacks()
+
 
         self.process.reset_stream(request_id, manifest_id, stream_id)
         self.process.update_params(params)

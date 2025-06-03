@@ -58,6 +58,7 @@ def encode_av(
         # Add a new stream to the output using the desired video codec
         output_width = video_meta['output_width']
         output_height = video_meta['output_height']
+        needs_rotation = video_meta['needs_rotation']
         video_opts = { 'video_size':f'{output_width}x{output_height}', 'bf':'0' }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
@@ -81,7 +82,6 @@ def encode_av(
     dropped_video = 0
     dropped_audio = 0
     audio_buffer = deque()
-
     while True:
         avframe = input_queue()
         if avframe is None:
@@ -97,6 +97,9 @@ def encode_av(
             tensor = avframe.tensor.squeeze(0)
             image_np = (tensor * 255).byte().cpu().numpy()
             image = Image.fromarray(image_np)
+            if needs_rotation:
+                # Transpose the frame dimensions when rotation is needed (e.g. for portrait video)
+                image = image.rotate(-90, expand=True)
 
             frame = av.video.frame.VideoFrame.from_image(image)
             frame.pts = rescale_ts(avframe.timestamp, avframe.time_base, output_video_stream.codec_context.time_base)

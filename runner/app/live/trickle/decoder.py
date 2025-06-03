@@ -10,6 +10,10 @@ import torch
 from .frame import InputFrame
 
 MAX_FRAMERATE=24
+ENGINE_DIMENSIONS: dict[str, int] = {
+    "width": 384,
+    "height": 704
+} # Static dimensions for the only supported engine
 
 def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_height):
     """
@@ -45,6 +49,11 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
     # Prepare video-related metadata (if video is present)
     video_metadata = None
     if video_stream is not None:
+        # Check if dimensions are flipped (90 degree rotation needed)
+        needs_rotation = (output_width == ENGINE_DIMENSIONS["height"] and output_height == ENGINE_DIMENSIONS["width"])
+        if needs_rotation:
+            logging.info(f"Dimensions flipped detected: Input {video_stream.codec_context.width}x{video_stream.codec_context.height} -> Output {output_width}x{output_height}, rotation will be applied")
+        
         video_metadata = {
             "codec": video_stream.codec_context.name,
             "width": video_stream.codec_context.width,
@@ -58,6 +67,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
             "format": str(video_stream.codec_context.format),
             "output_width": output_width,
             "output_height": output_height,
+            "needs_rotation": needs_rotation,
         }
 
     if video_metadata is None and audio_metadata is None:
@@ -113,9 +123,21 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
                         image = image.convert("RGB")
                     width, height = image.size
 
+                    # Apply rotation first if needed
+                    if video_metadata["needs_rotation"]:
+                        logging.debug(f"Rotating frame 90 degrees clockwise: {width}x{height} -> {height}x{width}")
+                        image = image.rotate(90, expand=True)
+                        width, height = image.size
+                        # When rotation is needed, we resize to engine dimensions
+                        target_width = ENGINE_DIMENSIONS["width"]
+                        target_height = ENGINE_DIMENSIONS["height"]
+                    else:
+                        target_width = output_width
+                        target_height = output_height
+
                     # Calculate aspect ratios
                     input_ratio = width / height
-                    output_ratio = output_width / output_height
+                    output_ratio = target_width / target_height
 
                     if input_ratio != output_ratio:
                         # Need to crop to match output aspect ratio
@@ -123,20 +145,25 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
                             # Input is wider than output - crop width
                             new_width = int(height * output_ratio)
                             start_x = (width - new_width) // 2
+                            logging.debug(f"Cropping width: {width}x{height} -> {new_width}x{height}")
                             image = image.crop((start_x, 0, start_x + new_width, height))
                         else:
                             # Input is taller than output - crop height
                             new_height = int(width / output_ratio)
                             start_y = (height - new_height) // 2
+                            logging.debug(f"Cropping height: {width}x{height} -> {width}x{new_height}")
                             image = image.crop((0, start_y, width, start_y + new_height))
 
-                    # Resize to final dimensions
-                    if (output_width, output_height) != image.size:
-                        image = image.resize((output_width, output_height))
+                    # Resize to target dimensions
+                    if (target_width, target_height) != image.size:
+                        logging.debug(f"Resizing frame: {image.size} -> {target_width}x{target_height}")
+                        image = image.resize((target_width, target_height))
 
                     # Convert to tensor
                     image_np = np.array(image).astype(np.float32) / 255.0
-                    tensor = torch.tensor(image_np).unsqueeze(0)
+                    
+                    # Create tensor, ensuring array is contiguous to avoid negative strides
+                    tensor = torch.tensor(np.ascontiguousarray(image_np)).unsqueeze(0)
 
                     avframe = InputFrame.from_av_video(tensor, frame.pts, frame.time_base)
                     avframe.log_timestamps["frame_init"] = time.time()

@@ -29,6 +29,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
+    #width: int = ComfyUtils.DEFAULT_WIDTH
+    #height: int = ComfyUtils.DEFAULT_HEIGHT
 
     @field_validator('prompt')
     @classmethod
@@ -67,14 +69,12 @@ class ComfyUI(Pipeline):
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
         
-        # Attempt to get dimensions from the workflow
+        # Get dimensions from the workflow to warm the pipeline
+        # If the dimensions are the same as opposite of the current dimensions, we keep them the same for warmup
         width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
-        if width is None or height is None:
-            width, height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT  # Default dimensions if not found in workflow
-            logging.warning(f"Could not find dimensions in workflow, using default {width}x{height}")
-    
-        # Fallback to default dimensions if not found in workflow
-        width, height = width or ComfyUtils.DEFAULT_WIDTH, height or ComfyUtils.DEFAULT_HEIGHT
+        #if (self.width == height and self.height == width):
+        #    width = self.height
+        #    height = self.width
         
         # Warm up the pipeline with the workflow dimensions
         logging.info(f"Warming up pipeline with dimensions: {width}x{height}")
@@ -106,8 +106,22 @@ class ComfyUI(Pipeline):
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
-        # TODO: currently its a single prompt, but need to support multiple prompts
+        
+        # Attempt to get dimensions from the workflow
+        width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+        if width != self.width or height != self.height:
+            logging.info(f"pipeline dimensions updated, clearing queues: {self.width}x{self.height} -> {width}x{height}")
+            self.video_incoming_frames.empty()
+            
+            # Since the dimensions are flipped, we need to override the dimensions in the workflow prompt to remain the same as the pipeline
+            new_params.prompt = ComfyUtils.set_latent_image_dimensions(new_params.prompt, self.width , self.height)
+            #await self.client.cleanup()
+            #self.client = ComfyStreamClient(cwd=os.getenv(COMFY_UI_WORKSPACE_ENV))
+        else:
+            logging.info(f"pipeline dimensions unchanged: {self.width}x{self.height}")
+        
         try:
+            await self.client.set_prompts([new_params.prompt])
             await self.client.update_prompts([new_params.prompt])
         except Exception as e:
             logging.error(f"Error updating ComfyUI Pipeline Prompt: {e}")

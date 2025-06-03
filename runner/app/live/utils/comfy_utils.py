@@ -36,5 +36,36 @@ class ComfyUtils:
             logging.warning(f"Failed to extract dimensions from workflow: {e}")
         
         # Return defaults if dimensions not found or on any error
-        logging.info(f"Using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}")
-        return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT 
+        logging.warning(f"Could not find dimensions in workflow, using default {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}")
+        return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
+
+    @staticmethod 
+    def set_latent_image_dimensions(workflow: dict | str | None, width: int, height: int) -> dict:
+        """Set dimensions in the EmptyLatentImage node in the workflow.
+        
+        Args:
+            workflow: The workflow JSON dictionary
+            width: Width to set
+            height: Height to set
+            
+        Returns:
+            Updated workflow dictionary with new dimensions
+        """
+        if workflow is None:
+            return {}
+
+        if isinstance(workflow, str):
+            workflow = json.loads(workflow)
+
+        try:
+            for node_id, node in workflow.items():
+                if node.get("class_type") == "EmptyLatentImage":
+                    inputs = node.get("inputs", {})
+                    inputs["width"] = width
+                    inputs["height"] = height
+                    node["inputs"] = inputs
+                    break
+        except Exception as e:
+            logging.warning(f"Failed to set dimensions in workflow: {e}")
+            
+        return workflow
