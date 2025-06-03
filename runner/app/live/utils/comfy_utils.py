@@ -36,5 +36,5 @@ class ComfyUtils:
             logging.warning(f"Failed to extract dimensions from workflow: {e}")
         
         # Return defaults if dimensions not found or on any error
-        logging.info(f"Using default dimensions {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}")
-        return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT 
+        logging.warning(f"Could not find dimensions in workflow, using default dimensions: {ComfyUtils.DEFAULT_WIDTH}x{ComfyUtils.DEFAULT_HEIGHT}")
+        return ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
