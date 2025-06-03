@@ -167,9 +167,6 @@ class PipelineProcess:
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
-
-                # TODO: We may need to call reset_stream when resolution is changed and start the pipeline again
-                # Changing the engine causes issues, maybe cleanup related
                 await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:
