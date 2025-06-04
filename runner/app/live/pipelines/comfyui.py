@@ -63,22 +63,31 @@ class ComfyUI(Pipeline):
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
-        # TODO: currently its a single prompt, but need to support multiple prompts
-        await self.client.set_prompts([new_params.prompt])
+        
+        # Store the parameters
         self.params = new_params
         
-        # Get dimensions from the workflow to warm the pipeline
-        width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
-        
-        # Warm up the pipeline with the workflow dimensions
-        logging.info(f"Warming up pipeline with dimensions: {width}x{height}")
-        dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, height, width, 3)
+        # Set the prompts in the client
+        try:
+            await self.client.set_prompts([new_params.prompt])
+            
+            # Get dimensions from the workflow to warm the pipeline
+            width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+            self.width = width
+            self.height = height
+            
+            # Warm up the pipeline with the workflow dimensions
+            logging.info(f"Warming up pipeline with dimensions: {width}x{height}")
+            dummy_frame = VideoFrame(None, 0, 0)
+            dummy_frame.side_data.input = torch.randn(1, height, width, 3)
 
-        for _ in range(WARMUP_RUNS):
-            self.client.put_video_input(dummy_frame)
-            _ = await self.client.get_video_output()
-        logging.info("Pipeline initialization and warmup complete")
+            for _ in range(WARMUP_RUNS):
+                self.client.put_video_input(dummy_frame)
+                _ = await self.client.get_video_output()
+            logging.info("Pipeline initialization and warmup complete")
+        except Exception as e:
+            logging.error(f"Error initializing ComfyUI Pipeline: {e}")
+            raise e
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
         tensor = frame.tensor
@@ -101,26 +110,55 @@ class ComfyUI(Pipeline):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
         
-        # Attempt to get dimensions from the workflow
-        width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
-        if width != self.width or height != self.height:
-            logging.info(f"pipeline dimensions updated, clearing queues: {self.width}x{self.height} -> {width}x{height}")
-            self.video_incoming_frames.empty()
-            
-            # Exit the comfy client to avoid memory leaks for different engine dimensions
-            await self.client.comfy_client.__aexit__()
-            await self.client.cleanup_queues()
-            await self.initialize(**params)
-        else:
-            logging.info(f"pipeline dimensions unchanged: {self.width}x{self.height}")
-        
         try:
-            await self.client.set_prompts([new_params.prompt])
-            await self.client.update_prompts([new_params.prompt])
+            # Attempt to get dimensions from the workflow
+            width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+            
+            # Check if dimensions have changed
+            if width != self.width or height != self.height:
+                logging.info(f"Pipeline dimensions updated: {self.width}x{self.height} -> {width}x{height}")
+                
+                # Stop the pipeline quickly
+                logging.info("Stopping pipeline for dimension change")
+                #await self.client.cleanup()
+                
+                # Update dimensions
+                self.width = width
+                self.height = height
+                
+                # Clear all queues
+                self.video_incoming_frames.empty()
+                
+                # Reinitialize with new dimensions
+                logging.info(f"Reinitializing pipeline with new dimensions: {width}x{height}")
+                await self.client.set_prompts([new_params.prompt])
+                
+                # Warm up with new dimensions
+                dummy_frame = VideoFrame(None, 0, 0)
+                dummy_frame.side_data.input = torch.randn(1, height, width, 3)
+                
+                for _ in range(WARMUP_RUNS):
+                    self.client.put_video_input(dummy_frame)
+                    _ = await self.client.get_video_output()
+                
+                logging.info("Pipeline reinitialized with new dimensions")
+            else:
+                # Only update prompts if dimensions haven't changed
+                logging.info("Dimensions unchanged, updating prompts only")
+                await self.client.set_prompts([new_params.prompt])
+                await self.client.update_prompts([new_params.prompt])
+            
+            self.params = new_params
+            logging.info("Pipeline parameters updated successfully")
         except Exception as e:
-            logging.error(f"Error updating ComfyUI Pipeline Prompt: {e}")
+            logging.error(f"Error updating ComfyUI Pipeline parameters: {e}")
+            # Restore previous state on error
+            try:
+                await self.client.set_prompts([self.params.prompt])
+                await self.client.update_prompts([self.params.prompt])
+            except Exception as restore_error:
+                logging.error(f"Failed to restore previous state: {restore_error}")
             raise e
-        self.params = new_params
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")

@@ -98,14 +98,32 @@ class ProcessGuardian:
                 except Exception as e:
                     logging.error(f"Error parsing resolution from prompt, using default dimensions: {e}")
 
-            # Update dimensions without restarting process
+            # If dimensions have changed, we need to restart the pipeline
             if (new_width != self.width or new_height != self.height):
                 logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}")
-                if (new_width == self.height and new_height == self.width):
-                    logging.info("Dimensions flipped detected (90-degree rotation needed)")
+                #if (new_width == self.height and new_height == self.width):
+                    #logging.info("Dimensions flipped detected (90-degree rotation needed)")
+                
+                # Stop the current process
+                await self.process.stop()
+                
+                # Update dimensions
                 self.width = new_width
                 self.height = new_height
-                # Add dimensions to params for pipeline update
+                
+                # Start new process with updated parameters
+                self.process = PipelineProcess.start(self.pipeline, params)
+                self.status.update_state(PipelineState.LOADING)
+                
+                # Wait for pipeline initialization
+                while not self.process.is_pipeline_initialized():
+                    await asyncio.sleep(0.1)
+                
+                logging.info(f"Pipeline restarted with new dimensions: {new_width}x{new_height}")
+            else:
+                # Update dimensions without restarting process
+                self.width = new_width
+                self.height = new_height
                 self.process.width = new_width
                 self.process.height = new_height
                 self.process.input_queue.empty()
@@ -118,7 +136,6 @@ class ProcessGuardian:
         self.streamer = streamer or _NoopStreamerCallbacks()
 
         self.process.reset_stream(request_id, manifest_id, stream_id)
-        #self.process.update_params(params)
         await self.update_params(params)
         self.status.update_state(PipelineState.ONLINE)
 
