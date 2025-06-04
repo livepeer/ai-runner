@@ -139,10 +139,30 @@ class PipelineProcess:
         logging.getLogger("comfy").setLevel(logging.WARNING)
 
         try:
-            asyncio.run(self._run_pipeline_loops())
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._run_pipeline_loops())
         except Exception as e:
             self._report_error(f"Error in process run method: {e}")
+        finally:
+            try:
+                # Cancel all remaining tasks
+                pending = asyncio.all_tasks(loop)
+                for task in pending:
+                    task.cancel()
+                
+                # Run the loop until all tasks are cancelled
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                
+                # Stop the loop
+                loop.stop()
+                loop.close()
 
+                # Final CUDA cleanup
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception as e:
+                logging.error(f"Error during event loop cleanup: {e}")
 
     def _handle_logging_params(self, params: dict) -> dict:
         if isinstance(params, dict) and "request_id" in params and "manifest_id" in params and "stream_id" in params:
@@ -191,24 +211,83 @@ class PipelineProcess:
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
         param_task = asyncio.create_task(self._param_update_loop(pipeline))
-
-        async def wait_for_stop():
-            while not self.is_done():
-                await asyncio.sleep(0.1)
-
-        tasks = [input_task, output_task, param_task, asyncio.create_task(wait_for_stop())]
+        wait_task = asyncio.create_task(self.wait_for_stop())
+        tasks = [input_task, output_task, param_task, wait_task]
 
         try:
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         except Exception as e:
             self._report_error(f"Error in pipeline loops: {e}")
         finally:
+            # Cancel all tasks and wait for them to complete
             for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
-            await self._cleanup_pipeline(pipeline)
+                if not task.done():
+                    task.cancel()
+            
+            # Wait for all tasks to complete with a timeout
+            try:
+                await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5.0)
+            except asyncio.TimeoutError:
+                logging.warning("Timeout waiting for tasks to complete during shutdown")
+            except Exception as e:
+                logging.error(f"Error during task cleanup: {e}")
+            
+            # Clear queues to release CUDA tensors
+            self._clear_queues()
+            
+            # Ensure pipeline cleanup happens
+            try:
+                await self._cleanup_pipeline(pipeline)
+            except Exception as e:
+                logging.error(f"Error during pipeline cleanup: {e}")
+
+            # Final cleanup of any remaining tasks
+            try:
+                remaining_tasks = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+                if remaining_tasks:
+                    for task in remaining_tasks:
+                        task.cancel()
+                    await asyncio.gather(*remaining_tasks, return_exceptions=True)
+            except Exception as e:
+                logging.error(f"Error during final task cleanup: {e}")
 
         logging.info("PipelineProcess: _run_pipeline_loops finished.")
+
+    def _clear_queues(self):
+        """Clear all queues to ensure CUDA tensors are released"""
+        try:
+            # Clear input queue
+            while not self.input_queue.empty():
+                try:
+                    frame = self.input_queue.get_nowait()
+                    if isinstance(frame, VideoFrame) and frame.tensor.is_cuda:
+                        frame.tensor.cpu()  # Move tensor to CPU before deletion
+                except queue.Empty:
+                    break
+                except Exception as e:
+                    logging.error(f"Error clearing input queue: {e}")
+
+            # Clear output queue
+            while not self.output_queue.empty():
+                try:
+                    frame = self.output_queue.get_nowait()
+                    if isinstance(frame, VideoOutput) and frame.tensor.is_cuda:
+                        frame.tensor.cpu()  # Move tensor to CPU before deletion
+                except queue.Empty:
+                    break
+                except Exception as e:
+                    logging.error(f"Error clearing output queue: {e}")
+
+            # Clear other queues
+            clear_queue(self.param_update_queue)
+            clear_queue(self.error_queue)
+            clear_queue(self.log_queue)
+
+            # Force CUDA cache clear
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception as e:
+            logging.error(f"Error during queue cleanup: {e}")
 
     async def _input_loop(self, pipeline: Pipeline):
         while not self.is_done():
@@ -300,6 +379,11 @@ class PipelineProcess:
             except queue.Empty:
                 break
         return (last_error["message"], last_error["timestamp"]) if last_error else None
+
+    async def wait_for_stop(self):
+        """Wait for the done event to be set"""
+        while not self.is_done():
+            await asyncio.sleep(0.1)
 
 class QueueTeeStream:
     """Tee all stream (stdout or stderr) messages to the process log queue"""

@@ -162,5 +162,32 @@ class ComfyUI(Pipeline):
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
-        await self.client.cleanup()
-        logging.info("ComfyUI pipeline stopped")
+        try:
+            # Clear the video incoming frames queue and move any CUDA tensors to CPU
+            while not self.video_incoming_frames.empty():
+                try:
+                    frame = self.video_incoming_frames.get_nowait()
+                    if frame.tensor.is_cuda:
+                        frame.tensor.cpu()  # Move tensor to CPU before deletion
+                except asyncio.QueueEmpty:
+                    break
+                except Exception as e:
+                    logging.error(f"Error clearing video incoming frames queue: {e}")
+
+            # Now cleanup the client with a timeout
+            try:
+                async with asyncio.timeout(5.0):  # 5 second timeout for client cleanup
+                    await self.client.cleanup()
+            except asyncio.TimeoutError:
+                logging.error("Timeout during client cleanup")
+            except Exception as e:
+                logging.error(f"Error during client cleanup: {e}")
+
+            # Force CUDA cache clear
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # Ensure all CUDA operations are complete
+        except Exception as e:
+            logging.error(f"Error during ComfyUI pipeline cleanup: {e}")
+        finally:
+            logging.info("ComfyUI pipeline stopped")
