@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=livepeer/comfyui-base@sha256:2d5ecad6bf24bb73831c6c87a33a7503f48a88ef2d490609068505a945d91146
+ARG BASE_IMAGE=livepeer/comfyui-base@sha256:5729833d8e6b1a16a3161aadec492ec721f98ad3b075867aecaf25a9cd6ca37b
 FROM ${BASE_IMAGE}
 
 # -----------------------------------------------------------------------------
