@@ -13,6 +13,7 @@ from typing import Annotated, Dict
 from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
+from utils import ComfyUtils
 
 MAX_FILE_AGE = 86400  # 1 day
 
@@ -101,19 +102,35 @@ async def handle_start_stream(request: web.Request):
         stream_request_timestamp = int(time.time() * 1000)
         process = cast(ProcessGuardian, request.app["process"])
         prev_streamer = cast(PipelineStreamer, request.app["streamer"])
-        if prev_streamer and prev_streamer.is_running():
-            # Stop the previous streamer before starting a new one
-            try:
-                logging.info("Stopping previous streamer")
-                prev_streamer.trigger_stop_stream()
-                await prev_streamer.wait(timeout=10)
-            except asyncio.TimeoutError as e:
-                logging.error(f"Timeout stopping streamer: {e}")
-                raise web.HTTPBadRequest(text="Timeout stopping previous streamer")
-
+        
+        # Parse request data early to check for resolution changes
         params_data = await parse_request_data(request)
         params = StartStreamParams(**params_data)
-
+        
+        # Get resolution from prompt using get_latent_image_dimensions
+        try:
+            width, height = ComfyUtils.get_latent_image_dimensions(params.params.get('prompt', ''))
+            logging.info(f"Parsed dimensions from prompt: {width}x{height}")
+        except Exception as e:
+            logging.error(f"Error parsing resolution from prompt, using default dimensions: {e}")
+            width, height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
+        
+        # Check if resolution has changed from previous stream
+        resolution_changed = False
+        if prev_streamer and prev_streamer.is_running():
+            if width != prev_streamer.width or height != prev_streamer.height:
+                resolution_changed = True
+                logging.info(f"Resolution change detected: {prev_streamer.width}x{prev_streamer.height} -> {width}x{height}")
+                # Stop the previous streamer before starting a new one
+                try:
+                    logging.info("Stopping previous streamer due to resolution change")
+                    prev_streamer.trigger_stop_stream()
+                    await prev_streamer.wait(timeout=10)
+                except asyncio.TimeoutError as e:
+                    logging.error(f"Timeout stopping streamer: {e}")
+                    raise web.HTTPBadRequest(text="Timeout stopping previous streamer")
+        
+        # Save params for cleanup in case of crash
         try:
             with open(last_params_file, "w") as f:
                 json.dump(params.model_dump(), f)
@@ -127,6 +144,8 @@ async def handle_start_stream(request: web.Request):
             params.publish_url,
             params.control_url,
             params.events_url,
+            width=width,
+            height=height,
         )
         streamer = PipelineStreamer(
             protocol,
@@ -134,6 +153,8 @@ async def handle_start_stream(request: web.Request):
             params.request_id,
             params.manifest_id,
             params.stream_id,
+            width=width,
+            height=height,
         )
 
         await streamer.start(params.params)
@@ -141,6 +162,9 @@ async def handle_start_stream(request: web.Request):
         await protocol.emit_monitoring_event({
             "type": "runner_receive_stream_request",
             "timestamp": stream_request_timestamp,
+            "resolution_changed": resolution_changed,
+            "width": width,
+            "height": height,
         }, queue_event_type="stream_trace")
 
         return web.Response(text="Stream started successfully")
@@ -168,8 +192,60 @@ async def handle_get_status(request: web.Request):
     return web.json_response(status.model_dump())
 
 
+async def handle_restart_pipeline(request: web.Request):
+    try:
+        process = cast(ProcessGuardian, request.app["process"])
+        # await streamer.start()
+        # await process.start()
+        streamer = cast(PipelineStreamer, request.app["streamer"])
+        
+        if not process or not process.is_alive():
+            raise web.HTTPBadRequest(text="Pipeline process not running")
+            
+        if not streamer or not streamer.is_running():
+            raise web.HTTPBadRequest(text="No active stream to restart pipeline for")
+            
+        # Try to get new params from request, fall back to current params if none provided
+        try:
+            params_data = await parse_request_data(request)
+            new_params = params_data
+        except:
+            # If no new params provided, use current params
+            new_params = streamer.current_params
+            if not new_params:
+                raise web.HTTPBadRequest(text="No parameters found to restart pipeline")
+            
+        # First stop the current process
+        logging.info("Stopping current process before restart")
+        await process.stop()
+        
+        # Then restart the process with new params
+        logging.info("Starting new process with updated parameters")
+        await process.start()
+        
+        # Now restart the pipeline with new params
+        await process.reset_stream(
+            streamer.request_id,
+            streamer.manifest_id,
+            streamer.stream_id,
+            new_params,
+            streamer
+        )
+        
+        # Update streamer's current params
+        streamer.current_params = new_params
+        
+        return web.Response(text="Pipeline restarted successfully with new parameters")
+        
+    except Exception as e:
+        logging.error(f"Error restarting pipeline: {e}")
+        return web.Response(text=f"Error restarting pipeline: {str(e)}", status=400)
+
+
 async def start_http_server(
-    port: int, process: ProcessGuardian, streamer: Optional[PipelineStreamer] = None
+    port: int,
+    process: ProcessGuardian,
+    streamer: Optional[PipelineStreamer] = None,
 ):
     asyncio.create_task(cleanup_last_stream())
 
@@ -179,6 +255,7 @@ async def start_http_server(
     app.router.add_post("/api/live-video-to-video", handle_start_stream)
     app.router.add_post("/api/params", handle_params_update)
     app.router.add_get("/api/status", handle_get_status)
+    app.router.add_post("/api/restart_pipeline", handle_restart_pipeline)
 
     runner = web.AppRunner(app)
     await runner.setup()

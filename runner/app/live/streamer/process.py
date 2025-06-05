@@ -43,36 +43,48 @@ class PipelineProcess:
         return self.process.is_alive()
 
     async def stop(self):
-        self.done.set()
-
-        if not self.process.is_alive():
-            logging.info("Process already not alive")
-            return
-
-        logging.info("Terminating pipeline process")
-
-        async def wait_stop(timeout: float) -> bool:
-            try:
-                await asyncio.to_thread(self.process.join, timeout=timeout)
-                return not self.process.is_alive()
-            except Exception as e:
-                logging.error(f"Process join error: {e}")
-                return False
-
-        if not await wait_stop(10):
-            logging.error("Failed to terminate process, killing")
-            self.process.kill()
-            if not await wait_stop(5):
-                logging.error("Failed to kill process")
-
-        logging.info("Pipeline process terminated, closing queues")
-
-        for q in [self.input_queue, self.output_queue, self.param_update_queue,
-                  self.error_queue, self.log_queue]:
-            q.cancel_join_thread()
-            q.close()
-
-        logging.info("Pipeline process cleanup complete")
+        """Stop the pipeline process and ensure all resources are cleaned up"""
+        try:
+            # Set done event to signal all loops to stop
+            self.done.set()
+            
+            if not self.process.is_alive():
+                logging.info("Process already not alive")
+                return
+                
+            logging.info("Terminating pipeline process")
+            
+            async def wait_stop(timeout: float) -> bool:
+                try:
+                    await asyncio.to_thread(self.process.join, timeout=timeout)
+                    return not self.process.is_alive()
+                except Exception as e:
+                    logging.error(f"Process join error: {e}")
+                    return False
+                    
+            # First try graceful termination
+            if not await wait_stop(10):
+                logging.error("Failed to terminate process gracefully, killing")
+                self.process.kill()
+                if not await wait_stop(5):
+                    logging.error("Failed to kill process")
+                    
+            # Clean up all queues
+            for q in [self.input_queue, self.output_queue, self.param_update_queue,
+                     self.error_queue, self.log_queue]:
+                try:
+                    q.cancel_join_thread()
+                    q.close()
+                except Exception as e:
+                    logging.error(f"Error closing queue: {e}")
+                    
+            # Clear any remaining state
+            self.pipeline_initialized.clear()
+            
+            logging.info("Pipeline process cleanup complete")
+        except Exception as e:
+            logging.error(f"Error during pipeline process cleanup: {e}")
+            raise
 
     def is_done(self):
         return self.done.is_set()
@@ -377,6 +389,7 @@ class PipelineProcess:
             try:
                 last_error = self.error_queue.get_nowait()
             except queue.Empty:
+                pass
                 break
         return (last_error["message"], last_error["timestamp"]) if last_error else None
 
