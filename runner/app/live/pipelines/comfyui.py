@@ -117,19 +117,17 @@ class ComfyUI(Pipeline):
                 self.pause_frames = True
                 if self.client.comfy_client.is_running:
                     logging.info("comfystream is running, exiting")
-                    await self.client.comfy_client.__aexit__()
+                    await self.client.cleanup(exit_client=True)
                     self.client = ComfyStreamClient(cwd=self.comfy_ui_workspace)
                     logging.info(f"comfystream rescyled: {self.width}x{self.height}")
-                    await self.client.set_prompts([new_params.prompt])
-                    await self.client.update_prompts([new_params.prompt])
+                    logging.info(f"comfystream rescyled: {self.width}x{self.height}")
                 self.pause_frames = False
+                logging.info("pipeline dimensions updated, re-initialized")
             else:
                 logging.info(f"pipeline dimensions unchanged: {self.width}x{self.height}")
-                await self.client.set_prompts([new_params.prompt])
-                await self.client.update_prompts([new_params.prompt])
             
-            logging.info("pipeline dimensions updated, re-initialized")
-            
+            await self.client.set_prompts([new_params.prompt])
+            await self.client.update_prompts([new_params.prompt])
         except Exception as e:
             logging.error(f"Error updating ComfyUI Pipeline Prompt: {e}")
             raise e
