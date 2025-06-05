@@ -7,6 +7,7 @@ import abc
 from trickle import InputFrame, OutputFrame
 from .process import PipelineProcess
 from .status import PipelineState, PipelineStatus, InferenceStatus, InputStatus
+from utils import ComfyUtils
 
 FPS_LOG_INTERVAL = 10.0
 
@@ -19,6 +20,7 @@ class StreamerCallbacks(abc.ABC):
     @abc.abstractmethod
     def is_stream_running(self) -> bool: ...
 
+class ProcessCallbacks(abc.ABC):
     @abc.abstractmethod
     async def emit_monitoring_event(self, event_data: dict) -> None: ...
 
@@ -44,6 +46,7 @@ class ProcessGuardian:
     ):
         self.pipeline = pipeline
         self.initial_params = params
+        self.width, self.height = ComfyUtils.get_latent_image_dimensions(params.get('prompt'))
         self.streamer: StreamerCallbacks = _NoopStreamerCallbacks()
 
         self.process: Optional[PipelineProcess] = None
@@ -82,14 +85,53 @@ class ProcessGuardian:
     ):
         if not self.process:
             raise RuntimeError("Process not running")
+
+        # Check if resolution has changed
+        width = params.pop("width", None)
+        height = params.pop("height", None)
+        resolution_changed = False
+        if (width is None or height is None):
+            new_width, new_height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT    
+            if params.get('prompt'):
+                try:
+                    new_width, new_height = ComfyUtils.get_latent_image_dimensions(params.get('prompt'))
+                    logging.info(f"Parsed dimensions from prompt: {new_width}x{new_height}")
+                except Exception as e:
+                    logging.error(f"Error parsing resolution from prompt, using default dimensions: {e}")
+
+            # Update dimensions without restarting process
+            if (new_width != self.width or new_height != self.height):
+                resolution_changed = True
+                logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}")
+                if (new_width == self.height and new_height == self.width):
+                    logging.info("Dimensions flipped detected (90-degree rotation needed)")
+                self.width = new_width
+                self.height = new_height
+                # Add dimensions to params for pipeline update
+                self.process.width = new_width
+                self.process.height = new_height
+                # Clear input queue to prevent old frames from being processed
+                self.process.input_queue.empty()
+                logging.info(f"Updated pipeline parameters with new dimensions: {params}")
+
+        # If resolution changed, we need to ensure clean state transition
+        if resolution_changed:
+            # First update the request ID to ensure no old frames are processed
+            self.process.reset_stream(request_id, manifest_id, stream_id)
+            # Small delay to allow queues to clear
+            await asyncio.sleep(0.1)
+            # Then update params
+            await self.update_params(params)
+        else:
+            # Normal flow for non-resolution changes
+            self.process.reset_stream(request_id, manifest_id, stream_id)
+            await self.update_params(params)
+
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
         self.input_fps_counter.reset()
         self.output_fps_counter.reset()
         self.streamer = streamer or _NoopStreamerCallbacks()
-
-        self.process.reset_stream(request_id, manifest_id, stream_id)
-        await self.update_params(params)
         self.status.update_state(PipelineState.ONLINE)
 
     def send_input(self, frame: InputFrame):

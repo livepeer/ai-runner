@@ -6,12 +6,72 @@ import logging
 from typing import cast
 import numpy as np
 import torch
+from PIL import Image
 
 from .frame import InputFrame
 
 MAX_FRAMERATE=24
 
-def decode_av(pipe_input, frame_callback, put_metadata):
+def resize_and_crop(image, target_width, target_height, crop_mode='center'):
+    """
+    Resize and crop an image to match target dimensions while maintaining aspect ratio.
+    
+    Args:
+        image: PIL Image to process
+        target_width: Target width
+        target_height: Target height
+        crop_mode: One of 'center', 'top', 'bottom', 'left', 'right'
+    
+    Returns:
+        Resized and cropped PIL Image
+    """
+    # Calculate aspect ratios
+    input_ratio = image.width / image.height
+    target_ratio = target_width / target_height
+    
+    if input_ratio == target_ratio:
+        # Direct resize if ratios match
+        return image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    
+    # First resize to match the larger dimension
+    if input_ratio > target_ratio:
+        # Input is wider - resize to match height
+        new_height = target_height
+        new_width = int(new_height * input_ratio)
+    else:
+        # Input is taller - resize to match width
+        new_width = target_width
+        new_height = int(new_width / input_ratio)
+    
+    resized = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    
+    # Then crop to target dimensions
+    if input_ratio > target_ratio:
+        # Need to crop width
+        excess_width = new_width - target_width
+        if crop_mode == 'center':
+            left = excess_width // 2
+        elif crop_mode == 'left':
+            left = 0
+        elif crop_mode == 'right':
+            left = excess_width
+        else:
+            left = excess_width // 2
+        return resized.crop((left, 0, left + target_width, target_height))
+    else:
+        # Need to crop height
+        excess_height = new_height - target_height
+        if crop_mode == 'center':
+            top = excess_height // 2
+        elif crop_mode == 'top':
+            top = 0
+        elif crop_mode == 'bottom':
+            top = excess_height
+        else:
+            top = excess_height // 2
+        return resized.crop((0, top, target_width, top + target_height))
+
+def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_height):
     """
     Reads from a pipe (or file-like object).
 
@@ -56,6 +116,8 @@ def decode_av(pipe_input, frame_callback, put_metadata):
             "sar": video_stream.codec_context.sample_aspect_ratio,
             "dar": video_stream.codec_context.display_aspect_ratio,
             "format": str(video_stream.codec_context.format),
+            "output_width": output_width,
+            "output_height": output_height,
         }
 
     if video_metadata is None and audio_metadata is None:
@@ -93,7 +155,6 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                     frame = cast(av.VideoFrame, frame)
                     if frame.pts is None:
                         continue
-
                     # drop frames that come in too fast
                     # TODO also check timing relative to wall clock
                     pts_time = frame.time
@@ -106,25 +167,15 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                     else:
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
-
-                    h = 512
-                    w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
-                    if frame.height > frame.width:
-                        w = 512
-                        h = int((512 * frame.height / frame.width) / 2) * 2
-                    frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
-
+                    # Convert frame to image
                     image = frame.to_image()
                     if image.mode != "RGB":
                         image = image.convert("RGB")
-                    width, height = image.size
-                    if (width, height) != (512, 512):
-                        # Crop to the center square if image not already square
-                        square_size = 512
-                        start_x = width // 2 - square_size // 2
-                        start_y = height // 2 - square_size // 2
-                        image = image.crop((start_x, start_y, start_x + square_size, start_y + square_size))
-
+                    
+                    # Resize and crop the image
+                    image = resize_and_crop(image, output_width, output_height, crop_mode='center')
+                    
+                    # Convert to tensor
                     image_np = np.array(image).astype(np.float32) / 255.0
                     tensor = torch.tensor(image_np).unsqueeze(0)
 
