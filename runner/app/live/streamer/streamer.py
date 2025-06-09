@@ -161,6 +161,9 @@ class PipelineStreamer(StreamerCallbacks):
 
     async def run_ingress_loop(self):
         async for av_frame in self.protocol.ingress_loop(self.stop_event):
+            if self.stop_event.is_set():
+                logging.info("Ingress loop ended due to stop event")
+                break
             # TODO any necessary accounting here for audio
             if isinstance(av_frame, AudioFrame):
                 self.process.send_input(av_frame)
