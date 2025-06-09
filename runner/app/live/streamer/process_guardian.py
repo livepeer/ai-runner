@@ -89,6 +89,7 @@ class ProcessGuardian:
         # Check if resolution has changed
         width = params.pop("width", None)
         height = params.pop("height", None)
+        resolution_changed = False
         if (width is None or height is None):
             new_width, new_height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT    
             if params.get('prompt'):
@@ -100,6 +101,7 @@ class ProcessGuardian:
 
             # Update dimensions without restarting process
             if (new_width != self.width or new_height != self.height):
+                resolution_changed = True
                 logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}")
                 if (new_width == self.height and new_height == self.width):
                     logging.info("Dimensions flipped detected (90-degree rotation needed)")
@@ -108,18 +110,28 @@ class ProcessGuardian:
                 # Add dimensions to params for pipeline update
                 self.process.width = new_width
                 self.process.height = new_height
+                # Clear input queue to prevent old frames from being processed
                 self.process.input_queue.empty()
                 logging.info(f"Updated pipeline parameters with new dimensions: {params}")
+
+        # If resolution changed, we need to ensure clean state transition
+        if resolution_changed:
+            # First update the request ID to ensure no old frames are processed
+            self.process.reset_stream(request_id, manifest_id, stream_id)
+            # Small delay to allow queues to clear
+            await asyncio.sleep(0.1)
+            # Then update params
+            await self.update_params(params)
+        else:
+            # Normal flow for non-resolution changes
+            self.process.reset_stream(request_id, manifest_id, stream_id)
+            await self.update_params(params)
 
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
         self.input_fps_counter.reset()
         self.output_fps_counter.reset()
         self.streamer = streamer or _NoopStreamerCallbacks()
-
-        self.process.reset_stream(request_id, manifest_id, stream_id)
-        #self.process.update_params(params)
-        await self.update_params(params)
         self.status.update_state(PipelineState.ONLINE)
 
     def send_input(self, frame: InputFrame):

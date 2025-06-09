@@ -53,12 +53,13 @@ class ComfyUIParams(BaseModel):
 
 class ComfyUI(Pipeline):
     def __init__(self):
-        comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
-        self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
+        self.comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
+        self.client = ComfyStreamClient(cwd=self.comfy_ui_workspace)
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self.width = ComfyUtils.DEFAULT_WIDTH
         self.height = ComfyUtils.DEFAULT_HEIGHT
+        self.pause_frames = False
 
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
@@ -87,34 +88,41 @@ class ComfyUI(Pipeline):
             tensor = tensor.clone()
         frame.side_data.input = tensor
         frame.side_data.skipped = True
+        if self.pause_frames or self.client.cleanup_lock.locked():
+            # Skip frames if pipeline is paused or shutting down
+            return
         self.client.put_video_input(frame)
-        await self.video_incoming_frames.put(VideoOutput(frame, request_id))
-
+        await self.video_incoming_frames.put(VideoOutput(frame, request_id))            
+            
     async def get_processed_video_frame(self):
         result_tensor = await self.client.get_video_output()
         out = await self.video_incoming_frames.get()
-        while out.frame.side_data.skipped:
-            out = await self.video_incoming_frames.get()
+        while out.frame.side_data.skipped or self.pause_frames:
+            if self.client.cleanup_lock.locked():
+                raise Exception("Client is shutting down, skipping frame")
+            else:
+                out = await self.video_incoming_frames.get()
         return out.replace_tensor(result_tensor)
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
         
-        # Attempt to get dimensions from the workflow
-        width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
-        if width != self.width or height != self.height:
-            logging.info(f"pipeline dimensions updated, clearing queues: {self.width}x{self.height} -> {width}x{height}")
-            self.video_incoming_frames.empty()
-            
-            # Exit the comfy client to avoid memory leaks for different engine dimensions
-            await self.client.comfy_client.__aexit__()
-            await self.client.cleanup_queues()
-            await self.initialize(**params)
-        else:
-            logging.info(f"pipeline dimensions unchanged: {self.width}x{self.height}")
-        
         try:
+            width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+            if width != self.width or height != self.height:
+                self.width = width
+                self.height = height
+                logging.info(f"pipeline dimensions updated, clearing queues: {self.width}x{self.height} -> {width}x{height}")
+                self.pause_frames = True
+                if self.client.comfy_client.is_running:
+                    logging.info("comfystream is running, exiting")
+                    await self.client.cleanup(exit_client=False)
+                self.pause_frames = False
+                logging.info("pipeline dimensions updated, re-initialized")
+            else:
+                logging.info(f"pipeline dimensions unchanged: {self.width}x{self.height}")
+            
             await self.client.set_prompts([new_params.prompt])
             await self.client.update_prompts([new_params.prompt])
         except Exception as e:
@@ -123,6 +131,34 @@ class ComfyUI(Pipeline):
         self.params = new_params
 
     async def stop(self):
+        """Stop the ComfyUI pipeline and ensure all resources are cleaned up"""
         logging.info("Stopping ComfyUI pipeline")
-        await self.client.cleanup()
-        logging.info("ComfyUI pipeline stopped")
+        try:
+            # Clear the video incoming frames queue and move any CUDA tensors to CPU
+            while not self.video_incoming_frames.empty():
+                try:
+                    frame = self.video_incoming_frames.get_nowait()
+                    if frame.tensor.is_cuda:
+                        frame.tensor.cpu()  # Move tensor to CPU before deletion
+                except asyncio.QueueEmpty:
+                    break
+                except Exception as e:
+                    logging.error(f"Error clearing video incoming frames queue: {e}")
+
+            # Now cleanup the client with a timeout
+            try:
+                async with asyncio.timeout(5.0):  # 5 second timeout for client cleanup
+                    await self.client.cleanup()
+            except asyncio.TimeoutError:
+                logging.error("Timeout during client cleanup")
+            except Exception as e:
+                logging.error(f"Error during client cleanup: {e}")
+
+            # Force CUDA cache clear
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()  # Ensure all CUDA operations are complete
+        except Exception as e:
+            logging.error(f"Error during ComfyUI pipeline cleanup: {e}")
+        finally:
+            logging.info("ComfyUI pipeline stopped")
