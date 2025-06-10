@@ -89,26 +89,26 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
 
         # Check if resolution has changed
-        width = params.pop("width", None)
-        height = params.pop("height", None)
-        if (width is None or height is None):
-            new_width, new_height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT    
-            if params.get('prompt'):
-                try:
-                    new_width, new_height = ComfyUtils.get_latent_image_dimensions(params.get('prompt'))
-                except Exception as e:
-                    logging.error(f"Error parsing resolution from prompt, using default dimensions: {e}")
+        new_width = params.pop("width", None)
+        new_height = params.pop("height", None)
+        if (new_width is None or new_height is None):
+            new_width, new_height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
 
-            # If resolution changed, we need to restart the process
-            if (new_width != self.width or new_height != self.height):
-                logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}, restarting process")
-                self.width = new_width
-                self.height = new_height
-                await self.process._cleanup_pipeline()
-                await self.stop()
-                # Create new process with current pipeline name and params
-                self.process = PipelineProcess.start(self.pipeline, params)
-                #self.process.update_params(params)
+        if params.get('prompt'):
+            try:
+                new_width, new_height = ComfyUtils.get_latent_image_dimensions(params.get('prompt'))
+            except Exception as e:
+                logging.error(f"Error parsing resolution from prompt, using default dimensions: {e}")
+
+        # If resolution changed, we need to restart the process
+        if (new_width != self.width or new_height != self.height):
+            logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}, restarting process")
+            self.width = new_width
+            self.height = new_height
+            await self.process._cleanup_pipeline()
+            await self.stop()
+            # Create new process with current pipeline name and params
+            self.process = PipelineProcess.start(self.pipeline, params)
 
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()

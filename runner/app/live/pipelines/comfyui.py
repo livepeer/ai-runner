@@ -59,6 +59,7 @@ class ComfyUI(Pipeline):
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self.width = ComfyUtils.DEFAULT_WIDTH
         self.height = ComfyUtils.DEFAULT_HEIGHT
+        self.pause_input = False
 
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
@@ -87,6 +88,8 @@ class ComfyUI(Pipeline):
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        if self.pause_input:
+            return
         tensor = frame.tensor
         if tensor.is_cuda:
             # Clone the tensor to be able to send it on comfystream internal queue
@@ -115,15 +118,28 @@ class ComfyUI(Pipeline):
         self.params = new_params
 
     async def stop(self):
-        logging.info("Stopping ComfyUI pipeline")
-        # Clear the video_incoming_frames queue
-        while not self.video_incoming_frames.empty():
-            try:
-                frame = await self.video_incoming_frames.get_nowait()
-                # Ensure any CUDA tensors are properly handled
-                if frame.tensor is not None and frame.tensor.is_cuda:
-                    frame.tensor = frame.tensor.cpu()
-            except asyncio.QueueEmpty:
-                break
-        await self.client.cleanup()
+        try:
+            self.pause_input = True
+            logging.info("Stopping ComfyUI pipeline")
+            await self.client.cleanup(unload_models=False)
+            # Wait for the pipeline to stop
+            await asyncio.sleep(1)
+            # Clear the video_incoming_frames queue
+            while not self.video_incoming_frames.empty():
+                try:
+                    frame = self.video_incoming_frames.get_nowait()
+                    # Ensure any CUDA tensors are properly handled
+                    if frame.tensor is not None and frame.tensor.is_cuda:
+                        frame.tensor = frame.tensor.cpu()
+                except asyncio.QueueEmpty:
+                    break
+                
+            # Force CUDA cache clear
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception as e:
+            logging.error(f"Error stopping ComfyUI pipeline: {e}")
+        finally:
+            self.pause_input = False
+        
         logging.info("ComfyUI pipeline stopped")
