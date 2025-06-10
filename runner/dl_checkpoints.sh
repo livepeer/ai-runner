@@ -4,6 +4,7 @@
 
 # ComfyUI image configuration
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
+AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion}
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 
 # Checks HF_TOKEN and huggingface-cli login status and throw warning if not authenticated.
@@ -91,6 +92,11 @@ function download_all_models() {
 
 # Download models only for the live-video-to-video pipeline.
 function download_live_models() {
+  # StreamDiffusion
+  huggingface-cli download KBlueLeaf/kohaku-v2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+
+  # ComfyUI
   docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
 
   # ComfyUI models
@@ -121,6 +127,26 @@ function build_tensorrt_models() {
   fi
   printf "\nBuilding TensorRT models...\n"
 
+
+  # StreamDiffusion (compile a matrix of models and timesteps)
+  # docker pull $AI_RUNNER_STREAMDIFFUSION_IMAGE
+  # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
+  docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
+
+  MODELS="stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1"
+  TIMESTEPS="3 4" # This is basically the supported sizes for the t_index_list
+  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
+      bash -c "for model in $MODELS; do
+                  for timestep in $TIMESTEPS; do
+                      echo \"Building TensorRT engines for model=\$model timestep=\$timestep...\" && \
+                      python app/live/StreamDiffusionWrapper/build_tensorrt.py --model-id \$model --timesteps \$timestep
+                  done
+              done
+              adduser $(id -u -n)
+              chown -R $(id -u -n):$(id -g -n) /models
+              " \
+      || (echo "failed streamdiffusion tensorrt"; return 1)
+
   # Depth-Anything-Tensorrt
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
@@ -145,7 +171,7 @@ function build_tensorrt_models() {
       echo "failed ComfyUI build_trt.py"
       exit 1
     )
-  
+
   # Dreamshaper-8-Dmd-1kstep static dynamic 488x704
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
