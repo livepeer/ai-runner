@@ -77,33 +77,35 @@ class StreamDiffusion(Pipeline):
                 return
 
         logging.info(f"Resetting diffuser for params change")
-        pipe = StreamDiffusionWrapper(
-            output_type="pt",
-            model_id_or_path=new_params.model_id,
-            lora_dict=new_params.lora_dict,
-            use_lcm_lora=new_params.use_lcm_lora,
-            lcm_lora_id=new_params.lcm_lora_id,
-            t_index_list=new_params.t_index_list,
-            frame_buffer_size=1,
-            width=512,
-            height=512,
-            warmup=10,
-            acceleration=new_params.acceleration,
-            do_add_noise=new_params.do_add_noise,
-            mode="img2img",
-            enable_similar_image_filter=new_params.enable_similar_image_filter,
-            similar_image_filter_threshold=new_params.similar_image_filter_threshold,
-            use_denoising_batch=new_params.use_denoising_batch,
-            seed=new_params.seed,
-        )
-        pipe.prepare(
-            prompt=new_params.prompt,
-            num_inference_steps=new_params.num_inference_steps,
-            guidance_scale=new_params.guidance_scale,
-        )
+        def load_streamdiffusion():
+            pipe = StreamDiffusionWrapper(
+                output_type="pt",
+                model_id_or_path=new_params.model_id,
+                lora_dict=new_params.lora_dict,
+                use_lcm_lora=new_params.use_lcm_lora,
+                lcm_lora_id=new_params.lcm_lora_id,
+                t_index_list=new_params.t_index_list,
+                frame_buffer_size=1,
+                width=512,
+                height=512,
+                warmup=10,
+                acceleration=new_params.acceleration,
+                do_add_noise=new_params.do_add_noise,
+                mode="img2img",
+                enable_similar_image_filter=new_params.enable_similar_image_filter,
+                similar_image_filter_threshold=new_params.similar_image_filter_threshold,
+                use_denoising_batch=new_params.use_denoising_batch,
+                seed=new_params.seed,
+            )
+            pipe.prepare(
+                prompt=new_params.prompt,
+                num_inference_steps=new_params.num_inference_steps,
+                guidance_scale=new_params.guidance_scale,
+            )
+            return pipe
 
+        self.pipe = await asyncio.to_thread(load_streamdiffusion)
         self.params = new_params
-        self.pipe = pipe
         self.first_frame = True
 
     async def stop(self):

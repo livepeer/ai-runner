@@ -315,6 +315,9 @@ class QueueTeeStream:
     def flush(self):
         self.original_stream.flush()
 
+    def isatty(self):
+        return self.original_stream.isatty()
+
 class LogQueueHandler(logging.Handler):
     """Send all log records to the process's log queue"""
     def __init__(self, process: PipelineProcess):

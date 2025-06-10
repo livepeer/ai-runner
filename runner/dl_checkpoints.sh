@@ -144,7 +144,7 @@ function build_tensorrt_models() {
       bash -c "for model in $MODELS; do
                   for timestep in $TIMESTEPS; do
                       echo \"Building TensorRT engines for model=\$model timestep=\$timestep...\" && \
-                      python app/live/StreamDiffusionWrapper/build_tensorrt.py --model-id \$model --timesteps \$timestep
+                      $CONDA_PYTHON app/live/StreamDiffusionWrapper/build_tensorrt.py --model-id \$model --timesteps \$timestep
                   done
               done
               adduser $(id -u -n)
