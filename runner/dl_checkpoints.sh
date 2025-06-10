@@ -3,6 +3,7 @@
 [ -v DEBUG ] && set -x
 
 # ComfyUI image configuration
+PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
 AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion}
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
@@ -97,7 +98,9 @@ function download_live_models() {
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
   # ComfyUI
-  docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
+  if [ "$PULL_IMAGES" = true ]; then
+    docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
+  fi
 
   # ComfyUI models
   if ! docker image inspect $AI_RUNNER_COMFYUI_IMAGE >/dev/null 2>&1; then
@@ -129,7 +132,9 @@ function build_tensorrt_models() {
 
 
   # StreamDiffusion (compile a matrix of models and timesteps)
-  # docker pull $AI_RUNNER_STREAMDIFFUSION_IMAGE
+  if [ "$PULL_IMAGES" = true ]; then
+    docker pull $AI_RUNNER_STREAMDIFFUSION_IMAGE
+  fi
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
 
