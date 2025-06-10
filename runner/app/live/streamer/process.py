@@ -25,6 +25,7 @@ class PipelineProcess:
 
     def __init__(self, pipeline_name: str):
         self.pipeline_name = pipeline_name
+        self.pipeline = None  # Initialize pipeline as None
         self.ctx = mp.get_context("spawn")
 
         self.input_queue = self.ctx.Queue(maxsize=2)
@@ -166,12 +167,12 @@ class PipelineProcess:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
-                pipeline = load_pipeline(self.pipeline_name)
+                self.pipeline = load_pipeline(self.pipeline_name)
 
                 # TODO: We may need to call reset_stream when resolution is changed and start the pipeline again
                 # Changing the engine causes issues, maybe cleanup related
-                await pipeline.initialize(**params)
-                return pipeline
+                await self.pipeline.initialize(**params)
+                return self.pipeline
         except Exception as e:
             self._report_error(f"Error loading pipeline: {e}")
             if not params:
@@ -181,19 +182,19 @@ class PipelineProcess:
                 with log_timing(
                     f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"
                 ):
-                    pipeline = load_pipeline(self.pipeline_name)
-                    await pipeline.initialize()
-                    return pipeline
+                    self.pipeline = load_pipeline(self.pipeline_name)
+                    await self.pipeline.initialize()
+                    return self.pipeline
             except Exception as e:
                 self._report_error(f"Error loading pipeline with default params: {e}")
                 raise
 
     async def _run_pipeline_loops(self):
-        pipeline = await self._initialize_pipeline()
+        await self._initialize_pipeline()
         self.pipeline_initialized.set()
-        input_task = asyncio.create_task(self._input_loop(pipeline))
-        output_task = asyncio.create_task(self._output_loop(pipeline))
-        param_task = asyncio.create_task(self._param_update_loop(pipeline))
+        input_task = asyncio.create_task(self._input_loop())
+        output_task = asyncio.create_task(self._output_loop())
+        param_task = asyncio.create_task(self._param_update_loop())
 
         async def wait_for_stop():
             while not self.is_done():
@@ -209,17 +210,17 @@ class PipelineProcess:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-            await self._cleanup_pipeline(pipeline)
+            await self._cleanup_pipeline()
 
         logging.info("PipelineProcess: _run_pipeline_loops finished.")
 
-    async def _input_loop(self, pipeline: Pipeline):
+    async def _input_loop(self):
         while not self.is_done():
             try:
                 input_frame = await asyncio.to_thread(self.input_queue.get, timeout=0.1)
                 if isinstance(input_frame, VideoFrame):
                     input_frame.log_timestamps["pre_process_frame"] = time.time()
-                    await pipeline.put_video_frame(input_frame, self.request_id)
+                    await self.pipeline.put_video_frame(input_frame, self.request_id)
                 elif isinstance(input_frame, AudioFrame):
                     self._try_queue_put(self.output_queue, AudioOutput([input_frame], self.request_id))
             except queue.Empty:
@@ -228,10 +229,10 @@ class PipelineProcess:
             except Exception as e:
                 self._report_error(f"Error processing input frame: {e}")
 
-    async def _output_loop(self, pipeline: Pipeline):
+    async def _output_loop(self):
         while not self.is_done():
             try:
-                output = await pipeline.get_processed_video_frame()
+                output = await self.pipeline.get_processed_video_frame()
                 if isinstance(output, VideoOutput) and not output.tensor.is_cuda and torch.cuda.is_available():
                     output = output.replace_tensor(output.tensor.cuda())
                 output.log_timestamps["post_process_frame"] = time.time()
@@ -239,19 +240,18 @@ class PipelineProcess:
             except Exception as e:
                 self._report_error(f"Error processing output frame: {e}")
 
-    async def _param_update_loop(self, pipeline: Pipeline):
+    async def _param_update_loop(self):
         while not self.is_done():
             try:
                 params = await asyncio.to_thread(self.param_update_queue.get, timeout=0.1)
 
                 if self._handle_logging_params(params):
                     logging.info(f"PipelineProcess: Updating pipeline parameters: {params}")
-                    await pipeline.update_params(**params)
+                    await self.pipeline.update_params(**params)
             except queue.Empty:
-                # Timeout ensures the non-daemon threads from to_thread can exit if task is cancelled
                 continue
             except Exception as e:
-                self._report_error(f"Error updating params: {e}")
+                self._report_error(f"Error updating parameters: {e}")
 
     def _report_error(self, error_msg: str):
         error_event = {
@@ -261,12 +261,12 @@ class PipelineProcess:
         logging.error(error_msg)
         self._try_queue_put(self.error_queue, error_event)
 
-    async def _cleanup_pipeline(self, pipeline):
-        if pipeline is not None:
+    async def _cleanup_pipeline(self):
+        if self.pipeline:
             try:
-                await pipeline.stop()
+                await self.pipeline.stop()
             except Exception as e:
-                logging.error(f"Error stopping pipeline: {e}")
+                self._report_error(f"Error cleaning up pipeline: {e}")
 
     def _setup_logging(self):
         level = (
