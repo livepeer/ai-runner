@@ -104,6 +104,7 @@ class ProcessGuardian:
                 logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}, restarting process")
                 self.width = new_width
                 self.height = new_height
+                await self.process._cleanup_pipeline()
                 await self.stop()
                 # Create new process with current pipeline name and params
                 self.process = PipelineProcess.start(self.pipeline, params)

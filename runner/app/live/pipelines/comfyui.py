@@ -116,5 +116,14 @@ class ComfyUI(Pipeline):
 
     async def stop(self):
         logging.info("Stopping ComfyUI pipeline")
+        # Clear the video_incoming_frames queue
+        while not self.video_incoming_frames.empty():
+            try:
+                frame = await self.video_incoming_frames.get_nowait()
+                # Ensure any CUDA tensors are properly handled
+                if frame.tensor is not None and frame.tensor.is_cuda:
+                    frame.tensor = frame.tensor.cpu()
+            except asyncio.QueueEmpty:
+                break
         await self.client.cleanup()
         logging.info("ComfyUI pipeline stopped")
