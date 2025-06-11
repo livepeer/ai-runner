@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=livepeer/comfyui-base@sha256:2d5ecad6bf24bb73831c6c87a33a7503f48a88ef2d490609068505a945d91146
+ARG BASE_IMAGE=livepeer/comfyui-base:patched-comfystream-hiddenswitch
 FROM ${BASE_IMAGE}
 
 # -----------------------------------------------------------------------------
@@ -9,6 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
 ENV PATH="/workspace/miniconda3/bin:${PATH}"
+ENV PYTHONPATH="/workspace/ComfyUI"
 
 # Install prerequisites
 RUN apt-get update && \
