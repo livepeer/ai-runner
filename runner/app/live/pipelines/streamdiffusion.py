@@ -47,8 +47,11 @@ class StreamDiffusion(Pipeline):
         if self.pipe is None:
             raise RuntimeError("Pipeline not initialized")
 
-        img_tensor = self.pipe.preprocess_image(frame.tensor)
-        # img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
+        # The incoming frame.tensor is (B, H, W, C) in range [-1, 1] while the
+        # VaeImageProcessor inside the wrapper expects (B, C, H, W) in [0, 1].
+        img_tensor = frame.tensor.permute(0, 3, 1, 2)
+        img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
+        img_tensor = self.pipe.preprocess_image(img_tensor)
 
         if self.first_frame:
             self.first_frame = False
@@ -58,6 +61,9 @@ class StreamDiffusion(Pipeline):
         out_tensor = await asyncio.to_thread(self.pipe, image=img_tensor)
         if isinstance(out_tensor, list):
             out_tensor = out_tensor[0]
+
+        # The output tensor from the wrapper is (C, H, W), and the encoder expects (1, H, W, C).
+        out_tensor = out_tensor.permute(1, 2, 0).unsqueeze(0)
 
         output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
         await self.frame_queue.put(output)
