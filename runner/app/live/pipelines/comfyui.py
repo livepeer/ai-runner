@@ -130,7 +130,7 @@ class ComfyUI(Pipeline):
                     frame = self.video_incoming_frames.get_nowait()
                     # Ensure any CUDA tensors are properly handled
                     if frame.tensor is not None and frame.tensor.is_cuda:
-                        frame.tensor = frame.tensor.cpu()
+                        frame.tensor.cpu()
                 except asyncio.QueueEmpty:
                     break
                 
