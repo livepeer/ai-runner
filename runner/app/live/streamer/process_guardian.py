@@ -82,6 +82,24 @@ class ProcessGuardian:
     ):
         if not self.process:
             raise RuntimeError("Process not running")
+
+        # Check if resolution has changed
+        new_width = params.get("width", None)
+        new_height = params.get("height", None)
+        if (new_width is None or new_height is None):
+            new_width, new_height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
+        
+        # If resolution changed, we need to restart the process (does not work for comfyui)
+        if (new_width != self.width or new_height != self.height):
+            logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}, restarting process")
+            self.width = new_width
+            self.height = new_height
+            await self.process._cleanup_pipeline()
+            await self.stop()
+            # Create new process with current pipeline name and params
+            params.update({"width": new_width, "height": new_height})
+            self.process = PipelineProcess.start(self.pipeline, params)
+
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
         self.input_fps_counter.reset()

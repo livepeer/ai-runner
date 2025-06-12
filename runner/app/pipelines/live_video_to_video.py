@@ -18,11 +18,16 @@ from app.utils.errors import InferenceError
 proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntary_ctxt_switches", "nonvoluntary_ctxt_switches", "CoreDumping"]
 
 class LiveVideoToVideoPipeline(Pipeline):
-    def __init__(self, model_id: str):
+    def __init__(self, model_id: str, dimensions: str | None = None):
         self.version = os.getenv("VERSION", "undefined")
         self.model_id = model_id
         self.model_dir = get_model_dir()
         self.torch_device = get_torch_device()
+        self.dimensions = dimensions
+        if dimensions:
+            self.width, self.height = map(int, dimensions.split("x"))
+        else:
+            self.width, self.height = 512, 512  # Default values
         self.infer_script_path = (
             Path(__file__).parent.parent / "live" / "infer.py"
         )
@@ -34,6 +39,9 @@ class LiveVideoToVideoPipeline(Pipeline):
     ):
         if not self.process:
             raise RuntimeError("Pipeline process not running")
+        
+        # TODO: remove this once we have a better way to parse dimensions/dynamically reload process
+        params.update({"width": self.width, "height": self.height}) 
 
         max_retries = 10
         thrown_ex = None
@@ -109,11 +117,14 @@ class LiveVideoToVideoPipeline(Pipeline):
         logging.info("Starting pipeline process")
         cmd = [sys.executable, str(self.infer_script_path)]
         cmd.extend(["--pipeline", self.model_id]) # we use the model_id as the pipeline name for now
+        cmd.extend(["--initial-params", json.dumps({"width": self.width, "height": self.height})])
         cmd.extend(["--http-port", "8888"])
         # TODO: set torch device from self.torch_device
 
         env = os.environ.copy()
         env["HUGGINGFACE_HUB_CACHE"] = str(self.model_dir)
+        if self.dimensions:
+            env["DIMENSIONS"] = self.dimensions
 
         try:
             self.process = subprocess.Popen(

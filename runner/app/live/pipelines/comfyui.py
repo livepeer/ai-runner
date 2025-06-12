@@ -2,7 +2,7 @@ import os
 import json
 import torch
 import asyncio
-from typing import Union
+from typing import Union, Optional, Tuple
 from pydantic import BaseModel, field_validator
 import pathlib
 
@@ -25,6 +25,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
+    width: Optional[int] = None
+    height: Optional[int] = None
 
     @field_validator('prompt')
     @classmethod
@@ -60,8 +62,17 @@ class ComfyUI(Pipeline):
         # TODO: currently its a single prompt, but need to support multiple prompts
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
-
-        # Warm up the pipeline
+        
+        # Get dimensions from params or environment variable
+        width = new_params.width
+        height = new_params.height
+        
+        # Fallback to default dimensions if not found
+        width = width or ComfyUtils.DEFAULT_WIDTH
+        height = height or ComfyUtils.DEFAULT_HEIGHT
+        
+        # Warm up the pipeline with the workflow dimensions
+        logging.info(f"Warming up pipeline with dimensions: {width}x{height}")
         dummy_frame = VideoFrame(None, 0, 0)
         dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
 
