@@ -1,7 +1,5 @@
 import logging
 import asyncio
-from PIL import Image
-
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput

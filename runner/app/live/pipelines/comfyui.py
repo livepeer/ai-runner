@@ -8,7 +8,7 @@ import pathlib
 
 from .interface import Pipeline
 from comfystream.client import ComfyStreamClient
-from trickle import VideoFrame, VideoOutput
+from trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 import logging
 
@@ -25,6 +25,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
+    width: int = 512
+    height: int = 512
 
     @field_validator('prompt')
     @classmethod
@@ -53,9 +55,13 @@ class ComfyUI(Pipeline):
         self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
+        self.width = DEFAULT_WIDTH
+        self.height = DEFAULT_HEIGHT
 
     async def initialize(self, **params):
         new_params = ComfyUIParams(**params)
+        self.width = new_params.width
+        self.height = new_params.height
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
         await self.client.set_prompts([new_params.prompt])
@@ -63,7 +69,7 @@ class ComfyUI(Pipeline):
 
         # Warm up the pipeline
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
+        dummy_frame.side_data.input = torch.randn(1, self.height, self.width, 3)
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)
