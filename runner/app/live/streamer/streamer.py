@@ -13,9 +13,6 @@ from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutpu
 fps_log_interval = 10
 status_report_interval = 10
 
-# DEFAULT_WIDTH = 512
-# DEFAULT_HEIGHT = 512 
-
 class PipelineStreamer(StreamerCallbacks):
     def __init__(
         self,
@@ -46,7 +43,6 @@ class PipelineStreamer(StreamerCallbacks):
         )
 
         self.stop_event.clear()
-        
         await self.protocol.start()
 
         # We need a bunch of concurrent tasks to run the streamer. So we start them all in background and then also start

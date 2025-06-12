@@ -95,6 +95,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_hei
                     frame = cast(av.VideoFrame, frame)
                     if frame.pts is None:
                         continue
+                    
                     # drop frames that come in too fast
                     # TODO also check timing relative to wall clock
                     pts_time = frame.time

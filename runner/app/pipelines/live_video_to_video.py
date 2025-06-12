@@ -38,15 +38,6 @@ class LiveVideoToVideoPipeline(Pipeline):
         if not self.process:
             raise RuntimeError("Pipeline process not running")
         
-        # TODO: remove this once we have a better way to parse dimensions/dynamically reload process
-        # Parse from kwargs and pass as params
-        # validation needed
-        width = params.get("width", DEFAULT_WIDTH)
-        height = params.get("height", DEFAULT_HEIGHT)
-        if width != self.width or height != self.height:
-            self.width = width
-            self.height = height
-
         max_retries = 10
         thrown_ex = None
         for attempt in range(max_retries):

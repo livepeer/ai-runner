@@ -136,7 +136,7 @@ async def handle_start_stream(request: web.Request):
             process,
             params.request_id,
             params.manifest_id,
-            params.stream_id
+            params.stream_id,
         )
 
         await streamer.start(params.params)
