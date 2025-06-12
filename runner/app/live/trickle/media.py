@@ -16,12 +16,12 @@ DECODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 MAX_ENCODER_RETRIES = 3
 ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 
-async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback):
+async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback, output_width, output_height):
     # TODO add some pre-processing parameters, eg image size
     try:
         in_pipe, out_pipe = os.pipe()
         write_fd = await AsyncifyFdWriter(out_pipe)
-        parse_task = asyncio.create_task(decode_in(in_pipe, image_callback, put_metadata, write_fd))
+        parse_task = asyncio.create_task(decode_in(in_pipe, image_callback, put_metadata, write_fd, output_width, output_height))
         subscribe_task = asyncio.create_task(subscribe(subscribe_url, write_fd, monitoring_callback))
         await asyncio.gather(subscribe_task, parse_task)
         logging.info("run_subscribe complete")
@@ -74,13 +74,13 @@ async def AsyncifyFdWriter(write_fd):
     writer = asyncio.StreamWriter(write_transport, write_protocol, None, loop)
     return writer
 
-async def decode_in(in_pipe, frame_callback, put_metadata, write_fd):
+async def decode_in(in_pipe, frame_callback, put_metadata, write_fd, output_width, output_height):
     def decode_runner():
         retry_count = 0
         last_retry_time = time.time()
         while retry_count < MAX_DECODER_RETRIES:
             try:
-                decode_av(f"pipe:{in_pipe}", frame_callback, put_metadata)
+                decode_av(f"pipe:{in_pipe}", frame_callback, put_metadata, output_width, output_height)
                 break  # clean exit
             except Exception as e:
                 msg = str(e)

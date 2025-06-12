@@ -13,6 +13,7 @@ from typing import Annotated, Dict
 from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
+from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 MAX_FILE_AGE = 86400  # 1 day
 
@@ -127,13 +128,15 @@ async def handle_start_stream(request: web.Request):
             params.publish_url,
             params.control_url,
             params.events_url,
+            params.params.get("width", DEFAULT_WIDTH),
+            params.params.get("height", DEFAULT_HEIGHT),
         )
         streamer = PipelineStreamer(
             protocol,
             process,
             params.request_id,
             params.manifest_id,
-            params.stream_id,
+            params.stream_id
         )
 
         await streamer.start(params.params)

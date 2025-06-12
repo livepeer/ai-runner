@@ -62,9 +62,11 @@ async def main(
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
+        width = params.get('width')
+        height = params.get('height')
         if stream_protocol == "trickle":
             protocol = TrickleProtocol(
-                subscribe_url, publish_url, control_url, events_url
+                subscribe_url, publish_url, control_url, events_url, width, height
             )
         elif stream_protocol == "zeromq":
             protocol = ZeroMQProtocol(subscribe_url, publish_url)
