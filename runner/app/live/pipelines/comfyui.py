@@ -9,6 +9,7 @@ import pathlib
 from .interface import Pipeline
 from comfystream.client import ComfyStreamClient
 from trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
+from utils import ComfyUtils
 
 import logging
 
@@ -64,6 +65,12 @@ class ComfyUI(Pipeline):
         self.height = new_params.height
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
+        
+        width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
+        if width != self.width or height != self.height:
+            new_params.prompt = ComfyUtils.update_latent_image_dimensions(new_params.prompt, self.width, self.height)
+            logging.info(f"Updated prompt with latent image dimensions {self.width}x{self.height} from request")
+
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
 
