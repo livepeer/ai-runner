@@ -57,20 +57,22 @@ async def main(
 ):
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(asyncio_exception_handler)
-
     process = ProcessGuardian(pipeline, params or {})
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
+        width = params.get('width')
+        height = params.get('height')
         if stream_protocol == "trickle":
             protocol = TrickleProtocol(
-                subscribe_url, publish_url, control_url, events_url
+                subscribe_url, publish_url, control_url, events_url,
+                width=width, height=height
             )
         elif stream_protocol == "zeromq":
             protocol = ZeroMQProtocol(subscribe_url, publish_url)
         else:
             raise ValueError(f"Unsupported protocol: {stream_protocol}")
-        streamer = PipelineStreamer(protocol, process, request_id, stream_id)
+        streamer = PipelineStreamer(protocol, process, request_id, stream_id, width=width, height=height)
 
     api = None
     try:

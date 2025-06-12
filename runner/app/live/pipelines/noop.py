@@ -1,7 +1,7 @@
 import logging
 import asyncio
 from PIL import Image
-
+import torch
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
@@ -26,3 +26,18 @@ class Noop(Pipeline):
 
   async def stop(self):
     logging.info("Stopping pipeline")
+
+    # Clear the frame queue and move any CUDA tensors to CPU
+    while not self.frame_queue.empty():
+      try:
+        frame = self.frame_queue.get_nowait()
+        if frame.tensor.is_cuda:
+          frame.tensor.cpu()  # Move tensor to CPU before deletion
+      except asyncio.QueueEmpty:
+        break
+      except Exception as e:
+        logging.error(f"Error clearing frame queue: {e}")
+
+    # Force CUDA cache clear
+    if torch.cuda.is_available():
+      torch.cuda.empty_cache()

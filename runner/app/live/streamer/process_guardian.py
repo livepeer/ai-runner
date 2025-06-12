@@ -7,6 +7,7 @@ import abc
 from trickle import InputFrame, OutputFrame
 from .process import PipelineProcess
 from .status import PipelineState, PipelineStatus, InferenceStatus, InputStatus
+from utils import ComfyUtils
 
 FPS_LOG_INTERVAL = 10.0
 
@@ -19,6 +20,9 @@ class StreamerCallbacks(abc.ABC):
     @abc.abstractmethod
     def is_stream_running(self) -> bool: ...
 
+
+
+class ProcessCallbacks(abc.ABC):
     @abc.abstractmethod
     async def emit_monitoring_event(self, event_data: dict) -> None: ...
 
@@ -44,6 +48,7 @@ class ProcessGuardian:
     ):
         self.pipeline = pipeline
         self.initial_params = params
+        self.width, self.height = ComfyUtils.get_latent_image_dimensions(params.get('prompt'))
         self.streamer: StreamerCallbacks = _NoopStreamerCallbacks()
 
         self.process: Optional[PipelineProcess] = None
@@ -82,6 +87,24 @@ class ProcessGuardian:
     ):
         if not self.process:
             raise RuntimeError("Process not running")
+
+        # Check if resolution has changed
+        new_width = params.get("width", None)
+        new_height = params.get("height", None)
+        if (new_width is None or new_height is None):
+            new_width, new_height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT
+        
+        # If resolution changed, we need to restart the process (does not work for comfyui)
+        if (new_width != self.width or new_height != self.height):
+            logging.info(f"Resolution changed from {self.width}x{self.height} to {new_width}x{new_height}, restarting process")
+            self.width = new_width
+            self.height = new_height
+            await self.process._cleanup_pipeline()
+            await self.stop()
+            # Create new process with current pipeline name and params
+            params.update({"width": new_width, "height": new_height})
+            self.process = PipelineProcess.start(self.pipeline, params)
+
         self.status.start_time = time.time()
         self.status.input_status = InputStatus()
         self.input_fps_counter.reset()
@@ -89,6 +112,8 @@ class ProcessGuardian:
         self.streamer = streamer or _NoopStreamerCallbacks()
 
         self.process.reset_stream(request_id, manifest_id, stream_id)
+        self.process.update_params(params)
+        
         await self.update_params(params)
         self.status.update_state(PipelineState.ONLINE)
 
@@ -310,7 +335,7 @@ class ProcessGuardian:
                         # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
                         # So we skip the restart here and move the state to ERROR so the worker will restart the whole container.
                         # TODO: Remove this exception once pipeline shutdown is fixed and restarting process is useful again.
-                        raise Exception("Skipping process restart due to pipeline shutdown issues")
+                        #raise Exception("Skipping process restart due to pipeline shutdown issues")
                         await self._restart_process()
                     except Exception:
                         logging.exception("Failed to stop streamer and restart process. Moving to ERROR state", stack_info=True)

@@ -11,7 +11,7 @@ from .frame import InputFrame
 
 MAX_FRAMERATE=24
 
-def decode_av(pipe_input, frame_callback, put_metadata):
+def decode_av(pipe_input, frame_callback, put_metadata, output_width, output_height):
     """
     Reads from a pipe (or file-like object).
 
@@ -56,6 +56,8 @@ def decode_av(pipe_input, frame_callback, put_metadata):
             "sar": video_stream.codec_context.sample_aspect_ratio,
             "dar": video_stream.codec_context.display_aspect_ratio,
             "format": str(video_stream.codec_context.format),
+            "output_width": output_width,
+            "output_height": output_height,
         }
 
     if video_metadata is None and audio_metadata is None:
@@ -93,7 +95,6 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                     frame = cast(av.VideoFrame, frame)
                     if frame.pts is None:
                         continue
-
                     # drop frames that come in too fast
                     # TODO also check timing relative to wall clock
                     pts_time = frame.time
@@ -106,25 +107,34 @@ def decode_av(pipe_input, frame_callback, put_metadata):
                     else:
                         # not delayed, so use prev pts to allow more jitter
                         next_pts_time = next_pts_time + frame_interval
-
-                    h = 512
-                    w = int((512 * frame.width / frame.height) / 2) * 2 # force divisible by 2
-                    if frame.height > frame.width:
-                        w = 512
-                        h = int((512 * frame.height / frame.width) / 2) * 2
-                    frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
-
+                    # Convert frame to image
                     image = frame.to_image()
                     if image.mode != "RGB":
                         image = image.convert("RGB")
                     width, height = image.size
-                    if (width, height) != (512, 512):
-                        # Crop to the center square if image not already square
-                        square_size = 512
-                        start_x = width // 2 - square_size // 2
-                        start_y = height // 2 - square_size // 2
-                        image = image.crop((start_x, start_y, start_x + square_size, start_y + square_size))
 
+                    # Calculate aspect ratios
+                    input_ratio = width / height
+                    output_ratio = output_width / output_height
+
+                    if input_ratio != output_ratio:
+                        # Need to crop to match output aspect ratio
+                        if input_ratio > output_ratio:
+                            # Input is wider than output - crop width
+                            new_width = int(height * output_ratio)
+                            start_x = (width - new_width) // 2
+                            image = image.crop((start_x, 0, start_x + new_width, height))
+                        else:
+                            # Input is taller than output - crop height
+                            new_height = int(width / output_ratio)
+                            start_y = (height - new_height) // 2
+                            image = image.crop((0, start_y, width, start_y + new_height))
+
+                    # Resize to final dimensions
+                    if (output_width, output_height) != image.size:
+                        image = image.resize((output_width, output_height))
+
+                    # Convert to tensor
                     image_np = np.array(image).astype(np.float32) / 255.0
                     tensor = torch.tensor(image_np).unsqueeze(0)
 
