@@ -2,7 +2,7 @@ import os
 import json
 import torch
 import asyncio
-from typing import Union
+from typing import Union, Optional, Tuple
 from pydantic import BaseModel, field_validator
 import pathlib
 
@@ -29,6 +29,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
+    width: Optional[int] = None
+    height: Optional[int] = None
 
     @field_validator('prompt')
     @classmethod
@@ -68,14 +70,13 @@ class ComfyUI(Pipeline):
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
         
-        # Attempt to get dimensions from the workflow
-        width, height = ComfyUtils.get_latent_image_dimensions(new_params.prompt)
-        if width is None or height is None:
-            width, height = ComfyUtils.DEFAULT_WIDTH, ComfyUtils.DEFAULT_HEIGHT  # Default dimensions if not found in workflow
-            logging.warning(f"Could not find dimensions in workflow, using default {width}x{height}")
-    
-        # Fallback to default dimensions if not found in workflow
-        width, height = width or ComfyUtils.DEFAULT_WIDTH, height or ComfyUtils.DEFAULT_HEIGHT
+        # Get dimensions from params or environment variable
+        width = new_params.width
+        height = new_params.height
+        
+        # Fallback to default dimensions if not found
+        width = width or ComfyUtils.DEFAULT_WIDTH
+        height = height or ComfyUtils.DEFAULT_HEIGHT
         
         # Warm up the pipeline with the workflow dimensions
         logging.info(f"Warming up pipeline with dimensions: {width}x{height}")

@@ -26,8 +26,17 @@ async def lifespan(app: FastAPI):
 
     pipeline = os.environ["PIPELINE"]
     model_id = os.environ["MODEL_ID"]
+    dimensions = os.environ.get("DIMENSIONS", "512x512")
+    if dimensions is not None:
+        try:
+            width, height = map(int, dimensions.split("x"))
+            if width % 64 != 0 or height % 64 != 0:
+                raise ValueError(f"Width and height must be divisible by 64, got {width}x{height}")
+        except ValueError as e:
+            logger.error(f"Invalid DIMENSIONS format. Expected 'WIDTHxHEIGHT' but got '{dimensions}'")
+            raise
 
-    app.pipeline = load_pipeline(pipeline, model_id)
+    app.pipeline = load_pipeline(pipeline, model_id, dimensions)
     app.include_router(load_route(pipeline))
 
     app.hardware_info_service.log_gpu_compute_info()
@@ -42,7 +51,7 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down")
 
 
-def load_pipeline(pipeline: str, model_id: str) -> any:
+def load_pipeline(pipeline: str, model_id: str, dimensions: str | None = None) -> any:
     match pipeline:
         case "text-to-image":
             from app.pipelines.text_to_image import TextToImagePipeline
@@ -81,7 +90,7 @@ def load_pipeline(pipeline: str, model_id: str) -> any:
         case "live-video-to-video":
             from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
 
-            return LiveVideoToVideoPipeline(model_id)
+            return LiveVideoToVideoPipeline(model_id, dimensions)
         case "text-to-speech":
             from app.pipelines.text_to_speech import TextToSpeechPipeline
 
