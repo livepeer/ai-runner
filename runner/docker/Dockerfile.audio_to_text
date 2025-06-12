@@ -4,17 +4,23 @@ FROM ${BASE_IMAGE}
 # Install CUDA Toolkit to enable flash attention.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    cuda-toolkit-12-1 \
+    cuda-toolkit-12-6 \
     g++ && \
     rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir \
     ninja \
-    transformers==4.43.3 \
+    transformers==4.51.3 \
     peft \
     deepcache \
-    flash_attn==2.5.6 \
     pynvml
+
+ARG VERSION="undefined"
+ENV VERSION=${VERSION}
+
+#add FASTER-WHISPER backend
+#note: ctranslate2==4.4.0 is only required if base image uses cuDNN 8
+RUN pip install faster-whisper && pip install --force-reinstall ctranslate2==4.4.0 && pip install numpy==1.26.4
 
 # Override base working directory to ensure the correct working directory.
 WORKDIR /app
