@@ -14,6 +14,7 @@ from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
+from utils import ComfyUtils
 
 MAX_FILE_AGE = 86400  # 1 day
 
@@ -96,7 +97,6 @@ async def parse_request_data(request: web.Request) -> Dict:
     else:
         raise ValueError(f"Unknown content type: {request.content_type}")
 
-
 async def handle_start_stream(request: web.Request):
     try:
         stream_request_timestamp = int(time.time() * 1000)
@@ -123,13 +123,28 @@ async def handle_start_stream(request: web.Request):
 
         config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
+        # Try to get dimensions from workflow first
+        workflow = params.params.get("prompt")
+        width = DEFAULT_WIDTH
+        height = DEFAULT_HEIGHT
+        
+        if process.pipeline == "comfyui" and workflow is not None and isinstance(workflow, dict) or isinstance(workflow,str):
+            width, height = ComfyUtils.get_latent_image_dimensions(workflow)
+            # Update params to match the dimensions from the workflow 
+            params.params.update({"width": width, "height": height})
+            logging.info(f"Using dimensions from workflow: {width}x{height}")
+        else:
+            width = params.params.get("width", DEFAULT_WIDTH)
+            height = params.params.get("height", DEFAULT_HEIGHT)
+            logging.info(f"Using dimensions from params: {width}x{height}")
+
         protocol = TrickleProtocol(
             params.subscribe_url,
             params.publish_url,
             params.control_url,
             params.events_url,
-            params.params.get("width", DEFAULT_WIDTH),
-            params.params.get("height", DEFAULT_HEIGHT),
+            width,
+            height,
         )
         streamer = PipelineStreamer(
             protocol,
