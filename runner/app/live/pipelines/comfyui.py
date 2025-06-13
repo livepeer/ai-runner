@@ -8,7 +8,8 @@ import pathlib
 
 from .interface import Pipeline
 from comfystream.client import ComfyStreamClient
-from trickle import VideoFrame, VideoOutput
+from trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
+from utils import ComfyUtils
 
 import logging
 
@@ -25,6 +26,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
+    width: int = 512
+    height: int = 512
 
     @field_validator('prompt')
     @classmethod
@@ -49,21 +52,31 @@ class ComfyUIParams(BaseModel):
 
 class ComfyUI(Pipeline):
     def __init__(self):
-        comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
-        self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
+        self.width = DEFAULT_WIDTH
+        self.height = DEFAULT_HEIGHT
+        self.pause_input = False
+        self.client = None
 
     async def initialize(self, **params):
+        """Initialize the ComfyUI pipeline with given parameters."""
+        self.client = ComfyStreamClient(cwd=os.getenv(COMFY_UI_WORKSPACE_ENV))
         new_params = ComfyUIParams(**params)
+        self.width = new_params.width
+        self.height = new_params.height
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
+        
+        new_params.prompt = ComfyUtils.update_latent_image_dimensions(new_params.prompt, self.width, self.height)
+        logging.info(f"Updated prompt with latent image dimensions {self.width}x{self.height} from request")
+
         # TODO: currently its a single prompt, but need to support multiple prompts
         await self.client.set_prompts([new_params.prompt])
         self.params = new_params
 
         # Warm up the pipeline
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
+        dummy_frame.side_data.input = torch.randn(1, self.height, self.width, 3)
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)
@@ -71,6 +84,10 @@ class ComfyUI(Pipeline):
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        if self.pause_input:
+            logging.warning("ComfyUI pipeline is paused, skipping input frame")
+            return
+
         tensor = frame.tensor
         if tensor.is_cuda:
             # Clone the tensor to be able to send it on comfystream internal queue
@@ -99,6 +116,38 @@ class ComfyUI(Pipeline):
         self.params = new_params
 
     async def stop(self):
-        logging.info("Stopping ComfyUI pipeline")
-        await self.client.cleanup()
+        try:
+            logging.info("Stopping ComfyUI pipeline")
+            self.pause_input = True
+            
+            # Wait for the pipeline to stop
+            # Clear the video_incoming_frames queue
+            while not self.video_incoming_frames.empty():
+                try:
+                    frame = self.video_incoming_frames.get_nowait()
+                    # Ensure any CUDA tensors are properly handled
+                    if frame.tensor is not None and frame.tensor.is_cuda:
+                        frame.tensor.cpu()
+                except asyncio.QueueEmpty:
+                    break
+
+            logging.info("Waiting for ComfyUI client to cleanup")
+            await self.client.cleanup(exit_client=True, unload_models=True)
+            await asyncio.sleep(1)
+            logging.info("ComfyUI client cleanup complete")
+                        
+            # Force CUDA cache clear
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()  # Wait for all CUDA operations to complete
+                torch.cuda.empty_cache()
+                
+        except Exception as e:
+            logging.error(f"Error stopping ComfyUI pipeline: {e}")
+        finally:
+            self.pause_input = False
+            self.client = None
+        self.video_incoming_frames = asyncio.Queue()
+        self.width = DEFAULT_WIDTH
+        self.height = DEFAULT_HEIGHT
+
         logging.info("ComfyUI pipeline stopped")

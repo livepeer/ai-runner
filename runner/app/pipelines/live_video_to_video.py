@@ -13,6 +13,7 @@ import psutil
 
 from app.pipelines.base import Pipeline, HealthCheck
 from app.pipelines.utils import get_model_dir, get_torch_device
+from app.live.trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 from app.utils.errors import InferenceError
 
 proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntary_ctxt_switches", "nonvoluntary_ctxt_switches", "CoreDumping"]
@@ -26,6 +27,8 @@ class LiveVideoToVideoPipeline(Pipeline):
         self.infer_script_path = (
             Path(__file__).parent.parent / "live" / "infer.py"
         )
+        self.width = DEFAULT_WIDTH
+        self.height = DEFAULT_HEIGHT
         self.restart_count = 0
         self.start_process()
 
@@ -34,7 +37,7 @@ class LiveVideoToVideoPipeline(Pipeline):
     ):
         if not self.process:
             raise RuntimeError("Pipeline process not running")
-
+        
         max_retries = 10
         thrown_ex = None
         for attempt in range(max_retries):
@@ -109,6 +112,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         logging.info("Starting pipeline process")
         cmd = [sys.executable, str(self.infer_script_path)]
         cmd.extend(["--pipeline", self.model_id]) # we use the model_id as the pipeline name for now
+        cmd.extend(["--initial-params", json.dumps({"width": self.width, "height": self.height})])
         cmd.extend(["--http-port", "8888"])
         # TODO: set torch device from self.torch_device
 
