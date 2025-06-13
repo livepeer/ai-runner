@@ -151,6 +151,8 @@ class StreamDiffusionWrapper:
 
         self.stream: StreamDiffusion = self._load_model(
             model_id_or_path=model_id_or_path,
+            width=width,
+            height=height,
             lora_dict=lora_dict,
             lcm_lora_id=lcm_lora_id,
             vae_id=vae_id,
@@ -352,6 +354,8 @@ class StreamDiffusionWrapper:
     def _load_model(
         self,
         model_id_or_path: str,
+        width: int,
+        height: int,
         t_index_list: List[int],
         lora_dict: Optional[Dict[str, float]] = None,
         lcm_lora_id: Optional[str] = None,
@@ -491,12 +495,14 @@ class StreamDiffusionWrapper:
                     model_id_or_path: str,
                     max_batch_size: int,
                     min_batch_size: int,
+                    width: int,
+                    height: int,
                 ):
                     maybe_path = Path(model_id_or_path)
                     if maybe_path.exists():
-                        return f"{maybe_path.stem}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}--mode-{self.mode}"
+                        return f"{maybe_path.stem}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}--mode-{self.mode}--width-{width}--height-{height}"
                     else:
-                        return f"{model_id_or_path}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}--mode-{self.mode}"
+                        return f"{model_id_or_path}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--max_batch-{max_batch_size}--min_batch-{min_batch_size}--mode-{self.mode}--width-{width}--height-{height}"
 
                 engine_dir = Path(engine_dir)
                 unet_path = os.path.join(
@@ -505,6 +511,8 @@ class StreamDiffusionWrapper:
                         model_id_or_path=model_id_or_path,
                         max_batch_size=stream.trt_unet_batch_size,
                         min_batch_size=stream.trt_unet_batch_size,
+                        width=self.width,
+                        height=self.height,
                     ),
                     "unet.engine",
                 )
@@ -518,6 +526,8 @@ class StreamDiffusionWrapper:
                         min_batch_size=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
+                        width=self.width,
+                        height=self.height,
                     ),
                     "vae_encoder.engine",
                 )
@@ -531,6 +541,8 @@ class StreamDiffusionWrapper:
                         min_batch_size=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
+                        width=self.width,
+                        height=self.height,
                     ),
                     "vae_decoder.engine",
                 )

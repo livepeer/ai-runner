@@ -30,6 +30,20 @@ def parse_args():
         help="Directory to save TensorRT engines (default: engines)"
     )
 
+    parser.add_argument(
+        "--width",
+        type=int,
+        default=512,
+        help="Width of the output image (default: 512)"
+    )
+
+    parser.add_argument(
+        "--height", 
+        type=int,
+        default=512,
+        help="Height of the output image (default: 512)"
+    )
+
     return parser.parse_args()
 
 def main():
@@ -49,7 +63,9 @@ def main():
         frame_buffer_size=1,
         model_id_or_path=args.model_id,
         t_index_list=t_index_list,
-        engine_dir=args.engine_dir
+        engine_dir=args.engine_dir,
+        width=args.width,
+        height=args.height
     )
 
     print("TensorRT engine building completed successfully!")

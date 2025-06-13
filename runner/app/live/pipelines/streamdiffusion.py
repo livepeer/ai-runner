@@ -8,6 +8,7 @@ from StreamDiffusionWrapper import StreamDiffusionWrapper
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
+from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 
 class StreamDiffusionParams(BaseModel):
@@ -16,6 +17,8 @@ class StreamDiffusionParams(BaseModel):
 
     prompt: str = "talking head, cyberpunk, tron, matrix, ultra-realistic, dark, futuristic, neon, 8k"
     model_id: str = "KBlueLeaf/kohaku-v2.1"
+    width: int = DEFAULT_WIDTH
+    height: int = DEFAULT_HEIGHT
     lora_dict: Optional[Dict[str, float]] = None
     use_lcm_lora: bool = True
     lcm_lora_id: str = "latent-consistency/lcm-lora-sdv1-5"
@@ -84,15 +87,57 @@ class StreamDiffusion(Pipeline):
                 self.params = new_params
                 return
 
+            # Check if resolution changed
+            if new_params.width != self.params.width or new_params.height != self.params.height:
+                await self.change_resolution(new_params)
+                return
+
         logging.info(f"Resetting diffuser for params change")
 
         self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
         self.params = new_params
         self.first_frame = True
 
+    async def change_resolution(self, new_params: StreamDiffusionParams):
+        """Change the resolution of the pipeline by stopping and reinitializing with new dimensions."""
+        logging.info(f"Changing resolution from {self.params.width}x{self.params.height} to {new_params.width}x{new_params.height}")
+        
+        # Stop the current pipeline
+        await self.stop()
+        
+        # Initialize with new parameters
+        self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+        self.params = new_params
+        self.first_frame = True
+        
+        logging.info("Resolution change complete")
+
     async def stop(self):
         logging.info("Stopping StreamDiffusion pipeline")
-        self.pipe = None
+        
+        # Clear the frame queue
+        while not self.frame_queue.empty():
+            try:
+                frame = self.frame_queue.get_nowait()
+                if hasattr(frame, 'tensor') and frame.tensor is not None:
+                    frame.tensor.cpu()
+                    del frame.tensor
+            except asyncio.QueueEmpty:
+                break
+        
+        # Clear pipeline tensors and delete the pipeline
+        if self.pipe is not None:
+            # Clear any cached tensors in the pipeline
+            if hasattr(self.pipe, 'stream'):
+                self.pipe.stream.clear()
+            # Delete the pipeline
+            del self.pipe
+            self.pipe = None
+        
+        # Force CUDA cache clearing
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
 
 def load_streamdiffusion_sync(params: StreamDiffusionParams):
@@ -104,8 +149,8 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams):
         lcm_lora_id=params.lcm_lora_id,
         t_index_list=params.t_index_list,
         frame_buffer_size=1,
-        width=512,
-        height=512,
+        width=params.width,
+        height=params.height,
         warmup=10,
         acceleration=params.acceleration,
         do_add_noise=params.do_add_noise,
