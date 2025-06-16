@@ -127,10 +127,7 @@ class StreamDiffusion(Pipeline):
         
         # Clear pipeline tensors and delete the pipeline
         if self.pipe is not None:
-            # Clear any cached tensors in the pipeline
-            if hasattr(self.pipe, 'stream'):
-                self.pipe.stream.clear()
-            # Delete the pipeline
+            # Delete the pipeline and let Python's garbage collector handle cleanup
             del self.pipe
             self.pipe = None
         
@@ -147,7 +144,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams):
         lora_dict=params.lora_dict,
         use_lcm_lora=params.use_lcm_lora,
         lcm_lora_id=params.lcm_lora_id,
-        t_index_list=params.t_index_list,
+        t_index_list=params.t_index_list or [37, 45, 48],
         frame_buffer_size=1,
         width=params.width,
         height=params.height,
