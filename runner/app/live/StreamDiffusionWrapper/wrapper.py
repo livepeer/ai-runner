@@ -46,7 +46,7 @@ class StreamDiffusionWrapper:
         cfg_type: Literal["none", "full", "self", "initialize"] = "self",
         seed: int = 2,
         use_safety_checker: bool = False,
-        engine_dir: Optional[Union[str, Path]] = "engines",
+        engine_dir: Optional[Union[str, Path]] = "/models/StreamDiffusion--engines",
     ):
         """
         Initializes the StreamDiffusionWrapper.
@@ -367,7 +367,7 @@ class StreamDiffusionWrapper:
         use_tiny_vae: bool = True,
         cfg_type: Literal["none", "full", "self", "initialize"] = "self",
         seed: int = 2,
-        engine_dir: Optional[Union[str, Path]] = "engines",
+        engine_dir: Optional[Union[str, Path]] = "/models/StreamDiffusion--engines",
     ) -> StreamDiffusion:
         """
         Loads the model.
@@ -554,7 +554,7 @@ class StreamDiffusionWrapper:
                     
                     unet_model = UNet(
                         fp16=True,
-                        device=stream.device,
+                        device=str(stream.device),
                         max_batch_size=stream.trt_unet_batch_size,
                         min_batch_size=stream.trt_unet_batch_size,
                         embedding_dim=stream.text_encoder.config.hidden_size,
@@ -577,7 +577,7 @@ class StreamDiffusionWrapper:
                     os.makedirs(os.path.dirname(vae_decoder_path), exist_ok=True)
                     stream.vae.forward = stream.vae.decode
                     vae_decoder_model = VAE(
-                        device=stream.device,
+                        device=str(stream.device),
                         max_batch_size=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
@@ -605,7 +605,7 @@ class StreamDiffusionWrapper:
                     os.makedirs(os.path.dirname(vae_encoder_path), exist_ok=True)
                     vae_encoder = TorchVAEEncoder(stream.vae).to(torch.device("cuda"))
                     vae_encoder_model = VAEEncoder(
-                        device=stream.device,
+                        device=str(stream.device),
                         max_batch_size=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
@@ -679,11 +679,11 @@ class StreamDiffusionWrapper:
             from diffusers.pipelines.stable_diffusion.safety_checker import (
                 StableDiffusionSafetyChecker,
             )
-            from transformers import CLIPFeatureExtractor
+            from transformers.models.clip import CLIPFeatureExtractor
 
             self.safety_checker = StableDiffusionSafetyChecker.from_pretrained(
                 "CompVis/stable-diffusion-safety-checker"
-            ).to(pipe.device)
+            ).to(device=pipe.device)
             self.feature_extractor = CLIPFeatureExtractor.from_pretrained(
                 "openai/clip-vit-base-patch32"
             )

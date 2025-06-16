@@ -142,8 +142,7 @@ function build_tensorrt_models() {
   TIMESTEPS="3 4" # This is basically the supported sizes for the t_index_list
   DIMENSIONS="512x512 384x704 704x384"
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
-    bash -c "mkdir -p /models/StreamDiffusion--engines && \
-         for model in $MODELS; do
+      bash -c "for model in $MODELS; do
                   for timestep in $TIMESTEPS; do
                       for dim in $DIMENSIONS; do
                           width=\${dim%x*}
