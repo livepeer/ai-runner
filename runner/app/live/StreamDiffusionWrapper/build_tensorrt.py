@@ -54,9 +54,15 @@ def main():
 
     print(f"Building TensorRT engines for model: {args.model_id}")
     print(f"Using {args.timesteps} timesteps: {t_index_list}")
+    print(f"Image dimensions: {args.width}x{args.height}")
+    
+    # Calculate latent dimensions (VAE downscales by factor of 8)
+    latent_width = args.width // 8
+    latent_height = args.height // 8
+    print(f"Expected latent dimensions: {latent_width}x{latent_height}")
     print(f"Engines will be saved to: {args.engine_dir}")
 
-    # Initialize wrapper which will trigger already TensorRT engine building
+    # Initialize wrapper which will trigger TensorRT engine building
     wrapper = StreamDiffusionWrapper(
         mode="img2img",
         acceleration="tensorrt",

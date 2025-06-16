@@ -549,6 +549,9 @@ class StreamDiffusionWrapper:
 
                 if not os.path.exists(unet_path):
                     os.makedirs(os.path.dirname(unet_path), exist_ok=True)
+                    
+                    print(f"Creating UNet model for image size: {self.width}x{self.height}")
+                    
                     unet_model = UNet(
                         fp16=True,
                         device=stream.device,
@@ -564,6 +567,10 @@ class StreamDiffusionWrapper:
                         unet_path + ".opt.onnx",
                         unet_path,
                         opt_batch_size=stream.trt_unet_batch_size,
+                        engine_build_options={
+                            'opt_image_height': self.height,
+                            'opt_image_width': self.width,
+                        },
                     )
 
                 if not os.path.exists(vae_decoder_path):
@@ -587,6 +594,10 @@ class StreamDiffusionWrapper:
                         opt_batch_size=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
+                        engine_build_options={
+                            'opt_image_height': self.height,
+                            'opt_image_width': self.width,
+                        },
                     )
                     delattr(stream.vae, "forward")
 
@@ -611,6 +622,10 @@ class StreamDiffusionWrapper:
                         opt_batch_size=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
+                        engine_build_options={
+                            'opt_image_height': self.height,
+                            'opt_image_width': self.width,
+                        },
                     )
 
                 cuda_stream = cuda.Stream()
@@ -672,6 +687,6 @@ class StreamDiffusionWrapper:
             self.feature_extractor = CLIPFeatureExtractor.from_pretrained(
                 "openai/clip-vit-base-patch32"
             )
-            self.nsfw_fallback_img = Image.new("RGB", (512, 512), (0, 0, 0))
+            self.nsfw_fallback_img = Image.new("RGB", (self.height, self.width), (0, 0, 0))
 
         return stream
