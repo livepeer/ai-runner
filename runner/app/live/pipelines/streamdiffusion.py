@@ -40,6 +40,7 @@ class StreamDiffusion(Pipeline):
         self.pipe: Optional[StreamDiffusionWrapper] = None
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
+        self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
@@ -47,9 +48,12 @@ class StreamDiffusion(Pipeline):
         logging.info("Pipeline initialization complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
-        output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
-        await self.frame_queue.put(output)
+        async with self._pipeline_lock:
+            if self.pipe is None:
+                raise RuntimeError("Pipeline not initialized")
+            out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
+            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+            await self.frame_queue.put(output)
 
     def process_tensor_sync(self, img_tensor: torch.Tensor):
         if self.pipe is None:
@@ -77,33 +81,39 @@ class StreamDiffusion(Pipeline):
         return await self.frame_queue.get()
 
     async def update_params(self, **params):
-        new_params = StreamDiffusionParams(**params)
-        if self.pipe is not None:
-            # avoid resetting the pipe if only the prompt changed
-            only_prompt = self.params.model_copy(update={"prompt": new_params.prompt})
-            if new_params == only_prompt:
-                logging.info(f"Updating prompt: {new_params.prompt}")
-                self.pipe.stream.update_prompt(new_params.prompt)
-                self.params = new_params
-                return
+        async with self._pipeline_lock:
+            new_params = StreamDiffusionParams(**params)
+            if self.pipe is not None:
+                # avoid resetting the pipe if only the prompt changed
+                only_prompt = self.params.model_copy(update={"prompt": new_params.prompt})
+                if new_params == only_prompt:
+                    logging.info(f"Updating prompt: {new_params.prompt}")
+                    self.pipe.stream.update_prompt(new_params.prompt)
+                    self.params = new_params
+                    return
 
-            # Check if resolution changed
-            if new_params.width != self.params.width or new_params.height != self.params.height:
-                await self.change_resolution(new_params)
-                return
+                # Check if resolution changed
+                if new_params.width != self.params.width or new_params.height != self.params.height:
+                    await self._change_resolution_locked(new_params)
+                    return
 
-        logging.info(f"Resetting diffuser for params change")
+            logging.info(f"Resetting diffuser for params change")
 
-        self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
-        self.params = new_params
-        self.first_frame = True
+            self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+            self.params = new_params
+            self.first_frame = True
 
     async def change_resolution(self, new_params: StreamDiffusionParams):
         """Change the resolution of the pipeline by stopping and reinitializing with new dimensions."""
+        async with self._pipeline_lock:
+            await self._change_resolution_locked(new_params)
+
+    async def _change_resolution_locked(self, new_params: StreamDiffusionParams):
+        """Internal method to change resolution. Must be called while holding the pipeline lock."""
         logging.info(f"Changing resolution from {self.params.width}x{self.params.height} to {new_params.width}x{new_params.height}")
         
         # Stop the current pipeline
-        await self.stop()
+        await self._stop_locked()
         
         # Initialize with new parameters
         self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
@@ -113,6 +123,12 @@ class StreamDiffusion(Pipeline):
         logging.info("Resolution change complete")
 
     async def stop(self):
+        """Stop the pipeline. Public method that acquires the lock."""
+        async with self._pipeline_lock:
+            await self._stop_locked()
+
+    async def _stop_locked(self):
+        """Internal method to stop the pipeline. Must be called while holding the pipeline lock."""
         logging.info("Stopping StreamDiffusion pipeline")
         
         # Clear the frame queue
@@ -121,7 +137,7 @@ class StreamDiffusion(Pipeline):
                 frame = self.frame_queue.get_nowait()
                 if hasattr(frame, 'tensor') and frame.tensor is not None:
                     frame.tensor.cpu()
-                    del frame.tensor
+                    # Don't try to delete the tensor attribute, just clear the reference
             except asyncio.QueueEmpty:
                 break
         
