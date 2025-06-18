@@ -579,7 +579,7 @@ class StreamDiffusionWrapper:
                     unet_model = UNet(
                         fp16=True,
                         device=str(stream.device),
-                        max_batch_size=stream.trt_unet_batch_size,
+                        max_batch=stream.trt_unet_batch_size,
                         min_batch_size=stream.trt_unet_batch_size,
                         embedding_dim=stream.text_encoder.config.hidden_size,
                         unet_dim=stream.unet.config.in_channels,
@@ -602,7 +602,7 @@ class StreamDiffusionWrapper:
                     stream.vae.forward = stream.vae.decode
                     vae_decoder_model = VAE(
                         device=str(stream.device),
-                        max_batch_size=self.batch_size
+                        max_batch=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
                         min_batch_size=self.batch_size
@@ -630,7 +630,7 @@ class StreamDiffusionWrapper:
                     vae_encoder = TorchVAEEncoder(stream.vae).to(torch.device("cuda"))
                     vae_encoder_model = VAEEncoder(
                         device=str(stream.device),
-                        max_batch_size=self.batch_size
+                        max_batch=self.batch_size
                         if self.mode == "txt2img"
                         else stream.frame_bff_size,
                         min_batch_size=self.batch_size
