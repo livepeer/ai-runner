@@ -56,9 +56,9 @@ def encode_av(
 
     if video_meta and video_codec:
         # Add a new stream to the output using the desired video codec
-        output_width = video_meta.get('output_width', DEFAULT_WIDTH)
-        output_height = video_meta.get('output_height', DEFAULT_HEIGHT)  
-        video_opts = { 'video_size':f'{output_width}x{output_height}', 'bf':'0' }
+        target_width = video_meta.get('target_width', DEFAULT_WIDTH)
+        target_height = video_meta.get('target_height', DEFAULT_HEIGHT)  
+        video_opts = { 'video_size':f'{target_width}x{target_height}', 'bf':'0' }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
         output_video_stream = output_container.add_stream(video_codec, options=video_opts)
