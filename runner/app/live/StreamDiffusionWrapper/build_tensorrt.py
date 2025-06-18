@@ -71,7 +71,8 @@ def main():
         t_index_list=t_index_list,
         engine_dir=args.engine_dir,
         width=args.width,
-        height=args.height
+        height=args.height,
+        build_engines_if_missing=True  # Explicitly enable engine building for this script
     )
 
     print("TensorRT engine building completed successfully!")

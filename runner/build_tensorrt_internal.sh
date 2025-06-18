@@ -135,7 +135,8 @@ for model in $MODELS; do
                 ((successful_builds++))
             else
                 echo "  ✗ Failed"
-                ((failed_builds++))
+                echo "Aborting build process due to failure."
+                exit 1
             fi
             echo
         done

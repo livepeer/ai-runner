@@ -215,6 +215,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams):
         similar_image_filter_threshold=params.similar_image_filter_threshold,
         use_denoising_batch=params.use_denoising_batch,
         seed=params.seed,
+        build_engines_if_missing=False,
     )
     pipe.prepare(
         prompt=params.prompt,

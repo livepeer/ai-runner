@@ -47,6 +47,7 @@ class StreamDiffusionWrapper:
         seed: int = 2,
         use_safety_checker: bool = False,
         engine_dir: Optional[Union[str, Path]] = "engines",
+        build_engines_if_missing: bool = True,
     ):
         """
         Initializes the StreamDiffusionWrapper.
@@ -165,6 +166,7 @@ class StreamDiffusionWrapper:
             cfg_type=cfg_type,
             seed=seed,
             engine_dir=engine_dir,
+            build_engines_if_missing=build_engines_if_missing,
         )
 
         if device_ids is not None:
@@ -368,6 +370,7 @@ class StreamDiffusionWrapper:
         cfg_type: Literal["none", "full", "self", "initialize"] = "self",
         seed: int = 2,
         engine_dir: Optional[Union[str, Path]] = "engines",
+        build_engines_if_missing: bool = True,
     ) -> StreamDiffusion:
         """
         Loads the model.
@@ -546,6 +549,27 @@ class StreamDiffusionWrapper:
                     ),
                     "vae_decoder.engine",
                 )
+
+                # Check if all required engines exist
+                missing_engines = []
+                if not os.path.exists(unet_path):
+                    missing_engines.append(f"UNet engine: {unet_path}")
+                if not os.path.exists(vae_decoder_path):
+                    missing_engines.append(f"VAE decoder engine: {vae_decoder_path}")
+                if not os.path.exists(vae_encoder_path):
+                    missing_engines.append(f"VAE encoder engine: {vae_encoder_path}")
+                
+                if missing_engines:
+                    if build_engines_if_missing:
+                        print(f"Missing TensorRT engines, building them...")
+                        for engine in missing_engines:
+                            print(f"  - {engine}")
+                    else:
+                        error_msg = f"Required TensorRT engines are missing and build_engines_if_missing=False:\n"
+                        for engine in missing_engines:
+                            error_msg += f"  - {engine}\n"
+                        error_msg += f"\nTo build engines, set build_engines_if_missing=True or run the build script manually."
+                        raise RuntimeError(error_msg)
 
                 if not os.path.exists(unet_path):
                     os.makedirs(os.path.dirname(unet_path), exist_ok=True)
