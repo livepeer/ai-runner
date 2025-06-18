@@ -26,8 +26,8 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
-    width: int = 512
-    height: int = 512
+    width: int = DEFAULT_WIDTH
+    height: int = DEFAULT_HEIGHT
 
     @field_validator('prompt')
     @classmethod
@@ -54,8 +54,6 @@ class ComfyUI(Pipeline):
     def __init__(self):
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
-        self.width = DEFAULT_WIDTH
-        self.height = DEFAULT_HEIGHT
         self.pause_input = False
         self.client = None
 

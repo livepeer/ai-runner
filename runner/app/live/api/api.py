@@ -124,19 +124,9 @@ async def handle_start_stream(request: web.Request):
         config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
         # Try to get dimensions from workflow first
-        workflow = params.params.get("prompt")
-        width = DEFAULT_WIDTH
-        height = DEFAULT_HEIGHT
-        
-        if process.pipeline == "comfyui" and workflow is not None and isinstance(workflow, dict) or isinstance(workflow,str):
-            width, height = ComfyUtils.get_latent_image_dimensions(workflow)
-            # Update params to match the dimensions from the workflow 
-            params.params.update({"width": width, "height": height})
-            logging.info(f"Using dimensions from workflow: {width}x{height}")
-        else:
-            width = params.params.get("width", DEFAULT_WIDTH)
-            height = params.params.get("height", DEFAULT_HEIGHT)
-            logging.info(f"Using dimensions from params: {width}x{height}")
+        width = params.params.get("width", DEFAULT_WIDTH)
+        height = params.params.get("height", DEFAULT_HEIGHT)
+        logging.info(f"Using dimensions from params: {width}x{height}")
 
         protocol = TrickleProtocol(
             params.subscribe_url,
