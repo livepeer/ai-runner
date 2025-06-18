@@ -8,7 +8,7 @@ from fractions import Fraction
 from collections import deque
 from PIL import Image
 
-from .frame import VideoOutput, AudioOutput, InputFrame
+from .frame import VideoOutput, AudioOutput, InputFrame, DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 # use mpegts default time base
 OUT_TIME_BASE=Fraction(1, 90_000)
@@ -56,8 +56,8 @@ def encode_av(
 
     if video_meta and video_codec:
         # Add a new stream to the output using the desired video codec
-        output_width = video_meta['output_width']
-        output_height = video_meta['output_height']
+        output_width = video_meta.get('output_width', DEFAULT_WIDTH)
+        output_height = video_meta.get('output_height', DEFAULT_HEIGHT)  
         video_opts = { 'video_size':f'{output_width}x{output_height}', 'bf':'0' }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
