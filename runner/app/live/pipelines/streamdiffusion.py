@@ -49,8 +49,6 @@ class StreamDiffusion(Pipeline):
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
         async with self._pipeline_lock:
-            if self.pipe is None:
-                raise RuntimeError("Pipeline not initialized")
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
             await self.frame_queue.put(output)
@@ -102,11 +100,6 @@ class StreamDiffusion(Pipeline):
             self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
             self.params = new_params
             self.first_frame = True
-
-    async def change_resolution(self, new_params: StreamDiffusionParams):
-        """Change the resolution of the pipeline by stopping and reinitializing with new dimensions."""
-        async with self._pipeline_lock:
-            await self._change_resolution_locked(new_params)
 
     async def _change_resolution_locked(self, new_params: StreamDiffusionParams):
         """Internal method to change resolution. Must be called while holding the pipeline lock."""
@@ -163,10 +156,7 @@ class StreamDiffusion(Pipeline):
             queue_clear_count = 0
             while not self.frame_queue.empty() and queue_clear_count < 100:  # Limit iterations
                 try:
-                    frame = self.frame_queue.get_nowait()
-                    if hasattr(frame, 'tensor') and frame.tensor is not None:
-                        # Move to CPU in a separate thread to avoid blocking
-                        await asyncio.to_thread(lambda: frame.tensor.cpu())
+                    self.frame_queue.get_nowait()
                     queue_clear_count += 1
                 except asyncio.QueueEmpty:
                     break
@@ -179,8 +169,7 @@ class StreamDiffusion(Pipeline):
         # Clear pipeline tensors and delete the pipeline
         if self.pipe is not None:
             try:
-                # Delete the pipeline and let Python's garbage collector handle cleanup
-                del self.pipe
+                # Set self.pipe to None
                 self.pipe = None
                 logging.info("Pipeline deleted successfully")
             except Exception as e:
