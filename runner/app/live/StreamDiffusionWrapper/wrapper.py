@@ -46,7 +46,7 @@ class StreamDiffusionWrapper:
         cfg_type: Literal["none", "full", "self", "initialize"] = "self",
         seed: int = 2,
         use_safety_checker: bool = False,
-        engine_dir: Optional[Union[str, Path]] = "/models/StreamDiffusion--engines",
+        engine_dir: Optional[Union[str, Path]] = "engines",
     ):
         """
         Initializes the StreamDiffusionWrapper.
@@ -367,7 +367,7 @@ class StreamDiffusionWrapper:
         use_tiny_vae: bool = True,
         cfg_type: Literal["none", "full", "self", "initialize"] = "self",
         seed: int = 2,
-        engine_dir: Optional[Union[str, Path]] = "/models/StreamDiffusion--engines",
+        engine_dir: Optional[Union[str, Path]] = "engines",
     ) -> StreamDiffusion:
         """
         Loads the model.

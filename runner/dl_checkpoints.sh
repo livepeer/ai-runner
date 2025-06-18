@@ -139,7 +139,7 @@ function build_tensorrt_models() {
   docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
 
   MODELS="stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1"
-  TIMESTEPS="3" # This is basically the supported sizes for the t_index_list
+  TIMESTEPS="4" # This is basically the supported sizes for the t_index_list
   DIMENSIONS="384x704 704x384"
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
       bash -c "for model in $MODELS; do

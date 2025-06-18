@@ -26,8 +26,8 @@ def parse_args():
     parser.add_argument(
         "--engine-dir",
         type=str,
-        default="/models/StreamDiffusion--engines",
-        help="Directory to save TensorRT engines (default: /models/StreamDiffusion--engines)"
+        default="engines",
+        help="Directory to save TensorRT engines (default: engines)"
     )
 
     parser.add_argument(

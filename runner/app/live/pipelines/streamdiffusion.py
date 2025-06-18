@@ -214,7 +214,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams):
         lora_dict=params.lora_dict,
         use_lcm_lora=params.use_lcm_lora,
         lcm_lora_id=params.lcm_lora_id,
-        t_index_list=params.t_index_list or [37, 45, 48],
+        t_index_list=params.t_index_list,
         frame_buffer_size=1,
         width=params.width,
         height=params.height,

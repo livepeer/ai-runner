@@ -9,7 +9,7 @@
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 MODELS="stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1"
 TIMESTEPS="3 4" # This is basically the supported sizes for the t_index_list
-DIMENSIONS="512x512 384x704 704x384"
+DIMENSIONS="384x704 704x384"
 
 # Function to display help
 function display_help() {
@@ -17,9 +17,9 @@ function display_help() {
     echo "Usage: $0 [options]"
     echo "Options:"
     echo "  --models MODEL_LIST     Comma-separated list of models (default: stabilityai/sd-turbo,KBlueLeaf/kohaku-v2.1)"
-    echo "  --timesteps TIMESTEPS   Space-separated list of timesteps (default: 3 4)"
-    echo "  --dimensions DIMS       Space-separated list of dimensions in WxH format (default: 512x512 384x704 704x384)"
-    echo "  --output-dir DIR        Output directory for TensorRT engines (default: /models/StreamDiffusion--engines)"
+    echo "  --timesteps TIMESTEPS   Space-separated list of timesteps (default: 4)"
+    echo "  --dimensions DIMS       Space-separated list of dimensions in WxH format (default: 384x704 704x384)"
+    echo "  --output-dir DIR        Output directory for TensorRT engines (default: engines)"
     echo "  --help                  Display this help message"
 }
 
