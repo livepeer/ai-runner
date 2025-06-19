@@ -65,10 +65,11 @@ if [ ! -f "$CONDA_PYTHON" ]; then
 fi
 
 # Check if the build script exists
-BUILD_SCRIPT="app/live/StreamDiffusionWrapper/build_tensorrt.py"
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+BUILD_SCRIPT="$SCRIPT_DIR/build_tensorrt.py"
 if [ ! -f "$BUILD_SCRIPT" ]; then
     echo "ERROR: Build script not found at $BUILD_SCRIPT"
-    echo "Make sure you're in the correct directory and the StreamDiffusion build script is available."
+    echo "Make sure the StreamDiffusion build script is available in the same directory as this script."
     exit 1
 fi
 

@@ -138,24 +138,12 @@ function build_tensorrt_models() {
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
 
-  MODELS="stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1"
-  TIMESTEPS="4" # This is basically the supported sizes for the t_index_list
-  DIMENSIONS="384x704 704x384"
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
-      bash -c "for model in $MODELS; do
-                  for timestep in $TIMESTEPS; do
-                      for dim in $DIMENSIONS; do
-                          width=\${dim%x*}
-                          height=\${dim#*x}
-                          echo \"Building TensorRT engines for model=\$model timestep=\$timestep dimensions=\${width}x\${height}...\" && \
-                          $CONDA_PYTHON app/live/StreamDiffusionWrapper/build_tensorrt.py --model-id \$model --timesteps \$timestep --width \$width --height \$height
-                      done
-                  done
-              done
-              adduser $(id -u -n)
-              chown -R $(id -u -n):$(id -g -n) /models
-              " \
-      || (echo "failed streamdiffusion tensorrt"; return 1)
+    bash -c "cd /app/app/live/StreamDiffusionWrapper && \
+             ./build_tensorrt_internal.sh --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' --timesteps '3' --dimensions '384x704 704x384' --output-dir /models/StreamDiffusion--engines && \
+             adduser $(id -u -n) && \
+             chown -R $(id -u -n):$(id -g -n) /models" \
+    || (echo "failed streamdiffusion tensorrt"; return 1)
 
   # Depth-Anything-Tensorrt
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
