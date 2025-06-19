@@ -14,7 +14,6 @@ from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
-from utils import ComfyUtils
 
 MAX_FILE_AGE = 86400  # 1 day
 

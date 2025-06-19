@@ -9,7 +9,6 @@ import pathlib
 from .interface import Pipeline
 from comfystream.client import ComfyStreamClient
 from trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
-from utils import ComfyUtils
 
 import logging
 
