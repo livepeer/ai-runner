@@ -114,7 +114,7 @@ class ComfyUI(Pipeline):
                 except asyncio.QueueEmpty:
                     break
             logging.info("Waiting for ComfyUI client to cleanup")
-            await self.client.cleanup(exit_client=True, unload_models=True)
+            await self.client.cleanup()
             await asyncio.sleep(1)
             logging.info("ComfyUI client cleanup complete")
             # Force CUDA cache clear
