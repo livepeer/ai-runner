@@ -95,8 +95,6 @@ echo "Output directory: $OUTPUT_DIR"
 echo
 
 total_builds=0
-successful_builds=0
-failed_builds=0
 
 # Calculate total number of builds
 for model in $MODELS; do
@@ -133,7 +131,6 @@ for model in $MODELS; do
                 --width "$width" \
                 --height "$height"; then
                 echo "  ✓ Success"
-                ((successful_builds++))
             else
                 echo "  ✗ Failed"
                 echo "Aborting build process due to failure."
@@ -147,19 +144,10 @@ done
 # Summary
 echo "Build process completed!"
 echo "Total builds: $total_builds"
-echo "Successful: $successful_builds"
-echo "Failed: $failed_builds"
 
-if [ $failed_builds -gt 0 ]; then
-    echo "WARNING: Some builds failed. Check the logs above for details."
-    exit 1
-else
-    echo "All TensorRT engines built successfully!"
-    
-    # List built engines
-    if [ -d "$OUTPUT_DIR" ]; then
-        echo
-        echo "Built engines:"
-        find "$OUTPUT_DIR" -name "*.engine" -o -name "*.trt" 2>/dev/null | sort
-    fi
+# List built engines
+if [ -d "$OUTPUT_DIR" ]; then
+    echo
+    echo "Built engines:"
+    find "$OUTPUT_DIR" -name "*.engine" -o -name "*.trt" 2>/dev/null | sort
 fi
