@@ -125,13 +125,32 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
                     if image.mode != "RGB":
                         image = image.convert("RGB")
                     width, height = image.size
-                    
-                    if (width, height) != (target_width, target_height):
-                        # Crop to the center to match target dimensions
-                        start_x = width // 2 - target_width // 2
-                        start_y = height // 2 - target_height // 2
-                        image = image.crop((start_x, start_y, start_x + target_width, start_y + target_height))
 
+                    # Calculate aspect ratios
+                    input_ratio = width / height
+                    output_ratio = target_width / target_height
+                    if input_ratio != output_ratio:
+                        # Need to crop to match output aspect ratio
+                        if input_ratio > output_ratio:
+                            # Input is wider than output - crop width
+                            new_width = int(height * output_ratio)
+                            start_x = (width - new_width) // 2
+                            image = image.crop(
+                                (start_x, 0, start_x + new_width, height)
+                            )
+                        else:
+                            # Input is taller than output - crop height
+                            new_height = int(width / output_ratio)
+                            start_y = (height - new_height) // 2
+                            image = image.crop(
+                                (0, start_y, width, start_y + new_height)
+                            )
+
+                    # Resize to final dimensions
+                    if (target_width, target_height) != image.size:
+                        image = image.resize((target_width, target_height))
+                        
+                        
                     # Convert to tensor
                     image_np = np.array(image).astype(np.float32) / 255.0
                     tensor = torch.tensor(image_np).unsqueeze(0)
