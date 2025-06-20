@@ -1216,8 +1216,8 @@ components:
           - type: string
           - type: 'null'
           title: Model Id
-          description: "Optional Hugging Face model ID for text-to-speech generation.\
-            \ If omitted, the pipeline\u2019s configured model is used."
+          description: Optional Hugging Face model ID for text-to-speech generation.
+            If omitted, the pipelines configured model is used.
         text:
           type: string
           title: Text
