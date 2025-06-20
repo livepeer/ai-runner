@@ -44,7 +44,7 @@ class TextToSpeechParams(BaseModel):
         Optional[str],
         Field(
             default=None,
-            description="Optional Hugging Face model ID for text-to-speech generation. If omitted, the pipeline’s configured model is used.",
+            description="Optional Hugging Face model ID for text-to-speech generation. If omitted, the pipelines configured model is used.",
         ),
     ]
     text: Annotated[
