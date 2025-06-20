@@ -125,7 +125,14 @@ async def handle_start_stream(request: web.Request):
         # Try to get dimensions from workflow first
         width = params.params.get("width", DEFAULT_WIDTH)
         height = params.params.get("height", DEFAULT_HEIGHT)
-        logging.info(f"Using dimensions from params: {width}x{height}")
+        if process.pipeline == "comfyui":
+            # TODO: Remove this once ComfyUI pipeline supports different resolutions without a restart
+            width = DEFAULT_WIDTH
+            height = DEFAULT_HEIGHT
+            params.params = params.params | {"width": width, "height": height}
+            logging.warning("Using default dimensions for ComfyUI pipeline")
+        else:
+            logging.info(f"Using dimensions from params: {width}x{height}")
 
         protocol = TrickleProtocol(
             params.subscribe_url,
