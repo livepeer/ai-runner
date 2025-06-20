@@ -311,7 +311,7 @@ class ProcessGuardian:
                         # So we skip the restart here and move the state to ERROR so the worker will restart the whole container.
                         # TODO: Remove this exception once pipeline shutdown is fixed and restarting process is useful again.
                         raise Exception("Skipping process restart due to pipeline shutdown issues")
-                        #await self._restart_process()
+                        await self._restart_process()
                     except Exception:
                         logging.exception("Failed to stop streamer and restart process. Moving to ERROR state", stack_info=True)
                         self.status.update_state(PipelineState.ERROR)
