@@ -23,7 +23,7 @@ class StreamDiffusionParams(BaseModel):
     use_lcm_lora: bool = True
     lcm_lora_id: str = "latent-consistency/lcm-lora-sdv1-5"
     num_inference_steps: int = 50
-    t_index_list: Optional[List[int]] = [37, 45, 48]
+    t_index_list: List[int] = [37, 45, 48]
     scale: float = 1.0
     acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt"
     use_denoising_batch: bool = True
@@ -90,110 +90,16 @@ class StreamDiffusion(Pipeline):
                     self.params = new_params
                     return
 
-                # Check if resolution changed
-                if new_params.width != self.params.width or new_params.height != self.params.height:
-                    await self._change_resolution_locked(new_params)
-                    return
-
             logging.info(f"Resetting diffuser for params change")
 
             self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
             self.params = new_params
             self.first_frame = True
 
-    async def _change_resolution_locked(self, new_params: StreamDiffusionParams):
-        """Internal method to change resolution. Must be called while holding the pipeline lock."""
-        logging.info(f"Changing resolution from {self.params.width}x{self.params.height} to {new_params.width}x{new_params.height}")
-        
-        # Stop the current pipeline with timeout protection
-        try:
-            await asyncio.wait_for(self._stop_locked(), timeout=8.0)
-        except asyncio.TimeoutError:
-            logging.warning("Timeout during resolution change stop, forcing cleanup")
-            self.pipe = None
-            if torch.cuda.is_available():
-                try:
-                    torch.cuda.empty_cache()
-                except Exception as e:
-                    logging.warning(f"Error during forced CUDA cleanup: {e}")
-        
-        # Initialize with new parameters
-        self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
-        self.params = new_params
-        self.first_frame = True
-        
-        logging.info("Resolution change complete")
-
     async def stop(self):
-        """Stop the pipeline. Public method that acquires the lock."""
-        try:
-            # Add a timeout to prevent hanging indefinitely
-            await asyncio.wait_for(self._stop_with_lock(), timeout=10.0)
-        except asyncio.TimeoutError:
-            logging.error("Timeout occurred while stopping StreamDiffusion pipeline")
-            # Force cleanup even if timeout occurred
-            self.pipe = None
-            if torch.cuda.is_available():
-                try:
-                    torch.cuda.empty_cache()
-                except Exception as e:
-                    logging.warning(f"Error during CUDA cache cleanup: {e}")
-        except Exception as e:
-            logging.error(f"Error stopping StreamDiffusion pipeline: {e}")
-            self.pipe = None
-
-    async def _stop_with_lock(self):
-        """Helper method to acquire lock and stop."""
         async with self._pipeline_lock:
-            await self._stop_locked()
-
-    async def _stop_locked(self):
-        """Internal method to stop the pipeline. Must be called while holding the pipeline lock."""
-        logging.info("Stopping StreamDiffusion pipeline")
-        
-        # Clear the frame queue with timeout protection
-        try:
-            queue_clear_count = 0
-            while not self.frame_queue.empty() and queue_clear_count < 100:  # Limit iterations
-                try:
-                    self.frame_queue.get_nowait()
-                    queue_clear_count += 1
-                except asyncio.QueueEmpty:
-                    break
-                except Exception as e:
-                    logging.warning(f"Error clearing frame from queue: {e}")
-                    break
-        except Exception as e:
-            logging.warning(f"Error during frame queue cleanup: {e}")
-        
-        # Clear pipeline tensors and delete the pipeline
-        if self.pipe is not None:
-            try:
-                # Set self.pipe to None
-                self.pipe = None
-                logging.info("Pipeline deleted successfully")
-            except Exception as e:
-                logging.warning(f"Error deleting pipeline: {e}")
-                self.pipe = None
-        
-        # Force CUDA cache clearing with timeout protection
-        if torch.cuda.is_available():
-            try:
-                # Run CUDA operations in a separate thread with timeout
-                await asyncio.wait_for(
-                    asyncio.to_thread(self._cuda_cleanup), 
-                    timeout=5.0  # 5 second timeout for CUDA cleanup
-                )
-                logging.info("CUDA cleanup completed successfully")
-            except asyncio.TimeoutError:
-                logging.warning("CUDA cleanup timed out, continuing anyway")
-            except Exception as e:
-                logging.warning(f"Error during CUDA cleanup: {e}")
-
-    def _cuda_cleanup(self):
-        """Synchronous CUDA cleanup operations."""
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+            self.pipe = None
+            self.frame_queue = asyncio.Queue()
 
 
 def load_streamdiffusion_sync(params: StreamDiffusionParams):
