@@ -17,10 +17,6 @@ class InferenceError(Exception):
         self.original_exception = original_exception
 
 
-class InvalidInputError(InferenceError):
-    """Exception raised when input validation fails."""
-    pass
-
 
 class ModelOOMError(InferenceError):
     """Exception raised when the model runs out of memory."""

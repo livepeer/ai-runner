@@ -1,11 +1,10 @@
+import base64
 import logging
 import os
 import time
-from typing import Annotated, Dict, Tuple, Union
-from pathlib import Path
-
+from typing import Annotated, Dict, Tuple, Union, Optional
 import torch
-from fastapi import APIRouter, Depends, status, UploadFile, File, Form
+from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, validator
@@ -16,7 +15,6 @@ from app.routes.utils import (
     AudioResponse,
     HTTPError,
     audio_to_data_url,
-    file_exceeds_max_size,
     handle_pipeline_exception,
     http_error,
 )
@@ -27,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 # ---------------- Validation limits ----------------
 MAX_TEXT_LEN = 10000  # maximum characters for text
-MAX_DESC_LEN = 1000  # maximum characters for description
 MAX_AUDIO_BYTES = 10 * 1024 * 1024  # 10 MB
 
 # Pipeline specific error handling configuration.
@@ -40,13 +37,14 @@ PIPELINE_ERROR_CONFIG: Dict[str, Tuple[Union[str, None], int]] = {
 }
 
 class TextToSpeechParams(BaseModel):
+
     # TODO: Make model_id and other None properties optional once Go codegen tool
     # supports OAPI 3.1 https://github.com/deepmap/oapi-codegen/issues/373
     model_id: Annotated[
-        str,
+        Optional[str],
         Field(
-            default="ResembleAI/chatterbox",
-            description="Hugging Face model ID used for text to speech generation.",
+            default=None,
+            description="Optional Hugging Face model ID for text-to-speech generation. If omitted, the pipeline’s configured model is used.",
         ),
     ]
     text: Annotated[
@@ -61,26 +59,16 @@ class TextToSpeechParams(BaseModel):
             description="Text input for speech generation.",
         ),
     ]
-    description: Annotated[
-        str | None,
-        Field(
-            default=(
-                "A male speaker delivers a slightly expressive and animated speech "
-                "with a moderate speed and pitch."
-            ),
-            description=("Description of speaker to steer text to speech generation."),
-        ),
-    ]
-    audio_prompt_path: Annotated[
-        str | None,
+    audio_prompt_base64: Annotated[
+        bytes | None,
         Field(
             default=None,
             description=(
-                "Optional path or URL to a reference audio clip for voice cloning (only used when model_id refers to Chatterbox)."
+                "Optional base64-encoded audio data for voice cloning reference. Provide as base64-encoded string; it will be decoded server-side. Must be a valid audio file format like WAV or MP3."
             ),
         ),
     ]
-    
+
     @validator("text")
     def validate_text_length(cls, v):
         if not v.strip():
@@ -89,11 +77,24 @@ class TextToSpeechParams(BaseModel):
             raise ValueError(f"text exceeds {MAX_TEXT_LEN} characters")
         return v
         
-    @validator("description")
-    def validate_description_length(cls, v):
-        if len(v) > MAX_DESC_LEN:
-            raise ValueError(f"description exceeds {MAX_DESC_LEN} characters")
-        return v
+    @validator("audio_prompt_base64", pre=True)
+    def validate_and_decode_audio_prompt(cls, v):
+        """Decode base64 audio once during validation and enforce size limits."""
+        if v is None:
+            return None
+        try:
+            # Accept already-bytes input for flexibility.
+            if isinstance(v, (bytes, bytearray)):
+                decoded = bytes(v)
+            else:
+                decoded = base64.b64decode(v)
+            if len(decoded) > MAX_AUDIO_BYTES:
+                raise ValueError(
+                    f"decoded audio data exceeds {MAX_AUDIO_BYTES / (1024 * 1024):.1f} MB"
+                )
+            return decoded
+        except Exception as e:
+            raise ValueError(f"invalid base64 audio data: {e}") from e
 
 
 RESPONSES = {
@@ -112,18 +113,7 @@ RESPONSES = {
 }
 
 
-def _multipart_params(
-    model_id: str = Form(""),
-    text: str = Form(""),
-    description: str = Form(
-        "A male speaker delivers a slightly expressive and animated speech with a moderate speed and pitch."
-    ),
-) -> "TextToSpeechParams":
-    return TextToSpeechParams(
-        model_id=model_id,
-        text=text,
-        description=description,
-    )
+
 
 
 @router.post(
@@ -131,8 +121,8 @@ def _multipart_params(
     response_model=AudioResponse,
     responses=RESPONSES,
     description=(
-        "Generate a text-to-speech audio file based on the provided text input and "
-        "speaker description."
+        "Generate a text-to-speech audio file based on the provided text input."
+        "Optionally include base64-encoded audio for voice cloning."
     ),
     operation_id="genTextToSpeech",
     summary="Text To Speech",
@@ -146,8 +136,7 @@ def _multipart_params(
     include_in_schema=False,
 )
 async def text_to_speech(
-    params: TextToSpeechParams = Depends(_multipart_params),
-    audio_prompt: UploadFile | None = File(None, description="Optional reference audio file for Chatterbox voice cloning"),
+    params: TextToSpeechParams,
     pipeline: Pipeline = Depends(get_pipeline),
     token: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
 ):
@@ -169,36 +158,22 @@ async def text_to_speech(
                 content=http_error("Invalid bearer token."),
             )
 
-    # Check uploaded file size early
-    if audio_prompt is not None and file_exceeds_max_size(audio_prompt, MAX_AUDIO_BYTES):
-        return JSONResponse(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            content=http_error("audio_prompt too large; 10 MB max"),
+
+
+    # If a model_id is supplied and differs from the pipeline’s current model, log a warning.
+    if params.model_id and params.model_id != pipeline.model_id:
+        logger.warning(
+            "Requested model_id %s differs from pipeline model_id %s — proceeding with current pipeline.",
+            params.model_id,
+            pipeline.model_id,
         )
 
-    if params.model_id != "" and params.model_id != pipeline.model_id:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content=http_error(
-                f"pipeline configured with {pipeline.model_id} but called with "
-                f"{params.model_id}"
-            ),
-        )
-
-    # Handle uploaded audio prompt.
-    temp_path = None
-    if audio_prompt is not None:
-        suffix = Path(audio_prompt.filename or "audio").suffix or ".wav"
-        import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(await audio_prompt.read())
-            temp_path = tmp.name
-        params.audio_prompt_path = temp_path  # override
 
     try:
-        start = time.time()
-        out = pipeline(params)
-        logger.info(f"TextToSpeechPipeline took {time.time() - start} seconds.")
+        start_time = time.time()
+        output = pipeline(params)
+        end_time = time.time()
+        logger.info(f"TextToSpeechPipeline took {end_time - start_time} seconds.")
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.
@@ -209,11 +184,6 @@ async def text_to_speech(
             default_error_message="Text-to-speech pipeline error.",
             custom_error_config=PIPELINE_ERROR_CONFIG,
         )
-    finally:
-        if temp_path:
-            try:
-                os.remove(temp_path)
-            except OSError:
-                pass
 
-    return {"audio": {"url": audio_to_data_url(out)}}
+
+    return {"audio": {"url": audio_to_data_url(output)}}

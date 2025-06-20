@@ -207,30 +207,6 @@ def audio_to_data_url(buffer: io.BytesIO, format: str = "wav") -> str:
     return f"data:audio/{format};base64,{base64_audio}"
 
 
-def file_exceeds_max_size(
-    input_file: UploadFile, max_size: int = 10 * 1024 * 1024
-) -> bool:
-    """Checks if the uploaded file exceeds the specified maximum size.
-
-    Args:
-        input_file: The uploaded file to check.
-        max_size: The maximum allowed file size in bytes. Defaults to 10 MB.
-
-    Returns:
-        True if the file exceeds the maximum size, False otherwise.
-    """
-    try:
-        if input_file.file:
-            # Get size by moving the cursor to the end of the file and back.
-            input_file.file.seek(0, os.SEEK_END)
-            file_size = input_file.file.tell()
-            input_file.file.seek(0)
-            return file_size > max_size
-    except Exception as e:
-        print(f"Error checking file size: {e}")
-    return False
-
-
 def json_str_to_np_array(
     data: Optional[str], var_name: Optional[str] = None
 ) -> Optional[np.ndarray]:
