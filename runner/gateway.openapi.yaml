@@ -466,15 +466,14 @@ paths:
       - generate
       summary: Text To Speech
       description: Generate a text-to-speech audio file based on the provided text
-        input and speaker description.
+        input.Optionally include base64-encoded audio for voice cloning.
       operationId: genTextToSpeech
       requestBody:
         content:
-          multipart/form-data:
+          application/json:
             schema:
-              allOf:
-              - $ref: '#/components/schemas/Body_genTextToSpeech'
-              title: Body
+              $ref: '#/components/schemas/TextToSpeechParams'
+        required: true
       responses:
         '200':
           description: Successful Response
@@ -770,30 +769,6 @@ components:
       - image
       - model_id
       title: Body_genSegmentAnything2
-    Body_genTextToSpeech:
-      properties:
-        audio_prompt:
-          anyOf:
-          - type: string
-            format: binary
-          - type: 'null'
-          title: Audio Prompt
-          description: Optional reference audio file for Chatterbox voice cloning
-        model_id:
-          type: string
-          title: Model Id
-          default: ''
-        text:
-          type: string
-          title: Text
-          default: ''
-        description:
-          type: string
-          title: Description
-          default: A male speaker delivers a slightly expressive and animated speech
-            with a moderate speed and pitch.
-      type: object
-      title: Body_genTextToSpeech
     Body_genUpscale:
       properties:
         prompt:
@@ -1234,6 +1209,37 @@ components:
       - prompt
       - model_id
       title: TextToImageParams
+    TextToSpeechParams:
+      properties:
+        model_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Model Id
+          description: "Optional Hugging Face model ID for text-to-speech generation.\
+            \ If omitted, the pipeline\u2019s configured model is used."
+        text:
+          type: string
+          title: Text
+          description: Text input for speech generation.
+          default: When it was all over, the remaing animals, except for the pigs
+            and dogs, crept away in a body. They were shaken and miserable. They did
+            not know which was more shocking - the treachery of the animals who had
+            leagued themselves with Snowball, or the cruel retribution they had just
+            witnessed.
+        audio_prompt_base64:
+          anyOf:
+          - type: string
+            format: binary
+          - type: 'null'
+          title: Audio Prompt Base64
+          description: Optional base64-encoded audio data for voice cloning reference.
+            Provide as base64-encoded string; it will be decoded server-side. Must
+            be a valid audio file format like WAV or MP3.
+      type: object
+      title: TextToSpeechParams
+      required:
+      - model_id
     ValidationError:
       properties:
         loc:
