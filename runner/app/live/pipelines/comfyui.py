@@ -53,13 +53,13 @@ class ComfyUIParams(BaseModel):
 
 class ComfyUI(Pipeline):
     def __init__(self):
+        comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
+        self.client = ComfyStreamClient(cwd=comfy_ui_workspace)
         self.params: ComfyUIParams
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
-        self.client = None
 
     async def initialize(self, **params):
         """Initialize the ComfyUI pipeline with given parameters."""
-        self.client = ComfyStreamClient(cwd=os.getenv(COMFY_UI_WORKSPACE_ENV))
         new_params = ComfyUIParams(**params)
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
