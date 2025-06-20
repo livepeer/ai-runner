@@ -29,8 +29,8 @@ RUN conda run -n comfystream pip install --no-cache-dir \
     --index-url https://download.pytorch.org/whl/cu126
 
 
-# Install StreamDiffusion @ b623251 (latest at time of writing) into the comfystream environment
-RUN conda run -n comfystream pip install git+https://github.com/pschroedl/StreamDiffusion.git@10dbcab3c46b192992dc0440fbc75398c7fc430b#egg=streamdiffusion[tensorrt]
+# Install StreamDiffusion @ 1d2f46b (latest at time of writing) into the comfystream environment
+RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@1d2f46bbf3fc1a0742b55c67c458b26ca272756a#egg=streamdiffusion[tensorrt]
 
 # Install TensorRT bindings and libraries into the comfystream environment
 # TODO: update install-tensorrt script in streamdiffusion and use it instead of this
