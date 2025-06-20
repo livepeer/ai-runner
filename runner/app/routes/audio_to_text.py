@@ -12,7 +12,6 @@ from app.pipelines.base import Pipeline
 from app.routes.utils import (
     HTTPError,
     TextResponse,
-    file_exceeds_max_size,
     get_media_duration_ffmpeg,
     handle_pipeline_exception,
     http_error,
@@ -132,12 +131,6 @@ async def audio_to_text(
                 f"pipeline configured with {pipeline.model_id} but called with "
                 f"{model_id}."
             ),
-        )
-
-    if file_exceeds_max_size(audio, 50 * 1024 * 1024):
-        return JSONResponse(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            content=http_error("File size exceeds limit."),
         )
 
     try:

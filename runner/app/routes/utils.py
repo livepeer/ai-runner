@@ -206,7 +206,6 @@ def audio_to_data_url(buffer: io.BytesIO, format: str = "wav") -> str:
     base64_audio = base64.b64encode(buffer.read()).decode("utf-8")
     return f"data:audio/{format};base64,{base64_audio}"
 
-
 def json_str_to_np_array(
     data: Optional[str], var_name: Optional[str] = None
 ) -> Optional[np.ndarray]:
