@@ -1,3 +1,4 @@
+from functools import partial
 import logging
 import os
 import random
@@ -68,7 +69,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def upscale(
+def upscale(
     prompt: Annotated[
         str,
         Form(description="Text prompt(s) to guide upscaled image generation."),
