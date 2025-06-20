@@ -95,7 +95,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
                     frame = cast(av.VideoFrame, frame)
                     if frame.pts is None:
                         continue
-                    
+
                     # drop frames that come in too fast
                     # TODO also check timing relative to wall clock
                     pts_time = frame.time
@@ -110,22 +110,25 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
                         next_pts_time = next_pts_time + frame_interval
 
                     # Use efficient reformatter method while maintaining aspect ratio
-                    if frame.height > frame.width:
-                        # Portrait: use target_height as base
-                        h = target_height
-                        w = int((target_height * frame.width / frame.height) / 2) * 2  # force divisible by 2
-                    else:
-                        # Landscape: use target_width as base
-                        w = target_width
-                        h = int((target_width * frame.height / frame.width) / 2) * 2  # force divisible by 2
-                    
-                    frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
+                    if (frame.width, frame.height) != (target_width, target_height):
+                        target_aspect_ratio = float(target_width) / float(target_height)
+                        frame_aspect_ratio = float(frame.width) / float(frame.height)
+                        if target_aspect_ratio < frame_aspect_ratio:
+                            # We will need to crop the width below, so resize to match the target_height
+                            h = target_height
+                            w = int((target_height * frame.width / frame.height) / 2) * 2  # force divisible by 2
+                        else:
+                            # We will need to crop the height below, so resize to match the target_width
+                            w = target_width
+                            h = int((target_width * frame.height / frame.width) / 2) * 2  # force divisible by 2
+
+                        frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
 
                     image = frame.to_image()
                     if image.mode != "RGB":
                         image = image.convert("RGB")
                     width, height = image.size
-                    
+
                     if (width, height) != (target_width, target_height):
                         # Crop to the center to match target dimensions
                         start_x = width // 2 - target_width // 2
