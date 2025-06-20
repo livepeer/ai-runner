@@ -127,8 +127,7 @@ async def handle_start_stream(request: web.Request):
         height = params.params.get("height", DEFAULT_HEIGHT)
         if process.pipeline == "comfyui":
             # TODO: Remove this once ComfyUI pipeline supports different resolutions without a restart
-            width = DEFAULT_WIDTH
-            height = DEFAULT_HEIGHT
+            width = height = 512
             params.params = params.params | {"width": width, "height": height}
             logging.warning("Using default dimensions for ComfyUI pipeline")
         else:
