@@ -140,7 +140,7 @@ function build_tensorrt_models() {
 
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "cd /app/app/live/StreamDiffusionWrapper && \
-             ./build_tensorrt_internal.sh --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' --timesteps '3' --dimensions '384x704 704x384' --output-dir /models/StreamDiffusion--engines && \
+             ./build_tensorrt_internal.sh --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' --timesteps '3' --dimensions '384x704 512x512 704x384' --output-dir /models/StreamDiffusion--engines && \
              adduser $(id -u -n) && \
              chown -R $(id -u -n):$(id -g -n) /models" \
     || (echo "failed streamdiffusion tensorrt"; return 1)
