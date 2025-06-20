@@ -470,10 +470,11 @@ paths:
       operationId: genTextToSpeech
       requestBody:
         content:
-          application/json:
+          multipart/form-data:
             schema:
-              $ref: '#/components/schemas/TextToSpeechParams'
-        required: true
+              allOf:
+              - $ref: '#/components/schemas/Body_genTextToSpeech'
+              title: Body
       responses:
         '200':
           description: Successful Response
@@ -813,6 +814,30 @@ components:
       required:
       - image
       title: Body_genSegmentAnything2
+    Body_genTextToSpeech:
+      properties:
+        audio_prompt:
+          anyOf:
+          - type: string
+            format: binary
+          - type: 'null'
+          title: Audio Prompt
+          description: Optional reference audio file for Chatterbox voice cloning
+        model_id:
+          type: string
+          title: Model Id
+          default: ''
+        text:
+          type: string
+          title: Text
+          default: ''
+        description:
+          type: string
+          title: Description
+          default: A male speaker delivers a slightly expressive and animated speech
+            with a moderate speed and pitch.
+      type: object
+      title: Body_genTextToSpeech
     Body_genUpscale:
       properties:
         prompt:
@@ -1365,26 +1390,6 @@ components:
       required:
       - prompt
       title: TextToImageParams
-    TextToSpeechParams:
-      properties:
-        model_id:
-          type: string
-          title: Model Id
-          description: Hugging Face model ID used for text to speech generation.
-          default: ''
-        text:
-          type: string
-          title: Text
-          description: Text input for speech generation.
-          default: ''
-        description:
-          type: string
-          title: Description
-          description: Description of speaker to steer text to speech generation.
-          default: A male speaker delivers a slightly expressive and animated speech
-            with a moderate speed and pitch.
-      type: object
-      title: TextToSpeechParams
     ValidationError:
       properties:
         loc:
