@@ -6,6 +6,7 @@ from typing import Annotated, Dict, Tuple, Union, Optional
 import torch
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
+from fastapi.concurrency import run_in_threadpool
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, validator
 
@@ -41,28 +42,23 @@ class TextToSpeechParams(BaseModel):
     # TODO: Make model_id and other None properties optional once Go codegen tool
     # supports OAPI 3.1 https://github.com/deepmap/oapi-codegen/issues/373
     model_id: Annotated[
-        Optional[str],
+        str,
         Field(
-            default=None,
+            default="",
             description="Optional Hugging Face model ID for text-to-speech generation. If omitted, the pipelines configured model is used.",
         ),
     ]
     text: Annotated[
         str,
         Field(
-            default=(
-                "When it was all over, the remaing animals, except for the pigs and dogs, "
-                "crept away in a body. They were shaken and miserable. They did not know "
-                "which was more shocking - the treachery of the animals who had leagued "
-                "themselves with Snowball, or the cruel retribution they had just witnessed."
-            ),
+            default="Hi, there my name is AI.",
             description="Text input for speech generation.",
         ),
     ]
     audio_prompt_base64: Annotated[
-        bytes | None,
+        bytes,
         Field(
-            default=None,
+            default="",
             description=(
                 "Optional base64-encoded audio data for voice cloning reference. Provide as base64-encoded string; it will be decoded server-side. Must be a valid audio file format like WAV or MP3."
             ),
@@ -171,7 +167,7 @@ async def text_to_speech(
 
     try:
         start_time = time.time()
-        output = pipeline(params)
+        output = await run_in_threadpool(pipeline, params)
         end_time = time.time()
         logger.info(f"TextToSpeechPipeline took {end_time - start_time} seconds.")
     except Exception as e:
