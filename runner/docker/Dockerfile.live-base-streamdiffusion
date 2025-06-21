@@ -32,16 +32,18 @@ RUN conda run -n comfystream pip install --no-cache-dir \
 # Install StreamDiffusion @ 1d2f46b (latest at time of writing) into the comfystream environment
 RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@1d2f46bbf3fc1a0742b55c67c458b26ca272756a#egg=streamdiffusion[tensorrt]
 
-# Install TensorRT bindings and libraries into the comfystream environment
-# TODO: update install-tensorrt script in streamdiffusion and use it instead of this
-RUN conda run -n comfystream --no-capture-output pip install --upgrade tensorrt-cu12-bindings==10.9.0.34 tensorrt-cu12-libs==10.9.0.34 --root-user-action=ignore
-
+# Pin versions of ONNX runtime which are too loose on streamdiffusion setup.py
 RUN conda run -n comfystream pip install --no-cache-dir \
     onnx==1.17.0 onnxruntime==1.17.0 onnxruntime-gpu==1.20.2
 
-RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
-    huggingface-hub==0.25.2 \
-    transformers==4.38.2
+# Install TensorRT bindings and libraries into the comfystream environment
+# TODO: update install-tensorrt script in streamdiffusion and use it instead of this
+RUN conda run -n comfystream pip install --no-cache-dir --upgrade --root-user-action=ignore \
+    tensorrt==10.9.0.34 \
+    tensorrt-cu12-bindings==10.9.0.34 \
+    tensorrt-cu12-libs==10.9.0.34 \
+    polygraphy==0.49.24 \
+    onnx-graphsurgeon==0.5.8
 
 WORKDIR /app
 
