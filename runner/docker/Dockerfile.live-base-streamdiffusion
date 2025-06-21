@@ -2,41 +2,34 @@ ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
 # Install Miniconda and create the 'comfystream' environment
-ARG PYTHON_VERSION=3.10
+ARG PYTHON_VERSION=3.11
 ENV CONDA_DIR /workspace/miniconda3
 ENV PATH $CONDA_DIR/bin:$PATH
 
 RUN apt-get update && apt-get install -y --no-install-recommends wget curl ca-certificates && \
-    wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.11.0-2-Linux-x86_64.sh -O ~/miniconda.sh && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py311_23.11.0-2-Linux-x86_64.sh -O ~/miniconda.sh && \
     /bin/bash ~/miniconda.sh -b -p $CONDA_DIR && \
     rm ~/miniconda.sh && \
     conda init bash && \
     conda config --set auto_activate_base false && \
     conda clean -a -y && \
     conda create -n comfystream python=$PYTHON_VERSION -y && \
-    conda run -n comfystream pip install --no-cache-dir --upgrade pip==23.3.2 setuptools==69.5.1 wheel==0.43.0 && \
-    conda clean -a -y && \
-    apt-get purge -y --auto-remove wget curl && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    conda run -n comfystream pip install --no-cache-dir --upgrade pip==25.1.1 setuptools==79.0.1 wheel==0.43.0 && \
+    conda clean -a -y
 
 ENV PIP_PREFER_BINARY=1
 
-# Install StreamDiffusion dependencies into the comfystream environment
-RUN conda run -n comfystream pip install --no-cache-dir \
-    torch==2.1.0 \
-    torchvision==0.16.0 \
-    xformers===0.0.22.post7 \
-    --index-url https://download.pytorch.org/whl/cu121
+# Copy requirements file and install StreamDiffusion dependencies into the comfystream environment
+COPY ./requirements.streamdiffusion.txt /tmp/requirements.streamdiffusion.txt
+RUN conda run -n comfystream --no-capture-output pip install -r /tmp/requirements.streamdiffusion.txt --root-user-action=ignore
 
-# Install StreamDiffusion @ b623251 (latest at time of writing) into the comfystream environment
-RUN conda run -n comfystream pip install git+https://github.com/cumulo-autumn/StreamDiffusion.git@b623251#egg=streamdiffusion[tensorrt]
+# Install PyTorch with CUDA support (requires special index URL)
+RUN conda run -n comfystream --no-capture-output pip install torch==2.7.0 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --root-user-action=ignore
 
-# Install TensorRT extension and ensure compatible dependencies into the comfystream environment
-RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
-    huggingface-hub==0.25.2 \
-    transformers==4.38.2
-RUN conda run -n comfystream python -m streamdiffusion.tools.install-tensorrt
-
+# Install StreamDiffusion from git repository
+RUN conda run -n comfystream --no-capture-output pip install git+https://github.com/livepeer/StreamDiffusion.git@db6c93abbdd7886a17f471d576a6c99843b1f6f6#egg=streamdiffusion[tensorrt]
 WORKDIR /app
 
 # Create symlink for where StreamDiffusion builds TensorRT engines at runtime
