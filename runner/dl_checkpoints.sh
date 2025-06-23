@@ -206,6 +206,10 @@ function build_streamdiffusion_tensorrt() {
             adduser $(id -u -n) && \
             chown -R $(id -u -n):$(id -g -n) /models" \
     || (echo "failed streamdiffusion tensorrt"; return 1)
+}
+
+function build_comfyui_tensorrt() {
+  printf "\nBuilding ComfyUI TensorRT models...\n"
 
   # Depth-Anything-Tensorrt
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
