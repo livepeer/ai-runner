@@ -2,7 +2,7 @@ ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
 # Install Miniconda and create the 'comfystream' environment
-ARG PYTHON_VERSION=3.10
+ARG PYTHON_VERSION=3.11
 ENV CONDA_DIR /workspace/miniconda3
 ENV PATH $CONDA_DIR/bin:$PATH
 
@@ -25,23 +25,23 @@ ENV PIP_PREFER_BINARY=1
 RUN conda run -n comfystream pip install --no-cache-dir \
     torch==2.7.0 \
     torchvision==0.22.0 \
+    torchaudio==2.7.0 \
     xformers===0.0.30 \
     --index-url https://download.pytorch.org/whl/cu126
-
 
 # Install StreamDiffusion @ 1d2f46b (latest at time of writing) into the comfystream environment
 RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@1d2f46bbf3fc1a0742b55c67c458b26ca272756a#egg=streamdiffusion[tensorrt]
 
 # Pin versions of ONNX runtime which are too loose on streamdiffusion setup.py
 RUN conda run -n comfystream pip install --no-cache-dir \
-    onnx==1.17.0 onnxruntime==1.17.0 onnxruntime-gpu==1.20.2
+    onnx==1.18.0 onnxruntime==1.22.0 onnxruntime-gpu==1.22.0
 
 # Install TensorRT bindings and libraries into the comfystream environment
 # TODO: update install-tensorrt script in streamdiffusion and use it instead of this
 RUN conda run -n comfystream pip install --no-cache-dir --upgrade --root-user-action=ignore \
-    tensorrt==10.9.0.34 \
-    tensorrt-cu12-bindings==10.9.0.34 \
-    tensorrt-cu12-libs==10.9.0.34 \
+    tensorrt==10.12.0.36 \
+    tensorrt-cu12-bindings==10.12.0.36 \
+    tensorrt-cu12-libs==10.12.0.36 \
     polygraphy==0.49.24 \
     onnx-graphsurgeon==0.5.8
 
