@@ -74,8 +74,16 @@ class StreamDiffusion(Pipeline):
         if isinstance(out_tensor, list):
             out_tensor = out_tensor[0]
 
-        # The output tensor from the wrapper is (C, H, W), and the encoder expects (1, H, W, C).
-        return out_tensor.permute(1, 2, 0).unsqueeze(0)
+        # The output tensor format depends on the wrapper's output_type
+        # For output_type="pt", it should be (C, H, W) in range [0, 1]
+        # But let's handle a potential batch dimension and squeeze it.
+        if out_tensor.dim() == 4:
+            out_tensor = out_tensor.squeeze(0)
+        elif out_tensor.dim() != 3:
+            raise ValueError(f"Unexpected output tensor dimensions: {out_tensor.shape}")
+
+        # Now out_tensor should be (C, H, W), convert to (H, W, C)
+        return out_tensor.permute(1, 2, 0)
 
     async def get_processed_video_frame(self) -> VideoOutput:
         return await self.frame_queue.get()
