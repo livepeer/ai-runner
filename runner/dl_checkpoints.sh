@@ -201,7 +201,12 @@ function build_streamdiffusion_tensorrt() {
   docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
 
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
-    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' --timesteps '3' --dimensions '384x704 512x512 704x384' && \
+    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
+              --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
+              --timesteps '3' \
+              --dimensions '384x704 512x512 704x384' \
+              --controlnets 'lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1p_sd15_canny lllyasviel/control_v11p_sd15_lineart' \
+              && \
             adduser $(id -u -n) && \
             chown -R $(id -u -n):$(id -g -n) /models" \
     || (echo "failed streamdiffusion tensorrt"; return 1)

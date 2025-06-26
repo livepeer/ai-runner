@@ -10,6 +10,7 @@ CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 MODELS="stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1"
 TIMESTEPS="3 4" # This is basically the supported sizes for the t_index_list
 DIMENSIONS="384x704 704x384"
+CONTROLNETS="" # Default empty, will be set from command line
 
 # Function to display help
 function display_help() {
@@ -43,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --output-dir)
             OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --controlnets)
+            CONTROLNETS="$2"
             shift 2
             ;;
         --help)
@@ -92,6 +97,11 @@ echo "Models: $MODELS"
 echo "Timesteps: $TIMESTEPS"
 echo "Dimensions: $DIMENSIONS"
 echo "Output directory: $OUTPUT_DIR"
+if [ -n "$CONTROLNETS" ]; then
+    echo "ControlNets: $CONTROLNETS"
+else
+    echo "ControlNets: None"
+fi
 echo
 
 total_builds=0
@@ -130,7 +140,8 @@ for model in $MODELS; do
                 --timesteps "$timestep" \
                 --width "$width" \
                 --height "$height" \
-                --engine-dir "$OUTPUT_DIR"; then
+                --engine-dir "$OUTPUT_DIR" \
+                --controlnets "$CONTROLNETS"; then
                 echo "  ✓ Success"
             else
                 echo "  ✗ Failed"
