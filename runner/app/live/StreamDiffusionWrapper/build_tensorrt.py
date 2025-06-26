@@ -1,10 +1,6 @@
 import argparse
-import os
-import sys
 
-# Add the current script's directory to Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from wrapper import StreamDiffusionWrapper
+from streamdiffusion import StreamDiffusionWrapper
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Build TensorRT engines for StreamDiffusion")
@@ -38,7 +34,7 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--height", 
+        "--height",
         type=int,
         default=512,
         help="Height of the output image (default: 512)"
@@ -55,7 +51,7 @@ def main():
     print(f"Building TensorRT engines for model: {args.model_id}")
     print(f"Using {args.timesteps} timesteps: {t_index_list}")
     print(f"Image dimensions: {args.width}x{args.height}")
-    
+
     # Calculate latent dimensions (VAE downscales by factor of 8)
     latent_width = args.width // 8
     latent_height = args.height // 8

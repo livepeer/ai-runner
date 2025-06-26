@@ -29,8 +29,8 @@ RUN conda run -n comfystream pip install --no-cache-dir \
     xformers===0.0.30 \
     --index-url https://download.pytorch.org/whl/cu126
 
-# Install StreamDiffusion @ v0.0.1-cnet (latest with controlnet support) into the comfystream environment
-RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@v0.0.1-cnet#egg=streamdiffusion[tensorrt]
+# Install StreamDiffusion @ 40b87cf (latest with controlnet support) into the comfystream environment
+RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@40b87cf67b9e05d81c522f2c9cd9e80829d8bb96#egg=streamdiffusion[tensorrt]
 
 # Pin versions of ONNX runtime which are too loose on streamdiffusion setup.py
 RUN conda run -n comfystream pip install --no-cache-dir \

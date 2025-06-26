@@ -4,7 +4,7 @@ from typing import Dict, List, Literal, Optional
 
 import torch
 from pydantic import BaseModel
-from StreamDiffusionWrapper import StreamDiffusionWrapper
+from streamdiffusion import StreamDiffusionWrapper
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
@@ -62,6 +62,8 @@ class StreamDiffusion(Pipeline):
         img_tensor = img_tensor.permute(0, 3, 1, 2)
         img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
         img_tensor = self.pipe.preprocess_image(img_tensor)
+
+        self.pipe.update_control_image_efficient(img_tensor)
 
         if self.first_frame:
             self.first_frame = False
