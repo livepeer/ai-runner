@@ -1,6 +1,7 @@
 import logging
 import asyncio
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union, Any
+from pathlib import Path
 
 import torch
 from pydantic import BaseModel
@@ -11,27 +12,81 @@ from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 
+class ControlNetConfig(BaseModel):
+    """ControlNet configuration model"""
+    model_id: str
+    conditioning_scale: float = 1.0
+    preprocessor: Optional[str] = None
+    preprocessor_params: Optional[Dict[str, Any]] = None
+    enabled: bool = True
+    control_guidance_start: float = 0.0
+    control_guidance_end: float = 1.0
+
+
 class StreamDiffusionParams(BaseModel):
     class Config:
         extra = "forbid"
 
-    prompt: str = "talking head, cyberpunk, tron, matrix, ultra-realistic, dark, futuristic, neon, 8k"
+    # Model configuration
     model_id: str = "KBlueLeaf/kohaku-v2.1"
+    pipeline_type: str = "sd1.5"
+
+    # Generation parameters
+    prompt: str = "an anime render of a girl with purple hair, masterpiece"
+    negative_prompt: str = "blurry, low quality, flat, 2d"
+    guidance_scale: float = 1.1
+    num_inference_steps: int = 50
+    delta: float = 0.7
+
+    # Image dimensions
     width: int = DEFAULT_WIDTH
     height: int = DEFAULT_HEIGHT
+
+    # Model settings
+    device: str = "cuda"
+    dtype: str = "float16"
+    t_index_list: List[int] = [0, 16, 32]
+    frame_buffer_size: int = 1
+
+    # LoRA settings
     lora_dict: Optional[Dict[str, float]] = None
     use_lcm_lora: bool = True
     lcm_lora_id: str = "latent-consistency/lcm-lora-sdv1-5"
-    num_inference_steps: int = 50
-    t_index_list: List[int] = [37, 45, 48]
-    scale: float = 1.0
+
+    # VAE settings
+    use_tiny_vae: bool = True
+    vae_id: Optional[str] = None
+
+    # Acceleration settings
     acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt"
+
+    # Processing settings
     use_denoising_batch: bool = True
+    do_add_noise: bool = True
+    cfg_type: Literal["none", "full", "self", "initialize"] = "self"
+    seed: int = 789
+
+    # Image filter settings
     enable_similar_image_filter: bool = False
-    seed: int = 2
-    guidance_scale: float = 1.2
-    do_add_noise: bool = False
     similar_image_filter_threshold: float = 0.98
+    similar_image_filter_max_skip_frame: int = 10
+
+    # Safety settings
+    use_safety_checker: bool = False
+
+    # ControlNet settings
+    use_controlnet: bool = True
+    controlnets: Optional[List[ControlNetConfig]] = [
+        ControlNetConfig(
+            model_id="lllyasviel/control_v11f1e_sd15_tile",
+            conditioning_scale=0.2,
+            preprocessor="passthrough",
+            preprocessor_params={"image_resolution": 512},
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        )
+    ]
 
 
 class StreamDiffusion(Pipeline):
@@ -63,7 +118,9 @@ class StreamDiffusion(Pipeline):
         img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
-        self.pipe.update_control_image_efficient(img_tensor)
+        # Update control image if using ControlNet
+        if self.params.use_controlnet:
+            self.pipe.update_control_image_efficient(img_tensor)
 
         if self.first_frame:
             self.first_frame = False
@@ -104,30 +161,81 @@ class StreamDiffusion(Pipeline):
             self.frame_queue = asyncio.Queue()
 
 
-def load_streamdiffusion_sync(params: StreamDiffusionParams):
+def _parse_dtype(dtype_str: str) -> torch.dtype:
+    """Parse dtype string to torch dtype"""
+    dtype_map = {
+        'float16': torch.float16,
+        'float32': torch.float32,
+        'half': torch.float16,
+        'float': torch.float32,
+    }
+    return dtype_map.get(dtype_str.lower(), torch.float16)
+
+
+def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
+    """Prepare ControlNet configurations for wrapper"""
+    if not params.use_controlnet or not params.controlnets:
+        return None
+
+    controlnet_configs = []
+    for cn_config in params.controlnets:
+        if not cn_config.enabled:
+            continue
+
+        controlnet_config = {
+            'model_id': cn_config.model_id,
+            'preprocessor': cn_config.preprocessor,
+            'conditioning_scale': cn_config.conditioning_scale,
+            'enabled': cn_config.enabled,
+            'preprocessor_params': cn_config.preprocessor_params or {},
+            'pipeline_type': params.pipeline_type,
+            'control_guidance_start': cn_config.control_guidance_start,
+            'control_guidance_end': cn_config.control_guidance_end,
+        }
+        controlnet_configs.append(controlnet_config)
+
+    return controlnet_configs
+
+
+def load_streamdiffusion_sync(params: StreamDiffusionParams, build_engines_if_missing: bool = False):
+    # Prepare ControlNet configuration
+    controlnet_config = _prepare_controlnet_configs(params)
+
     pipe = StreamDiffusionWrapper(
-        output_type="pt",
         model_id_or_path=params.model_id,
-        lora_dict=params.lora_dict,
-        use_lcm_lora=params.use_lcm_lora,
-        lcm_lora_id=params.lcm_lora_id,
         t_index_list=params.t_index_list,
-        frame_buffer_size=1,
+        lora_dict=params.lora_dict,
+        mode="img2img",
+        output_type="pt",
+        lcm_lora_id=params.lcm_lora_id,
+        vae_id=params.vae_id,
+        device=params.device,
+        dtype=_parse_dtype(params.dtype),
+        frame_buffer_size=params.frame_buffer_size,
         width=params.width,
         height=params.height,
         warmup=10,
         acceleration=params.acceleration,
         do_add_noise=params.do_add_noise,
-        mode="img2img",
+        use_lcm_lora=params.use_lcm_lora,
+        use_tiny_vae=params.use_tiny_vae,
         enable_similar_image_filter=params.enable_similar_image_filter,
         similar_image_filter_threshold=params.similar_image_filter_threshold,
+        similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
         use_denoising_batch=params.use_denoising_batch,
+        cfg_type=params.cfg_type,
         seed=params.seed,
-        build_engines_if_missing=False,
+        use_safety_checker=params.use_safety_checker,
+        build_engines_if_missing=build_engines_if_missing,
+        use_controlnet=params.use_controlnet,
+        controlnet_config=controlnet_config,
     )
+
     pipe.prepare(
         prompt=params.prompt,
+        negative_prompt=params.negative_prompt,
         num_inference_steps=params.num_inference_steps,
         guidance_scale=params.guidance_scale,
+        delta=params.delta,
     )
     return pipe
