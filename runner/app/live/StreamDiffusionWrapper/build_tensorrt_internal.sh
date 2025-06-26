@@ -24,7 +24,7 @@ function display_help() {
 }
 
 # Default values
-OUTPUT_DIR="/models/StreamDiffusion--engines"
+OUTPUT_DIR="./engines"
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -114,22 +114,23 @@ for model in $MODELS; do
     for timestep in $TIMESTEPS; do
         for dim in $DIMENSIONS; do
             ((current_build++))
-            
+
             # Parse dimensions
             width=${dim%x*}
             height=${dim#*x}
-            
+
             echo "[$current_build/$total_builds] Building TensorRT engine for:"
             echo "  Model: $model"
             echo "  Timesteps: $timestep"
             echo "  Dimensions: ${width}x${height}"
-            
+
             # Build the engine
             if $CONDA_PYTHON "$BUILD_SCRIPT" \
                 --model-id "$model" \
                 --timesteps "$timestep" \
                 --width "$width" \
-                --height "$height"; then
+                --height "$height" \
+                --engine-dir "$OUTPUT_DIR"; then
                 echo "  ✓ Success"
             else
                 echo "  ✗ Failed"
