@@ -3,7 +3,7 @@ from typing import Dict, List, Any
 
 from streamdiffusion import StreamDiffusionWrapper
 
-def create_controlnet_configs(controlnet_model_ids: List[str], image_resolution: int = 512) -> List[Dict[str, Any]]:
+def create_controlnet_configs(controlnet_model_ids: List[str], width: int, height: int) -> List[Dict[str, Any]]:
     """Create dummy ControlNet configurations for compilation"""
     controlnet_configs = []
 
@@ -14,7 +14,10 @@ def create_controlnet_configs(controlnet_model_ids: List[str], image_resolution:
             'model_id': model_id,
             'conditioning_scale': 0.5,  # Default scale
             'preprocessor': "passthrough",  # Simple preprocessor
-            'preprocessor_params': {"image_resolution": image_resolution},
+            'preprocessor_params': {
+                "image_width": width,
+                "image_height": height,
+            },
             'enabled': True,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
@@ -91,7 +94,7 @@ def main():
     use_controlnet = False
     if args.controlnets:
         controlnet_model_ids = args.controlnets.split()
-        controlnet_config = create_controlnet_configs(controlnet_model_ids, max(args.width, args.height))
+        controlnet_config = create_controlnet_configs(controlnet_model_ids, args.width, args.height)
         use_controlnet = True
         print(f"ControlNets ({len(controlnet_model_ids)}):")
         for i, cn_id in enumerate(controlnet_model_ids):

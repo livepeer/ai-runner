@@ -77,6 +77,18 @@ class StreamDiffusionParams(BaseModel):
             control_guidance_end=1.0,
         ),
         ControlNetConfig(
+            model_id="lllyasviel/control_v11p_sd15_canny",
+            conditioning_scale=0.29,
+            preprocessor="canny",
+            preprocessor_params={
+                "low_threshold": 100,
+                "high_threshold": 200
+            },
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
             model_id="lllyasviel/control_v11f1e_sd15_tile",
             conditioning_scale=0.2,
             preprocessor="passthrough",
