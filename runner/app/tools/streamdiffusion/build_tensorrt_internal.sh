@@ -21,11 +21,14 @@ function display_help() {
     echo "  --timesteps TIMESTEPS   Space-separated list of timesteps (default: 4)"
     echo "  --dimensions DIMS       Space-separated list of dimensions in WxH format (default: 384x704 704x384)"
     echo "  --output-dir DIR        Output directory for TensorRT engines (default: engines)"
+    echo "  --controlnets CONTROLNETS Space-separated list of controlnet models"
+    echo "  --build-depth-anything  Build Depth-Anything TensorRT engine (requires ONNX model to be downloaded)"
     echo "  --help                  Display this help message"
 }
 
 # Default values
 OUTPUT_DIR="./engines"
+BUILD_DEPTH_ANYTHING=false
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -49,6 +52,10 @@ while [[ $# -gt 0 ]]; do
         --controlnets)
             CONTROLNETS="$2"
             shift 2
+            ;;
+        --build-depth-anything)
+            BUILD_DEPTH_ANYTHING=true
+            shift
             ;;
         --help)
             display_help
@@ -102,6 +109,11 @@ if [ -n "$CONTROLNETS" ]; then
 else
     echo "ControlNets: None"
 fi
+if [ "$BUILD_DEPTH_ANYTHING" = true ]; then
+    echo "Depth-Anything: Enabled"
+else
+    echo "Depth-Anything: Disabled"
+fi
 echo
 
 total_builds=0
@@ -153,6 +165,57 @@ for model in $MODELS; do
     done
 done
 
+
+# Function to build Depth-Anything TensorRT engine if requested.
+# TODO: Remove this once streamdiffusion lib can do this automatically for depth ControlNet.
+function build_depth_anything_engine() {
+    echo "Building Depth-Anything TensorRT engine..."
+
+    engine_path="$OUTPUT_DIR/depth-anything/depth_anything_v2_vits.engine"
+    mkdir -p $(dirname "$engine_path")
+
+
+    if [ ! -d "ComfyUI-Depth-Anything-Tensorrt" ]; then
+        git clone https://github.com/yuvraj108c/ComfyUI-Depth-Anything-Tensorrt.git \
+            && cd ComfyUI-Depth-Anything-Tensorrt \
+            && git checkout 1f4c161949b3616516745781fb91444e6443cc25 2>/dev/null \
+            && cd ..
+    fi
+
+    if [ -f "$engine_path" ]; then
+        echo "Engine already exists at: $engine_path"
+        echo "Skipping build."
+        return 0
+    fi
+
+    echo "Locating Depth-Anything ONNX model..."
+    onnx_path=$(find /models -name "depth_anything_v2_vits.onnx" 2>/dev/null | head -1)
+
+    if [ -z "$onnx_path" ] || [ ! -f "$onnx_path" ]; then
+        echo "ERROR: Depth-Anything ONNX model not found"
+        echo "Please ensure the model is downloaded using huggingface-cli"
+        return 1
+    fi
+
+    echo "Found ONNX model at: $onnx_path"
+
+    echo "Calling export_trt.py to build engine: $engine_path"
+    if $CONDA_PYTHON ./ComfyUI-Depth-Anything-Tensorrt/export_trt.py \
+        --trt-path="$engine_path" \
+        --onnx-path="$onnx_path"; then
+        echo "  ✓ Depth-Anything TensorRT engine built successfully"
+    else
+        echo "  ✗ Failed to build Depth-Anything TensorRT engine"
+        return 1
+    fi
+
+    echo
+}
+
+if [ "$BUILD_DEPTH_ANYTHING" = true ]; then
+    build_depth_anything_engine || exit 1
+fi
+
 # Summary
 echo "Build process completed!"
 echo "Total builds: $total_builds"
@@ -163,3 +226,4 @@ if [ -d "$OUTPUT_DIR" ]; then
     echo "Built engines:"
     find "$OUTPUT_DIR" -name "*.engine" -o -name "*.trt" 2>/dev/null | sort
 fi
+

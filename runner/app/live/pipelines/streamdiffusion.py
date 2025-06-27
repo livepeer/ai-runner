@@ -64,10 +64,37 @@ class StreamDiffusionParams(BaseModel):
     # ControlNet settings
     controlnets: Optional[List[ControlNetConfig]] = [
         ControlNetConfig(
+            model_id="lllyasviel/control_v11f1p_sd15_depth",
+            conditioning_scale=0.28,
+            preprocessor="depth_tensorrt",
+            preprocessor_params={
+                "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
+                "detect_resolution": 518,
+                "image_resolution": 512
+            },
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
             model_id="lllyasviel/control_v11f1e_sd15_tile",
             conditioning_scale=0.2,
             preprocessor="passthrough",
             preprocessor_params={"image_resolution": 512},
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
+            model_id="lllyasviel/`control_v11p_sd15_lineart`",
+            conditioning_scale=0.0,
+            preprocessor="standard_lineart",
+            preprocessor_params={
+                "detect_resolution": 512,
+                "image_resolution": 512,
+                "gaussian_sigma": 6.0,
+                "intensity_threshold": 8
+            },
             enabled=True,
             control_guidance_start=0.0,
             control_guidance_end=1.0,
