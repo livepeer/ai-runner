@@ -1,6 +1,7 @@
 import logging
 import asyncio
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union, Any
+from pathlib import Path
 
 import torch
 from pydantic import BaseModel
@@ -11,27 +12,100 @@ from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 
+class ControlNetConfig(BaseModel):
+    """ControlNet configuration model"""
+    model_id: str
+    conditioning_scale: float = 1.0
+    preprocessor: Optional[str] = None
+    preprocessor_params: Optional[Dict[str, Any]] = None
+    enabled: bool = True
+    control_guidance_start: float = 0.0
+    control_guidance_end: float = 1.0
+
+
 class StreamDiffusionParams(BaseModel):
     class Config:
         extra = "forbid"
 
-    prompt: str = "talking head, cyberpunk, tron, matrix, ultra-realistic, dark, futuristic, neon, 8k"
+    # Model configuration
     model_id: str = "KBlueLeaf/kohaku-v2.1"
+    pipeline_type: str = "sd1.5"
+
+    # Generation parameters
+    prompt: str = "an anime render of a girl with purple hair, masterpiece"
+    negative_prompt: str = "blurry, low quality, flat, 2d"
+    guidance_scale: float = 1.1
+    delta: float = 0.7
+    num_inference_steps: int = 50
+    t_index_list: List[int] = [0, 16, 32]
+
+    # Image dimensions
     width: int = DEFAULT_WIDTH
     height: int = DEFAULT_HEIGHT
+
+    # LoRA settings
     lora_dict: Optional[Dict[str, float]] = None
     use_lcm_lora: bool = True
     lcm_lora_id: str = "latent-consistency/lcm-lora-sdv1-5"
-    num_inference_steps: int = 50
-    t_index_list: List[int] = [37, 45, 48]
-    scale: float = 1.0
+
+    # Acceleration settings
     acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt"
+
+    # Processing settings
     use_denoising_batch: bool = True
+    do_add_noise: bool = True
+    seed: int = 789
+
+    # Similar image filter settings
     enable_similar_image_filter: bool = False
-    seed: int = 2
-    guidance_scale: float = 1.2
-    do_add_noise: bool = False
     similar_image_filter_threshold: float = 0.98
+    similar_image_filter_max_skip_frame: int = 10
+
+    # ControlNet settings
+    controlnets: Optional[List[ControlNetConfig]] = [
+        ControlNetConfig(
+            model_id="lllyasviel/control_v11f1p_sd15_depth",
+            conditioning_scale=0.28,
+            preprocessor="depth_tensorrt",
+            preprocessor_params={},
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
+            model_id="lllyasviel/control_v11p_sd15_canny",
+            conditioning_scale=0.29,
+            preprocessor="canny",
+            preprocessor_params={
+                "low_threshold": 100,
+                "high_threshold": 200
+            },
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
+            model_id="lllyasviel/control_v11f1e_sd15_tile",
+            conditioning_scale=0.2,
+            preprocessor="passthrough",
+            preprocessor_params={},
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
+            model_id="lllyasviel/control_v11p_sd15_lineart",
+            conditioning_scale=0.0,
+            preprocessor="standard_lineart",
+            preprocessor_params={
+                "gaussian_sigma": 6.0,
+                "intensity_threshold": 8
+            },
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        )
+    ]
 
 
 class StreamDiffusion(Pipeline):
@@ -63,6 +137,7 @@ class StreamDiffusion(Pipeline):
         img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
+        # Noop if ControlNets are not enabled
         self.pipe.update_control_image_efficient(img_tensor)
 
         if self.first_frame:
@@ -104,30 +179,90 @@ class StreamDiffusion(Pipeline):
             self.frame_queue = asyncio.Queue()
 
 
+def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
+    """Prepare ControlNet configurations for wrapper"""
+    if not params.controlnets:
+        return None
+
+    controlnet_configs = []
+    for cn_config in params.controlnets:
+        if not cn_config.enabled:
+            continue
+
+        preprocessor_params = (cn_config.preprocessor_params or {}).copy()
+
+        # Inject preprocessor-specific parameters
+        if cn_config.preprocessor == "depth_tensorrt":
+            preprocessor_params.update({
+                "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
+                "detect_resolution": 518,
+                "image_resolution": 512
+            })
+        elif cn_config.preprocessor == "canny":
+            # no enforced params
+            pass
+        elif cn_config.preprocessor == "passthrough":
+            preprocessor_params.update({
+                "image_width": params.width,
+                "image_height": params.height
+            })
+        elif cn_config.preprocessor == "standard_lineart":
+            preprocessor_params.update({
+                "detect_resolution": 512,
+                "image_width": params.width,
+                "image_height": params.height
+            })
+        else:
+            raise ValueError(f"Unrecognized preprocessor: {cn_config.preprocessor}")
+
+        controlnet_config = {
+            'model_id': cn_config.model_id,
+            'preprocessor': cn_config.preprocessor,
+            'conditioning_scale': cn_config.conditioning_scale,
+            'enabled': cn_config.enabled,
+            'preprocessor_params': preprocessor_params,
+            'pipeline_type': params.pipeline_type,
+            'control_guidance_start': cn_config.control_guidance_start,
+            'control_guidance_end': cn_config.control_guidance_end,
+        }
+        controlnet_configs.append(controlnet_config)
+
+    return controlnet_configs
+
+
 def load_streamdiffusion_sync(params: StreamDiffusionParams):
+    # Prepare ControlNet configuration
+    controlnet_config = _prepare_controlnet_configs(params)
+
     pipe = StreamDiffusionWrapper(
-        output_type="pt",
         model_id_or_path=params.model_id,
-        lora_dict=params.lora_dict,
-        use_lcm_lora=params.use_lcm_lora,
-        lcm_lora_id=params.lcm_lora_id,
         t_index_list=params.t_index_list,
+        lora_dict=params.lora_dict,
+        mode="img2img",
+        output_type="pt",
+        lcm_lora_id=params.lcm_lora_id,
         frame_buffer_size=1,
         width=params.width,
         height=params.height,
         warmup=10,
         acceleration=params.acceleration,
         do_add_noise=params.do_add_noise,
-        mode="img2img",
+        use_lcm_lora=params.use_lcm_lora,
         enable_similar_image_filter=params.enable_similar_image_filter,
         similar_image_filter_threshold=params.similar_image_filter_threshold,
+        similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
         use_denoising_batch=params.use_denoising_batch,
         seed=params.seed,
         build_engines_if_missing=False,
+        use_controlnet=bool(controlnet_config),
+        controlnet_config=controlnet_config,
     )
+
     pipe.prepare(
         prompt=params.prompt,
+        negative_prompt=params.negative_prompt,
         num_inference_steps=params.num_inference_steps,
         guidance_scale=params.guidance_scale,
+        delta=params.delta,
     )
     return pipe
