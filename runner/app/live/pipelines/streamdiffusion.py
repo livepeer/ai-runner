@@ -67,11 +67,7 @@ class StreamDiffusionParams(BaseModel):
             model_id="lllyasviel/control_v11f1p_sd15_depth",
             conditioning_scale=0.28,
             preprocessor="depth_tensorrt",
-            preprocessor_params={
-                "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
-                "detect_resolution": 518,
-                "image_resolution": 512
-            },
+            preprocessor_params={},
             enabled=True,
             control_guidance_start=0.0,
             control_guidance_end=1.0,
@@ -92,18 +88,16 @@ class StreamDiffusionParams(BaseModel):
             model_id="lllyasviel/control_v11f1e_sd15_tile",
             conditioning_scale=0.2,
             preprocessor="passthrough",
-            preprocessor_params={"image_resolution": 512},
+            preprocessor_params={},
             enabled=True,
             control_guidance_start=0.0,
             control_guidance_end=1.0,
         ),
         ControlNetConfig(
-            model_id="lllyasviel/`control_v11p_sd15_lineart`",
+            model_id="lllyasviel/control_v11p_sd15_lineart",
             conditioning_scale=0.0,
             preprocessor="standard_lineart",
             preprocessor_params={
-                "detect_resolution": 512,
-                "image_resolution": 512,
                 "gaussian_sigma": 6.0,
                 "intensity_threshold": 8
             },
@@ -195,12 +189,38 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         if not cn_config.enabled:
             continue
 
+        preprocessor_params = (cn_config.preprocessor_params or {}).copy()
+
+        # Inject preprocessor-specific parameters
+        if cn_config.preprocessor == "depth_tensorrt":
+            preprocessor_params.update({
+                "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
+                "detect_resolution": 518,
+                "image_resolution": 512
+            })
+        elif cn_config.preprocessor == "canny":
+            # no enforced params
+            pass
+        elif cn_config.preprocessor == "passthrough":
+            preprocessor_params.update({
+                "image_width": params.width,
+                "image_height": params.height
+            })
+        elif cn_config.preprocessor == "standard_lineart":
+            preprocessor_params.update({
+                "detect_resolution": 512,
+                "image_width": params.width,
+                "image_height": params.height
+            })
+        else:
+            raise ValueError(f"Unrecognized preprocessor: {cn_config.preprocessor}")
+
         controlnet_config = {
             'model_id': cn_config.model_id,
             'preprocessor': cn_config.preprocessor,
             'conditioning_scale': cn_config.conditioning_scale,
             'enabled': cn_config.enabled,
-            'preprocessor_params': cn_config.preprocessor_params or {},
+            'preprocessor_params': preprocessor_params,
             'pipeline_type': params.pipeline_type,
             'control_guidance_start': cn_config.control_guidance_start,
             'control_guidance_end': cn_config.control_guidance_end,
