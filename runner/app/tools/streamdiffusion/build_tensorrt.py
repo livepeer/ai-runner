@@ -1,29 +1,37 @@
 import argparse
-from typing import Dict, List, Any
+from typing import List
 
-from streamdiffusion import StreamDiffusionWrapper
+# Make sure 'infer.py' root folder is in PYTHONPATH
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(__file__, "..", "..", "..", "live")))
 
-def create_controlnet_configs(controlnet_model_ids: List[str], width: int, height: int) -> List[Dict[str, Any]]:
-    """Create dummy ControlNet configurations for compilation"""
+from pipelines.streamdiffusion import (
+    load_streamdiffusion_sync,
+    StreamDiffusionParams,
+    ControlNetConfig,
+)
+
+def create_controlnet_configs(controlnet_model_ids: List[str], width: int, height: int) -> List[ControlNetConfig]:
+    """
+    Create dummy ControlNet configurations for compilation using typed models.
+    The exact parameters don't matter for compilation, just need the model to be loaded.
+    """
     controlnet_configs = []
-
     for model_id in controlnet_model_ids:
-        # Create a basic configuration for each ControlNet
-        # The exact parameters don't matter for compilation, just need the model to be loaded
-        config = {
-            'model_id': model_id,
-            'conditioning_scale': 0.5,  # Default scale
-            'preprocessor': "passthrough",  # Simple preprocessor
-            'preprocessor_params': {
+        config = ControlNetConfig(
+            model_id=model_id,
+            conditioning_scale=0.5,
+            preprocessor="passthrough",  # Simplest preprocessor
+            preprocessor_params={
                 "image_width": width,
                 "image_height": height,
             },
-            'enabled': True,
-            'control_guidance_start': 0.0,
-            'control_guidance_end': 1.0,
-        }
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        )
         controlnet_configs.append(config)
-
     return controlnet_configs
 
 def parse_args():
@@ -35,42 +43,36 @@ def parse_args():
         required=True,
         help="Model ID or path to load (e.g. KBlueLeaf/kohaku-v2.1, stabilityai/sd-turbo)"
     )
-
     parser.add_argument(
         "--timesteps",
         type=int,
         default=3,
         help="Number of timesteps in t_index_list (default: 3)"
     )
-
     parser.add_argument(
         "--engine-dir",
         type=str,
         default="engines",
         help="Directory to save TensorRT engines (default: engines)"
     )
-
     parser.add_argument(
         "--width",
         type=int,
         default=512,
         help="Width of the output image (default: 512)"
     )
-
     parser.add_argument(
         "--height",
         type=int,
         default=512,
         help="Height of the output image (default: 512)"
     )
-
     parser.add_argument(
         "--controlnets",
         type=str,
         default="",
         help="Space-separated list of ControlNet model IDs to compile (e.g. 'lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11f1p_sd15_depth')"
     )
-
     return parser.parse_args()
 
 def main():
@@ -90,31 +92,23 @@ def main():
     print(f"Engines will be saved to: {args.engine_dir}")
 
     # Create ControlNet configurations if provided
-    controlnet_config = None
-    use_controlnet = False
+    controlnets = None
     if args.controlnets:
         controlnet_model_ids = args.controlnets.split()
-        controlnet_config = create_controlnet_configs(controlnet_model_ids, args.width, args.height)
-        use_controlnet = True
+        controlnets = create_controlnet_configs(controlnet_model_ids, args.width, args.height)
         print(f"ControlNets ({len(controlnet_model_ids)}):")
         for i, cn_id in enumerate(controlnet_model_ids):
             print(f"  {i}: {cn_id}")
 
-    # Initialize wrapper which will trigger TensorRT engine building
-    wrapper = StreamDiffusionWrapper(
-        mode="img2img",
-        acceleration="tensorrt",
-        frame_buffer_size=1,
-        model_id_or_path=args.model_id,
+    params = StreamDiffusionParams(
+        model_id=args.model_id,
         t_index_list=t_index_list,
-        engine_dir=args.engine_dir,
+        acceleration="tensorrt",
         width=args.width,
         height=args.height,
-        build_engines_if_missing=True,  # Explicitly enable engine building for this script
-        use_controlnet=use_controlnet,
-        controlnet_config=controlnet_config,
+        controlnets=controlnets,
     )
-
+    load_streamdiffusion_sync(params, engine_dir=args.engine_dir, build_engines_if_missing=True)
     print("TensorRT engine building completed successfully!")
 
 if __name__ == "__main__":

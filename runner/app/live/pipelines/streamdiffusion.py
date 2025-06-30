@@ -176,12 +176,30 @@ class StreamDiffusion(Pipeline):
             self.frame_queue = asyncio.Queue()
 
 
+sd15_keywords = ["sd1.5", "sd15", "stable-diffusion-v1-5", "stable-diffusion-1-5", "kohaku", "dreamshaper"]
+sdturbo_keywords = ["sdturbo", "sd-turbo"]
+sdxl_turbo_keywords = ["sdxl-turbo"]
+
+def _get_pipeline_type_from_model_id(model_id: str) -> Optional[str]:
+    """Determine pipeline type based on model ID"""
+    model_id_lower = model_id.lower()
+
+    if any(keyword in model_id_lower for keyword in sd15_keywords):
+        return "sd1.5"
+    elif any(keyword in model_id_lower for keyword in sdturbo_keywords):
+        return "sdturbo"
+    elif any(keyword in model_id_lower for keyword in sdxl_turbo_keywords):
+        return "sdxlturbo"
+
+    raise ValueError(f"Unknown pipeline type for model ID: {model_id}")
+
+
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
     if not params.controlnets:
         return None
 
-    pipeline_type = get_pipeline_type_from_model_id(params.model_id)
+    pipeline_type = _get_pipeline_type_from_model_id(params.model_id)
     controlnet_configs = []
     for cn_config in params.controlnets:
         if not cn_config.enabled:
@@ -228,7 +246,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
     return controlnet_configs
 
 
-def load_streamdiffusion_sync(params: StreamDiffusionParams):
+def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engines", build_engines_if_missing = False):
     # Prepare ControlNet configuration
     controlnet_config = _prepare_controlnet_configs(params)
 
@@ -251,9 +269,10 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams):
         similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
         use_denoising_batch=params.use_denoising_batch,
         seed=params.seed,
-        build_engines_if_missing=False,
         use_controlnet=bool(controlnet_config),
         controlnet_config=controlnet_config,
+        engine_dir=engine_dir,
+        build_engines_if_missing=build_engines_if_missing,
     )
 
     pipe.prepare(
@@ -264,19 +283,3 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams):
         delta=params.delta,
     )
     return pipe
-
-sd15_keywords = ["sd1.5", "sd15", "stable-diffusion-v1-5", "stable-diffusion-1-5", "kohaku", "dreamshaper"]
-sdturbo_keywords = ["sdturbo", "sd-turbo"]
-sdxl_turbo_keywords = ["sdxl-turbo"]
-
-def get_pipeline_type_from_model_id(model_id: str) -> Optional[str]:
-    """Determine pipeline type based on model ID"""
-    model_id_lower = model_id.lower()
-
-    if any(keyword in model_id_lower for keyword in sd15_keywords):
-        return "sd1.5"
-    elif any(keyword in model_id_lower for keyword in sdturbo_keywords):
-        return "sdturbo"
-    elif any(keyword in model_id_lower for keyword in sdxl_turbo_keywords):
-        return "sdxlturbo"
-    return None
