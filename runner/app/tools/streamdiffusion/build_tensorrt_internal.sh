@@ -27,6 +27,7 @@ function display_help() {
 }
 
 # Default values
+MODELS_DIR=${HUGGINGFACE_HUB_CACHE:-./models}
 OUTPUT_DIR="./engines"
 BUILD_DEPTH_ANYTHING=false
 
@@ -189,7 +190,7 @@ function build_depth_anything_engine() {
     fi
 
     echo "Locating Depth-Anything ONNX model..."
-    onnx_path=$(find /models -name "depth_anything_v2_vits.onnx" 2>/dev/null | head -1)
+    onnx_path=$(find "$MODELS_DIR" -name "depth_anything_v2_vits.onnx" 2>/dev/null | head -1)
 
     if [ -z "$onnx_path" ] || [ ! -f "$onnx_path" ]; then
         echo "ERROR: Depth-Anything ONNX model not found"
