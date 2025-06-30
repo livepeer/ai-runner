@@ -1,7 +1,6 @@
 import logging
 import asyncio
-from typing import Dict, List, Literal, Optional, Union, Any
-from pathlib import Path
+from typing import Dict, List, Literal, Optional, Any
 
 import torch
 from pydantic import BaseModel
@@ -10,7 +9,6 @@ from streamdiffusion import StreamDiffusionWrapper
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
-
 
 class ControlNetConfig(BaseModel):
     """ControlNet configuration model"""
@@ -29,7 +27,6 @@ class StreamDiffusionParams(BaseModel):
 
     # Model configuration
     model_id: str = "KBlueLeaf/kohaku-v2.1"
-    pipeline_type: str = "sd1.5"
 
     # Generation parameters
     prompt: str = "an anime render of a girl with purple hair, masterpiece"
@@ -184,6 +181,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
     if not params.controlnets:
         return None
 
+    pipeline_type = get_pipeline_type_from_model_id(params.model_id)
     controlnet_configs = []
     for cn_config in params.controlnets:
         if not cn_config.enabled:
@@ -217,11 +215,11 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
 
         controlnet_config = {
             'model_id': cn_config.model_id,
+            'pipeline_type': pipeline_type,
             'preprocessor': cn_config.preprocessor,
             'conditioning_scale': cn_config.conditioning_scale,
             'enabled': cn_config.enabled,
             'preprocessor_params': preprocessor_params,
-            'pipeline_type': params.pipeline_type,
             'control_guidance_start': cn_config.control_guidance_start,
             'control_guidance_end': cn_config.control_guidance_end,
         }
@@ -266,3 +264,19 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams):
         delta=params.delta,
     )
     return pipe
+
+sd15_keywords = ["sd1.5", "sd15", "stable-diffusion-v1-5", "stable-diffusion-1-5", "kohaku", "dreamshaper"]
+sdturbo_keywords = ["sdturbo", "sd-turbo"]
+sdxl_turbo_keywords = ["sdxl-turbo"]
+
+def get_pipeline_type_from_model_id(model_id: str) -> Optional[str]:
+    """Determine pipeline type based on model ID"""
+    model_id_lower = model_id.lower()
+
+    if any(keyword in model_id_lower for keyword in sd15_keywords):
+        return "sd1.5"
+    elif any(keyword in model_id_lower for keyword in sdturbo_keywords):
+        return "sdturbo"
+    elif any(keyword in model_id_lower for keyword in sdxl_turbo_keywords):
+        return "sdxlturbo"
+    return None
