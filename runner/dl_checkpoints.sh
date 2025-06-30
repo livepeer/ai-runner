@@ -211,7 +211,7 @@ function build_streamdiffusion_tensorrt() {
               && \
             adduser $(id -u -n) && \
             chown -R $(id -u -n):$(id -g -n) /models" \
-    || (echo "failed streamdiffusion tensorrt"; return 1)
+    || (echo "failed streamdiffusion tensorrt"; exit 1)
 }
 
 function build_comfyui_tensorrt() {
@@ -258,7 +258,7 @@ function build_comfyui_tensorrt() {
                 chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI build_trt.py dynamic engine"
-      return 1
+      exit 1
     )
 
   # FasterLivePortrait
@@ -270,7 +270,7 @@ function build_comfyui_tensorrt() {
                 chown -R $(id -u -n):$(id -g -n) /models" ||
     (
       echo "failed ComfyUI FasterLivePortrait Tensorrt Engines"
-      return 1
+      exit 1
     )
 }
 
