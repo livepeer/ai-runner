@@ -131,6 +131,7 @@ function download_streamdiffusion_live_models() {
   huggingface-cli download KBlueLeaf/kohaku-v2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
+  huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
 }
 
 function download_comfyui_live_models() {
@@ -208,6 +209,7 @@ function build_streamdiffusion_tensorrt() {
               --dimensions '384x704 512x512 704x384' \
               --controlnets 'lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11p_sd15_canny lllyasviel/control_v11p_sd15_lineart' \
               --build-depth-anything \
+              --build-pose \
               && \
             adduser $(id -u -n) && \
             chown -R $(id -u -n):$(id -g -n) /models" \
