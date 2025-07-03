@@ -214,25 +214,16 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         preprocessor_params = (cn_config.preprocessor_params or {}).copy()
 
         # Inject preprocessor-specific parameters
-        if cn_config.preprocessor in ["canny", "hed", "soft_edge"]:
+        if cn_config.preprocessor in ["canny", "hed", "soft_edge", "passthrough"]:
             # no enforced params
             pass
         elif cn_config.preprocessor == "depth_tensorrt":
             preprocessor_params.update({
                 "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
-                "detect_resolution": 518,
-                "image_resolution": 512
             })
         elif cn_config.preprocessor == "pose_tensorrt":
             preprocessor_params.update({
                 "engine_path": "./engines/pose/yolo_nas_pose_l_0.5.engine",
-                "detect_resolution": 640,
-                "image_resolution": 512
-            })
-        elif cn_config.preprocessor == "passthrough":
-            preprocessor_params.update({
-                "image_width": params.width,
-                "image_height": params.height
             })
         else:
             raise ValueError(f"Unrecognized preprocessor: {cn_config.preprocessor}")

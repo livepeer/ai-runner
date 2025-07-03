@@ -12,7 +12,7 @@ from pipelines.streamdiffusion import (
     ControlNetConfig,
 )
 
-def create_controlnet_configs(controlnet_model_ids: List[str], width: int, height: int) -> List[ControlNetConfig]:
+def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNetConfig]:
     """
     Create dummy ControlNet configurations for compilation using typed models.
     The exact parameters don't matter for compilation, just need the model to be loaded.
@@ -23,10 +23,7 @@ def create_controlnet_configs(controlnet_model_ids: List[str], width: int, heigh
             model_id=model_id,
             conditioning_scale=0.5,
             preprocessor="passthrough",  # Simplest preprocessor
-            preprocessor_params={
-                "image_width": width,
-                "image_height": height,
-            },
+            preprocessor_params={},
             enabled=True,
             control_guidance_start=0.0,
             control_guidance_end=1.0,
@@ -95,7 +92,7 @@ def main():
     controlnets = None
     if args.controlnets:
         controlnet_model_ids = args.controlnets.split()
-        controlnets = create_controlnet_configs(controlnet_model_ids, args.width, args.height)
+        controlnets = create_controlnet_configs(controlnet_model_ids)
         print(f"ControlNets ({len(controlnet_model_ids)}):")
         for i, cn_id in enumerate(controlnet_model_ids):
             print(f"  {i}: {cn_id}")
