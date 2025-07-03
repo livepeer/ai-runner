@@ -229,14 +229,8 @@ function build_depth_anything_engine() {
 function build_pose_engine() {
     echo "Building YoloNas Pose TensorRT engine..."
 
-    engine_path="$OUTPUT_DIR/pose/yolo_nas_pose_l_0.5.engine"
-
-    if [ -f "$engine_path" ]; then
-        echo "Engine already exists at: $engine_path"
-        echo "Skipping build."
-        return 0
-    fi
-    mkdir -p $(dirname "$engine_path")
+    engines_dir="$OUTPUT_DIR/pose"
+    mkdir -p "$engines_dir"
 
     if [ ! -d "ComfyUI-YoloNasPose-Tensorrt" ]; then
         git clone https://github.com/yuvraj108c/ComfyUI-YoloNasPose-Tensorrt.git \
@@ -246,34 +240,45 @@ function build_pose_engine() {
             && cd ..
     fi
 
-    echo "Locating YoloNas Pose ONNX model..."
-    onnx_path=$(find "$MODELS_DIR" -name "yolo_nas_pose_l_0.5.onnx" 2>/dev/null | head -1)
+    echo "Locating YoloNas Pose ONNX models..."
+    onnx_model_paths=$(find "$MODELS_DIR" -name "yolo_nas_pose_l_*.onnx" 2>/dev/null)
 
-    if [ -z "$onnx_path" ] || [ ! -f "$onnx_path" ]; then
+    if [ -z "$onnx_model_paths" ]; then
         echo "ERROR: YoloNas Pose ONNX model not found"
         echo "Please ensure the model is downloaded using huggingface-cli"
         return 1
     fi
 
-    echo "Found ONNX model at: $onnx_path"
+    echo "Found ONNX models at: $onnx_model_paths"
 
-    # The export_trt.py script expects a hardcoded path to the model and engine, so create a link
+    echo "Building $(echo "$onnx_model_paths" | wc -w) YoloNas Pose TensorRT engines..."
     cd ComfyUI-YoloNasPose-Tensorrt
-    ln -sf "$onnx_path" "yolo_nas_pose_l.onnx"
+    for onnx_path in $onnx_model_paths; do
+        engine_path="$engines_dir/$(basename "$onnx_path" .onnx).engine"
 
-    echo "Calling export_trt.py to build engine in temporary directory..."
-    if $CONDA_PYTHON export_trt.py; then
-        if [ -f "yolo_nas_pose_l.engine" ]; then
-            mv "yolo_nas_pose_l.engine" "$engine_path"
-            echo "  ✓ YoloNas Pose TensorRT engine built successfully"
+        if [ -f "$engine_path" ]; then
+            echo "Engine already exists at: $engine_path"
+            echo "Skipping build."
+            continue
+        fi
+
+        # The export_trt.py script expects a hardcoded path to the model, so create a link
+        rm -f "yolo_nas_pose_l.onnx" && ln -sf "$onnx_path" "yolo_nas_pose_l.onnx"
+
+        echo "Calling export_trt.py to build engine: $engine_path"
+        if $CONDA_PYTHON export_trt.py; then
+            if [ -f "yolo_nas_pose_l.engine" ]; then
+                mv "yolo_nas_pose_l.engine" "$engine_path"
+                echo "  ✓ YoloNas Pose TensorRT engine built successfully"
+            else
+                echo "  ✗ Engine file not found in expected location"
+                return 1
+            fi
         else
-            echo "  ✗ Engine file not found in expected location"
+            echo "  ✗ Failed to build YoloNas Pose TensorRT engine"
             return 1
         fi
-    else
-        echo "  ✗ Failed to build YoloNas Pose TensorRT engine"
-        return 1
-    fi
+    done
 
     cd ..
     echo

@@ -64,7 +64,9 @@ class StreamDiffusionParams(BaseModel):
             model_id="thibaud/controlnet-sd21-openpose-diffusers",
             conditioning_scale=0.711,
             preprocessor="pose_tensorrt",
-            preprocessor_params={},
+            preprocessor_params={
+                "confidence_threshold": 0.5,
+            },
             enabled=True,
             control_guidance_start=0.0,
             control_guidance_end=1.0,
@@ -203,8 +205,14 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
                 "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
             })
         elif cn_config.preprocessor == "pose_tensorrt":
+            confidence_threshold = preprocessor_params.pop("confidence_threshold", 0.5)
+
+            engine_path = f"./engines/pose/yolo_nas_pose_l_{confidence_threshold}.engine"
+            if not os.path.exists(engine_path):
+                raise ValueError(f"Invalid confidence threshold: {confidence_threshold}")
+
             preprocessor_params.update({
-                "engine_path": "./engines/pose/yolo_nas_pose_l_0.5.engine",
+                "engine_path": engine_path,
             })
         else:
             raise ValueError(f"Unrecognized preprocessor: {cn_config.preprocessor}")
