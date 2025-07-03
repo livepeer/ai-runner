@@ -3,8 +3,8 @@ FROM ${BASE_IMAGE}
 
 # Install Miniconda and create the 'comfystream' environment
 ARG PYTHON_VERSION=3.11
-ENV CONDA_DIR /workspace/miniconda3
-ENV PATH $CONDA_DIR/bin:$PATH
+ENV CONDA_DIR=/workspace/miniconda3
+ENV PATH=$CONDA_DIR/bin:$PATH
 
 RUN apt-get update && apt-get install -y --no-install-recommends wget curl ca-certificates && \
     wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.11.0-2-Linux-x86_64.sh -O ~/miniconda.sh && \
@@ -23,11 +23,11 @@ ENV PIP_PREFER_BINARY=1
 
 # Install StreamDiffusion dependencies into the comfystream environment
 RUN conda run -n comfystream pip install --no-cache-dir \
-    torch==2.7.0 \
-    torchvision==0.22.0 \
-    torchaudio==2.7.0 \
-    xformers===0.0.30 \
-    --index-url https://download.pytorch.org/whl/cu126
+    torch==2.7.0.dev20250310+cu128 \
+    torchvision==0.22.0.dev20250310+cu128 \
+    torchaudio==2.6.0.dev20250310+cu128 \
+    --index-url https://download.pytorch.org/whl/nightly/cu128 && \
+    conda run -n comfystream pip install --no-cache-dir xformers==0.0.30
 
 # Install StreamDiffusion @ v0.0.1-cnet.2 (latest with controlnet support) into the comfystream environment
 RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@v0.0.1-cnet.2#egg=streamdiffusion[tensorrt]
