@@ -3,6 +3,7 @@
 # Internal TensorRT engine build script that runs inside the container
 # This script is designed to be executed within the AI runner container environment
 
+set -e
 [ -v DEBUG ] && set -x
 
 # Configuration
@@ -184,20 +185,19 @@ function build_depth_anything_engine() {
     echo "Building Depth-Anything TensorRT engine..."
 
     engine_path="$OUTPUT_DIR/depth-anything/depth_anything_v2_vits.engine"
-    mkdir -p $(dirname "$engine_path")
 
+    if [ -f "$engine_path" ]; then
+        echo "Engine already exists at: $engine_path"
+        echo "Skipping build."
+        return 0
+    fi
+    mkdir -p $(dirname "$engine_path")
 
     if [ ! -d "ComfyUI-Depth-Anything-Tensorrt" ]; then
         git clone https://github.com/yuvraj108c/ComfyUI-Depth-Anything-Tensorrt.git \
             && cd ComfyUI-Depth-Anything-Tensorrt \
             && git checkout 1f4c161949b3616516745781fb91444e6443cc25 2>/dev/null \
             && cd ..
-    fi
-
-    if [ -f "$engine_path" ]; then
-        echo "Engine already exists at: $engine_path"
-        echo "Skipping build."
-        return 0
     fi
 
     echo "Locating Depth-Anything ONNX model..."
@@ -230,6 +230,12 @@ function build_pose_engine() {
     echo "Building YoloNas Pose TensorRT engine..."
 
     engine_path="$OUTPUT_DIR/pose/yolo_nas_pose_l_0.5.engine"
+
+    if [ -f "$engine_path" ]; then
+        echo "Engine already exists at: $engine_path"
+        echo "Skipping build."
+        return 0
+    fi
     mkdir -p $(dirname "$engine_path")
 
     if [ ! -d "ComfyUI-YoloNasPose-Tensorrt" ]; then
@@ -238,12 +244,6 @@ function build_pose_engine() {
             && git checkout 873de560bb05bf3331e4121f393b83ecc04c324a 2>/dev/null \
             && $CONDA_PYTHON -m pip install -r requirements.txt \
             && cd ..
-    fi
-
-    if [ -f "$engine_path" ]; then
-        echo "Engine already exists at: $engine_path"
-        echo "Skipping build."
-        return 0
     fi
 
     echo "Locating YoloNas Pose ONNX model..."
@@ -256,8 +256,6 @@ function build_pose_engine() {
     fi
 
     echo "Found ONNX model at: $onnx_path"
-
-
 
     # The export_trt.py script expects a hardcoded path to the model and engine, so create a link
     cd ComfyUI-YoloNasPose-Tensorrt

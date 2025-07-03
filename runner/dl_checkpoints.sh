@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -e
 [ -v DEBUG ] && set -x
 
 # ComfyUI image configuration
