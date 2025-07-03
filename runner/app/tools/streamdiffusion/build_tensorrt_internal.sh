@@ -229,7 +229,7 @@ function build_depth_anything_engine() {
 function build_pose_engine() {
     echo "Building YoloNas Pose TensorRT engine..."
 
-    engines_dir="$OUTPUT_DIR/pose"
+    engines_dir="$(readlink -f "$OUTPUT_DIR/pose")"
     mkdir -p "$engines_dir"
 
     if [ ! -d "ComfyUI-YoloNasPose-Tensorrt" ]; then
