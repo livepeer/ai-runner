@@ -182,30 +182,11 @@ class StreamDiffusion(Pipeline):
             self.frame_queue = asyncio.Queue()
 
 
-sd15_keywords = ["sd1.5", "sd15", "stable-diffusion-v1-5", "stable-diffusion-1-5", "kohaku", "dreamshaper"]
-sdturbo_keywords = ["sdturbo", "sd-turbo"]
-sdxl_turbo_keywords = ["sdxl-turbo"]
-
-def _get_pipeline_type_from_model_id(model_id: str) -> Optional[str]:
-    """Determine pipeline type based on model ID"""
-    model_id_lower = model_id.lower()
-
-    if any(keyword in model_id_lower for keyword in sd15_keywords):
-        return "sd1.5"
-    elif any(keyword in model_id_lower for keyword in sdturbo_keywords):
-        return "sdturbo"
-    elif any(keyword in model_id_lower for keyword in sdxl_turbo_keywords):
-        return "sdxlturbo"
-
-    raise ValueError(f"Unknown pipeline type for model ID: {model_id}")
-
-
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
     if not params.controlnets:
         return None
 
-    pipeline_type = _get_pipeline_type_from_model_id(params.model_id)
     controlnet_configs = []
     for cn_config in params.controlnets:
         if not cn_config.enabled:
@@ -230,7 +211,6 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
 
         controlnet_config = {
             'model_id': cn_config.model_id,
-            'pipeline_type': pipeline_type,
             'preprocessor': cn_config.preprocessor,
             'conditioning_scale': cn_config.conditioning_scale,
             'enabled': cn_config.enabled,
