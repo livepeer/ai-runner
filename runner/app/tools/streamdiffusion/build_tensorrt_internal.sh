@@ -135,7 +135,7 @@ total_builds=0
 for model in $MODELS; do
     for timestep in $TIMESTEPS; do
         for dim in $DIMENSIONS; do
-            ((total_builds++))
+            total_builds=$((total_builds + 1))
         done
     done
 done
@@ -148,7 +148,7 @@ current_build=0
 for model in $MODELS; do
     for timestep in $TIMESTEPS; do
         for dim in $DIMENSIONS; do
-            ((current_build++))
+            current_build=$((current_build + 1))
 
             # Parse dimensions
             width=${dim%x*}
