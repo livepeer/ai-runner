@@ -257,16 +257,27 @@ function build_pose_engine() {
 
     echo "Found ONNX model at: $onnx_path"
 
-    echo "Calling export_trt.py to build engine: $engine_path"
-    if $CONDA_PYTHON ./ComfyUI-YoloNasPose-Tensorrt/export_trt.py \
-        --trt-path="$engine_path" \
-        --onnx-path="$onnx_path"; then
-        echo "  ✓ YoloNas Pose TensorRT engine built successfully"
+
+
+    # The export_trt.py script expects a hardcoded path to the model and engine, so create a link
+    cd ComfyUI-YoloNasPose-Tensorrt
+    ln -sf "$onnx_path" "yolo_nas_pose_l.onnx"
+
+    echo "Calling export_trt.py to build engine in temporary directory..."
+    if $CONDA_PYTHON export_trt.py; then
+        if [ -f "yolo_nas_pose_l.engine" ]; then
+            mv "yolo_nas_pose_l.engine" "$engine_path"
+            echo "  ✓ YoloNas Pose TensorRT engine built successfully"
+        else
+            echo "  ✗ Engine file not found in expected location"
+            return 1
+        fi
     else
         echo "  ✗ Failed to build YoloNas Pose TensorRT engine"
         return 1
     fi
 
+    cd ..
     echo
 }
 
