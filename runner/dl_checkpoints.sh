@@ -131,6 +131,15 @@ function download_streamdiffusion_live_models() {
   # StreamDiffusion
   huggingface-cli download KBlueLeaf/kohaku-v2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+
+  # ControlNet models
+  huggingface-cli download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download thibaud/controlnet-sd21-hed-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download thibaud/controlnet-sd21-canny-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download thibaud/controlnet-sd21-depth-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download thibaud/controlnet-sd21-color-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+
+  # Preprocessor models
   huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
   huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
 }
@@ -208,7 +217,7 @@ function build_streamdiffusion_tensorrt() {
               --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
               --timesteps '3' \
               --dimensions '384x704 512x512 704x384' \
-              --controlnets 'lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11p_sd15_canny lllyasviel/control_v11p_sd15_lineart lllyasviel/control_v11p_sd15_openpose' \
+              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
               --build-depth-anything \
               --build-pose \
               && \

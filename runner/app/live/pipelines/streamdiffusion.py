@@ -26,15 +26,15 @@ class StreamDiffusionParams(BaseModel):
         extra = "forbid"
 
     # Model configuration
-    model_id: str = "KBlueLeaf/kohaku-v2.1"
+    model_id: str = "stabilityai/sd-turbo"
 
     # Generation parameters
     prompt: str = "an anime render of a girl with purple hair, masterpiece"
     negative_prompt: str = "blurry, low quality, flat, 2d"
-    guidance_scale: float = 1.1
+    guidance_scale: float = 1.0
     delta: float = 0.7
     num_inference_steps: int = 50
-    t_index_list: List[int] = [0, 16, 32]
+    t_index_list: List[int] = [12, 20, 32]
 
     # Image dimensions
     width: int = DEFAULT_WIDTH
@@ -61,17 +61,26 @@ class StreamDiffusionParams(BaseModel):
     # ControlNet settings
     controlnets: Optional[List[ControlNetConfig]] = [
         ControlNetConfig(
-            model_id="lllyasviel/control_v11f1p_sd15_depth",
-            conditioning_scale=0.28,
-            preprocessor="depth_tensorrt",
+            model_id="thibaud/controlnet-sd21-openpose-diffusers",
+            conditioning_scale=0.711,
+            preprocessor="pose_tensorrt",
             preprocessor_params={},
             enabled=True,
             control_guidance_start=0.0,
             control_guidance_end=1.0,
         ),
         ControlNetConfig(
-            model_id="lllyasviel/control_v11p_sd15_canny",
-            conditioning_scale=0.29,
+            model_id="thibaud/controlnet-sd21-hed-diffusers",
+            conditioning_scale=0.2,
+            preprocessor="soft_edge",
+            preprocessor_params={},
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
+            model_id="thibaud/controlnet-sd21-canny-diffusers",
+            conditioning_scale=0.2,
             preprocessor="canny",
             preprocessor_params={
                 "low_threshold": 100,
@@ -82,31 +91,19 @@ class StreamDiffusionParams(BaseModel):
             control_guidance_end=1.0,
         ),
         ControlNetConfig(
-            model_id="lllyasviel/control_v11f1e_sd15_tile",
+            model_id="thibaud/controlnet-sd21-depth-diffusers",
+            conditioning_scale=0.5,
+            preprocessor="depth_tensorrt",
+            preprocessor_params={},
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
+            model_id="thibaud/controlnet-sd21-color-diffusers",
             conditioning_scale=0.2,
             preprocessor="passthrough",
             preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="lllyasviel/control_v11p_sd15_openpose",
-            conditioning_scale=0.2,
-            preprocessor="pose_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="lllyasviel/control_v11p_sd15_lineart",
-            conditioning_scale=0.0,
-            preprocessor="standard_lineart",
-            preprocessor_params={
-                "gaussian_sigma": 6.0,
-                "intensity_threshold": 8
-            },
             enabled=True,
             control_guidance_start=0.0,
             control_guidance_end=1.0,
@@ -217,7 +214,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         preprocessor_params = (cn_config.preprocessor_params or {}).copy()
 
         # Inject preprocessor-specific parameters
-        if cn_config.preprocessor == "canny":
+        if cn_config.preprocessor in ["canny", "hed", "soft_edge"]:
             # no enforced params
             pass
         elif cn_config.preprocessor == "depth_tensorrt":
@@ -234,12 +231,6 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             })
         elif cn_config.preprocessor == "passthrough":
             preprocessor_params.update({
-                "image_width": params.width,
-                "image_height": params.height
-            })
-        elif cn_config.preprocessor == "standard_lineart":
-            preprocessor_params.update({
-                "detect_resolution": 512,
                 "image_width": params.width,
                 "image_height": params.height
             })
