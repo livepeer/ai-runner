@@ -91,6 +91,15 @@ class StreamDiffusionParams(BaseModel):
             control_guidance_end=1.0,
         ),
         ControlNetConfig(
+            model_id="lllyasviel/control_v11p_sd15_openpose",
+            conditioning_scale=0.2,
+            preprocessor="pose_tensorrt",
+            preprocessor_params={},
+            enabled=True,
+            control_guidance_start=0.0,
+            control_guidance_end=1.0,
+        ),
+        ControlNetConfig(
             model_id="lllyasviel/control_v11p_sd15_lineart",
             conditioning_scale=0.0,
             preprocessor="standard_lineart",
@@ -208,15 +217,21 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         preprocessor_params = (cn_config.preprocessor_params or {}).copy()
 
         # Inject preprocessor-specific parameters
-        if cn_config.preprocessor == "depth_tensorrt":
+        if cn_config.preprocessor == "canny":
+            # no enforced params
+            pass
+        elif cn_config.preprocessor == "depth_tensorrt":
             preprocessor_params.update({
                 "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
                 "detect_resolution": 518,
                 "image_resolution": 512
             })
-        elif cn_config.preprocessor == "canny":
-            # no enforced params
-            pass
+        elif cn_config.preprocessor == "pose_tensorrt":
+            preprocessor_params.update({
+                "engine_path": "./engines/pose/yolo_nas_pose_l_0.5.engine",
+                "detect_resolution": 640,
+                "image_resolution": 512
+            })
         elif cn_config.preprocessor == "passthrough":
             preprocessor_params.update({
                 "image_width": params.width,
