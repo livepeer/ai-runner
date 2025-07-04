@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from typing import Dict, List, Literal, Optional, Any, Tuple
+from typing import Dict, List, Literal, Optional, Any, Tuple, cast
 
 import torch
 from pydantic import BaseModel
@@ -142,7 +142,7 @@ class StreamDiffusion(Pipeline):
         # The incoming frame.tensor is (B, H, W, C) in range [-1, 1] while the
         # VaeImageProcessor inside the wrapper expects (B, C, H, W) in [0, 1].
         img_tensor = img_tensor.permute(0, 3, 1, 2)
-        img_tensor = self.pipe.stream.image_processor.denormalize(img_tensor)
+        img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
         # Noop if ControlNets are not enabled
