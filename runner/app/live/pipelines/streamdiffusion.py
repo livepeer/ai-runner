@@ -167,16 +167,47 @@ class StreamDiffusion(Pipeline):
         async with self._pipeline_lock:
             new_params = StreamDiffusionParams(**params)
             if self.pipe is not None:
-                # avoid resetting the pipe if only the prompt changed
-                only_prompt = self.params.model_copy(update={"prompt": new_params.prompt})
-                if new_params == only_prompt:
-                    logging.info(f"Updating prompt: {new_params.prompt}")
-                    prompt_list = [(new_params.prompt, 1.0)] if isinstance(new_params.prompt, str) else new_params.prompt
-                    self.pipe.update_stream_params(prompt_list=prompt_list)
-                    self.params = new_params
+                updatable_params = {
+                    'num_inference_steps', 'guidance_scale', 'delta', 't_index_list', 'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt', 'seed_interpolation_method'
+                }
+
+                only_updatable_changed = True
+                for key, new_value in new_params.model_dump().items():
+                    if key not in updatable_params and new_value != getattr(self.params, key):
+                        only_updatable_changed = False
+                        logging.info(f"Non-updatable parameter changed: {key}")
+                        break
+                    elif key == 't_index_list' and len(new_value) != len(getattr(self.params, key)):
+                        only_updatable_changed = False
+                        logging.info(f"Non-updatable parameter changed: length of t_index_list")
+                        break
+
+                if only_updatable_changed:
+                    logging.info("Updating parameters via update_stream_params")
+
+                    update_kwargs = {
+                        k: v for k, v
+                        in new_params.model_dump().items()
+                        if k in updatable_params and v != getattr(self.params, k)
+                    }
+
+                    # Some fields are named/typed differently from our params in the update_stream_params method
+                    if 'prompt' in update_kwargs:
+                        prompt = update_kwargs.pop('prompt')
+                        update_kwargs['prompt_list'] = [(prompt, 1.0)] if isinstance(prompt, str) else prompt
+                    if 'prompt_interpolation_method' in update_kwargs:
+                        update_kwargs['interpolation_method'] = update_kwargs.pop('prompt_interpolation_method')
+                    if 'seed' in update_kwargs:
+                        seed = update_kwargs.pop('seed')
+                        update_kwargs['seed_list'] = [(seed, 1.0)] if isinstance(seed, int) else seed
+
+                    if update_kwargs:
+                        self.pipe.update_stream_params(**update_kwargs)
+                        self.params = new_params
+
                     return
 
-            logging.info(f"Resetting diffuser for params change")
+            logging.info(f"Resetting pipeline for params change")
 
             self.pipe = None
             self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
