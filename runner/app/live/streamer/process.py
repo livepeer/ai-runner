@@ -240,8 +240,19 @@ class PipelineProcess:
         while not self.is_done():
             try:
                 params = await asyncio.to_thread(self.param_update_queue.get, timeout=0.1)
+                if self._handle_logging_params(params):
+                    params = None
 
-                if not self._handle_logging_params(params):
+                # Drain the params queue to skip old params updates
+                while not self.param_update_queue.empty():
+                    try:
+                        params = self.param_update_queue.get_nowait()
+                        if self._handle_logging_params(params):
+                            params = None
+                    except queue.Empty:
+                        break
+
+                if params:
                     logging.info(f"PipelineProcess: Updating pipeline parameters: {params}")
                     await pipeline.update_params(**params)
             except queue.Empty:
