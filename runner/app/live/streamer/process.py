@@ -155,15 +155,12 @@ class PipelineProcess:
 
     async def _initialize_pipeline(self):
         try:
-            stream_id = ""
-            params = {}
-            try:
-                params = self.param_update_queue.get_nowait()
+            params = await self._get_latest_params(timeout=0.005)
+            if params:
                 logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
-                if self._handle_logging_params(params):
-                    params = {}
-            except queue.Empty:
+            else:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
+                params = {}
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
@@ -239,27 +236,38 @@ class PipelineProcess:
     async def _param_update_loop(self, pipeline: Pipeline):
         while not self.is_done():
             try:
-                params = await asyncio.to_thread(self.param_update_queue.get, timeout=0.1)
-                if self._handle_logging_params(params):
-                    params = None
-
-                # Drain the params queue to skip old params updates
-                while not self.param_update_queue.empty():
-                    try:
-                        params = self.param_update_queue.get_nowait()
-                        if self._handle_logging_params(params):
-                            params = None
-                    except queue.Empty:
-                        break
-
+                params = await self._get_latest_params(timeout=0.1)
                 if params:
                     logging.info(f"PipelineProcess: Updating pipeline parameters: {params}")
                     await pipeline.update_params(**params)
-            except queue.Empty:
-                # Timeout ensures the non-daemon threads from to_thread can exit if task is cancelled
-                continue
             except Exception as e:
                 self._report_error(f"Error updating params: {e}")
+
+    async def _get_latest_params(self, timeout: float) -> dict | None:
+        """
+        Get the latest params from the param_update_queue, skipping stale entries before the latest. Already filters
+        and processes params that are only logging updates. Waits for timeout seconds for a new params entry, or returns
+        None if no new entry is found.
+        """
+
+        try:
+            params = await asyncio.to_thread(self.param_update_queue.get, timeout=timeout)
+        except queue.Empty:
+            return None
+
+        if self._handle_logging_params(params):
+            params = None
+
+        # Drain the params queue to get the latest params
+        while not self.param_update_queue.empty():
+            try:
+                new_params = self.param_update_queue.get_nowait()
+                if not self._handle_logging_params(new_params):
+                    params = new_params
+            except queue.Empty:
+                break
+
+        return params
 
     def _report_error(self, error_msg: str):
         error_event = {
