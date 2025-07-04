@@ -166,6 +166,10 @@ class StreamDiffusion(Pipeline):
     async def update_params(self, **params):
         async with self._pipeline_lock:
             new_params = StreamDiffusionParams(**params)
+            if new_params == self.params:
+                logging.info("No parameters changed")
+                return
+
             if self.pipe is not None:
                 updatable_params = {
                     'num_inference_steps', 'guidance_scale', 'delta', 't_index_list', 'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt', 'seed_interpolation_method'
@@ -201,11 +205,12 @@ class StreamDiffusion(Pipeline):
                         seed = update_kwargs.pop('seed')
                         update_kwargs['seed_list'] = [(seed, 1.0)] if isinstance(seed, int) else seed
 
-                    if update_kwargs:
+                    try:
                         self.pipe.update_stream_params(**update_kwargs)
                         self.params = new_params
-
-                    return
+                        return
+                    except Exception as e:
+                        logging.error(f"Error updating parameters dynamically: {e}")
 
             logging.info(f"Resetting pipeline for params change")
 
