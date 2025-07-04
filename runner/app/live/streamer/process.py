@@ -1,6 +1,8 @@
 import os
 import asyncio
 import logging
+import hashlib
+import json
 import torch.multiprocessing as mp
 import queue
 import sys
@@ -237,8 +239,13 @@ class PipelineProcess:
         while not self.is_done():
             try:
                 params = await self._get_latest_params(timeout=0.1)
-                if params:
-                    logging.info(f"PipelineProcess: Updating pipeline parameters: {params}")
+                if not params:
+                    continue
+
+                params_hash = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
+                logging.info(f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}")
+
+                with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
                     await pipeline.update_params(**params)
             except Exception as e:
                 self._report_error(f"Error updating params: {e}")
