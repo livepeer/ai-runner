@@ -143,15 +143,15 @@ class PipelineProcess:
             self._report_error(f"Error in process run method: {e}")
 
 
-    def _handle_logging_params(self, params: dict) -> dict:
+    def _handle_logging_params(self, params: dict) -> bool:
         if isinstance(params, dict) and "request_id" in params and "manifest_id" in params and "stream_id" in params:
             logging.info(f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, manifest_id={params['manifest_id']} stream_id={params['stream_id']}")
             self.request_id = params["request_id"]
             self._reset_logging_fields(
                 params["request_id"], params["manifest_id"], params["stream_id"]
             )
-            return {}
-        return params
+            return True
+        return False
 
     async def _initialize_pipeline(self):
         try:
@@ -160,7 +160,8 @@ class PipelineProcess:
             try:
                 params = self.param_update_queue.get_nowait()
                 logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
-                params = self._handle_logging_params(params)
+                if self._handle_logging_params(params):
+                    params = {}
             except queue.Empty:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
 
@@ -240,7 +241,7 @@ class PipelineProcess:
             try:
                 params = await asyncio.to_thread(self.param_update_queue.get, timeout=0.1)
 
-                if self._handle_logging_params(params):
+                if not self._handle_logging_params(params):
                     logging.info(f"PipelineProcess: Updating pipeline parameters: {params}")
                     await pipeline.update_params(**params)
             except queue.Empty:
