@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from typing import Dict, List, Literal, Optional, Any
+from typing import Dict, List, Literal, Optional, Any, Tuple
 
 import torch
 from pydantic import BaseModel
@@ -30,7 +30,8 @@ class StreamDiffusionParams(BaseModel):
     model_id: str = "stabilityai/sd-turbo"
 
     # Generation parameters
-    prompt: str = "an anime render of a girl with purple hair, masterpiece"
+    prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
+    prompt_interpolation_method: Literal["linear", "slerp"] = "slerp"
     negative_prompt: str = "blurry, low quality, flat, 2d"
     guidance_scale: float = 1.0
     delta: float = 0.7
@@ -52,7 +53,8 @@ class StreamDiffusionParams(BaseModel):
     # Processing settings
     use_denoising_batch: bool = True
     do_add_noise: bool = True
-    seed: int = 789
+    seed: int | List[Tuple[int, float]] = 789
+    seed_interpolation_method: Literal["linear", "slerp"] = "linear"
 
     # Similar image filter settings
     enable_similar_image_filter: bool = False
@@ -169,7 +171,8 @@ class StreamDiffusion(Pipeline):
                 only_prompt = self.params.model_copy(update={"prompt": new_params.prompt})
                 if new_params == only_prompt:
                     logging.info(f"Updating prompt: {new_params.prompt}")
-                    self.pipe.stream.update_prompt(new_params.prompt)
+                    prompt_list = [(new_params.prompt, 1.0)] if isinstance(new_params.prompt, str) else new_params.prompt
+                    self.pipe.update_stream_params(prompt_list=prompt_list)
                     self.params = new_params
                     return
 
@@ -255,7 +258,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
         similar_image_filter_threshold=params.similar_image_filter_threshold,
         similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
         use_denoising_batch=params.use_denoising_batch,
-        seed=params.seed,
+        seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
         use_controlnet=bool(controlnet_config),
         controlnet_config=controlnet_config,
         engine_dir=engine_dir,
@@ -264,9 +267,12 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
 
     pipe.prepare(
         prompt=params.prompt,
+        interpolation_method=params.prompt_interpolation_method,
         negative_prompt=params.negative_prompt,
         num_inference_steps=params.num_inference_steps,
         guidance_scale=params.guidance_scale,
         delta=params.delta,
+        seed_list=[(params.seed, 1.0)] if isinstance(params.seed, int) else params.seed,
+        seed_interpolation_method=params.seed_interpolation_method,
     )
     return pipe
