@@ -1,6 +1,6 @@
 # Based on https://github.com/huggingface/api-inference-community/blob/main/docker_images/diffusers/Dockerfile
 
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu20.04
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
 LABEL maintainer="Yondon Fu <yondon@livepeer.org>"
 
 # Add any system dependency here
