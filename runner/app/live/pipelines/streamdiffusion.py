@@ -120,6 +120,7 @@ class StreamDiffusion(Pipeline):
     def __init__(self):
         super().__init__()
         self.pipe: Optional[StreamDiffusionWrapper] = None
+        self.params: Optional[StreamDiffusionParams] = None
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
@@ -177,11 +178,12 @@ class StreamDiffusion(Pipeline):
 
                 only_updatable_changed = True
                 for key, new_value in new_params.model_dump().items():
-                    if key not in updatable_params and new_value != getattr(self.params, key):
+                    curr_value = getattr(self.params, key, None)
+                    if key not in updatable_params and new_value != curr_value:
                         only_updatable_changed = False
                         logging.info(f"Non-updatable parameter changed: {key}")
                         break
-                    elif key == 't_index_list' and len(new_value) != len(getattr(self.params, key)):
+                    elif key == 't_index_list' and len(new_value) != len(curr_value or []):
                         only_updatable_changed = False
                         logging.info(f"Non-updatable parameter changed: length of t_index_list")
                         break
