@@ -158,7 +158,7 @@ class PipelineProcess:
     async def _initialize_pipeline(self):
         try:
             params = await self._get_latest_params(timeout=0.005)
-            if params:
+            if params is not None:
                 logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
             else:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
@@ -239,7 +239,7 @@ class PipelineProcess:
         while not self.is_done():
             try:
                 params = await self._get_latest_params(timeout=0.1)
-                if not params:
+                if params is None:
                     continue
 
                 params_hash = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
