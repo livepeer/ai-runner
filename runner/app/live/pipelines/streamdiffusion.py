@@ -165,62 +165,69 @@ class StreamDiffusion(Pipeline):
         return await self.frame_queue.get()
 
     async def update_params(self, **params):
+        new_params = StreamDiffusionParams(**params)
+        if new_params == self.params:
+            logging.info("No parameters changed")
+            return
+
         async with self._pipeline_lock:
-            new_params = StreamDiffusionParams(**params)
-            if new_params == self.params:
-                logging.info("No parameters changed")
-                return
-
-            if self.pipe is not None:
-                updatable_params = {
-                    'num_inference_steps', 'guidance_scale', 'delta', 't_index_list', 'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt', 'seed_interpolation_method'
-                }
-
-                only_updatable_changed = True
-                curr_params = self.params.model_dump() if self.params else {}
-                for key, new_value in new_params.model_dump().items():
-                    curr_value = curr_params.get(key, None)
-                    if key not in updatable_params and new_value != curr_value:
-                        only_updatable_changed = False
-                        logging.info(f"Non-updatable parameter changed: {key}")
-                        break
-                    elif key == 't_index_list' and len(new_value) != len(curr_value or []):
-                        only_updatable_changed = False
-                        logging.info(f"Non-updatable parameter changed: length of t_index_list")
-                        break
-
-                if only_updatable_changed:
-                    logging.info("Updating parameters via update_stream_params")
-
-                    update_kwargs = {
-                        k: v for k, v
-                        in new_params.model_dump().items()
-                        if k in updatable_params and v != getattr(self.params, k)
-                    }
-
-                    # Some fields are named/typed differently from our params in the update_stream_params method
-                    if 'prompt' in update_kwargs:
-                        prompt = update_kwargs.pop('prompt')
-                        update_kwargs['prompt_list'] = [(prompt, 1.0)] if isinstance(prompt, str) else prompt
-                    if 'prompt_interpolation_method' in update_kwargs:
-                        update_kwargs['interpolation_method'] = update_kwargs.pop('prompt_interpolation_method')
-                    if 'seed' in update_kwargs:
-                        seed = update_kwargs.pop('seed')
-                        update_kwargs['seed_list'] = [(seed, 1.0)] if isinstance(seed, int) else seed
-
-                    try:
-                        self.pipe.update_stream_params(**update_kwargs)
-                        self.params = new_params
-                        return
-                    except Exception as e:
-                        logging.error(f"Error updating parameters dynamically: {e}")
+            try:
+                if await self._update_params_dynamic(new_params):
+                    return
+            except Exception as e:
+                logging.error(f"Error updating parameters dynamically: {e}")
 
             logging.info(f"Resetting pipeline for params change")
-
             self.pipe = None
             self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
             self.params = new_params
             self.first_frame = True
+
+    async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
+        if self.pipe is None:
+            return False
+
+        updatable_params = {
+            'num_inference_steps', 'guidance_scale', 'delta', 't_index_list', 'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt', 'seed_interpolation_method'
+        }
+
+        only_updatable_changed = True
+        curr_params = self.params.model_dump() if self.params else {}
+        for key, new_value in new_params.model_dump().items():
+            curr_value = curr_params.get(key, None)
+            if key not in updatable_params and new_value != curr_value:
+                only_updatable_changed = False
+                logging.info(f"Non-updatable parameter changed: {key}")
+                break
+            elif key == 't_index_list' and len(new_value) != len(curr_value or []):
+                only_updatable_changed = False
+                logging.info(f"Non-updatable parameter changed: length of t_index_list")
+                break
+
+        if not only_updatable_changed:
+            return False
+
+        logging.info("Updating parameters via update_stream_params")
+
+        update_kwargs = {
+            k: v for k, v
+            in new_params.model_dump().items()
+            if k in updatable_params and v != getattr(self.params, k)
+        }
+
+        # Some fields are named/typed differently from our params in the update_stream_params method
+        if 'prompt' in update_kwargs:
+            prompt = update_kwargs.pop('prompt')
+            update_kwargs['prompt_list'] = [(prompt, 1.0)] if isinstance(prompt, str) else prompt
+        if 'prompt_interpolation_method' in update_kwargs:
+            update_kwargs['interpolation_method'] = update_kwargs.pop('prompt_interpolation_method')
+        if 'seed' in update_kwargs:
+            seed = update_kwargs.pop('seed')
+            update_kwargs['seed_list'] = [(seed, 1.0)] if isinstance(seed, int) else seed
+
+        self.pipe.update_stream_params(**update_kwargs)
+        self.params = new_params
+        return True
 
     async def stop(self):
         async with self._pipeline_lock:
