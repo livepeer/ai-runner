@@ -177,8 +177,9 @@ class StreamDiffusion(Pipeline):
                 }
 
                 only_updatable_changed = True
+                curr_params = self.params.model_dump() if self.params else {}
                 for key, new_value in new_params.model_dump().items():
-                    curr_value = getattr(self.params, key, None)
+                    curr_value = curr_params.get(key, None)
                     if key not in updatable_params and new_value != curr_value:
                         only_updatable_changed = False
                         logging.info(f"Non-updatable parameter changed: {key}")
