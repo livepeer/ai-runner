@@ -188,10 +188,13 @@ class StreamDiffusion(Pipeline):
             return False
 
         updatable_params = {
-            'num_inference_steps', 'guidance_scale', 'delta', 't_index_list', 'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt', 'seed_interpolation_method'
+            'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
+            'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt',
+            'seed_interpolation_method', 'controlnets'
         }
 
         only_updatable_changed = True
+        controlnet_scale_changes: List[Tuple[int, float]] = []
         curr_params = self.params.model_dump() if self.params else {}
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
@@ -203,6 +206,23 @@ class StreamDiffusion(Pipeline):
                 only_updatable_changed = False
                 logging.info(f"Non-updatable parameter changed: length of t_index_list")
                 break
+            elif key == 'controlnets':
+                # check if only the scale of the controlnets changed
+                if len(new_value) != len(curr_value or []):
+                    only_updatable_changed = False
+                    logging.info(f"Non-updatable parameter changed: length of controlnets")
+                    break
+                for i, new_cn in enumerate(new_value):
+                    curr_cn = curr_value[i]
+                    curr_cn_with_new_scale = {**curr_cn, 'conditioning_scale': new_cn.conditioning_scale}
+                    if curr_cn_with_new_scale != new_cn:
+                        only_updatable_changed = False
+                        logging.info(f"Non-updatable parameter changed: controlnets[{i}]")
+                        break
+                    elif curr_cn['conditioning_scale'] != new_cn['conditioning_scale']:
+                        controlnet_scale_changes.append((i, new_cn.conditioning_scale))
+                if only_updatable_changed:
+                    break
 
         if not only_updatable_changed:
             return False
@@ -212,7 +232,7 @@ class StreamDiffusion(Pipeline):
         update_kwargs = {
             k: v for k, v
             in new_params.model_dump().items()
-            if k in updatable_params and v != getattr(self.params, k)
+            if k in updatable_params and k != 'controlnets' and v != getattr(self.params, k)
         }
 
         # Some fields are named/typed differently from our params in the update_stream_params method
@@ -225,7 +245,12 @@ class StreamDiffusion(Pipeline):
             seed = update_kwargs.pop('seed')
             update_kwargs['seed_list'] = [(seed, 1.0)] if isinstance(seed, int) else seed
 
-        self.pipe.update_stream_params(**update_kwargs)
+        if update_kwargs:
+            self.pipe.update_stream_params(**update_kwargs)
+
+        for i, scale in controlnet_scale_changes:
+            self.pipe.update_controlnet_scale(i, scale)
+
         self.params = new_params
         return True
 
