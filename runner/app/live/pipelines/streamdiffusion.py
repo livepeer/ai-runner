@@ -211,6 +211,8 @@ class StreamDiffusion(Pipeline):
                 if not updatable:
                     logging.info(f"Non-updatable parameter changed: controlnets")
                     return False
+                # do not add controlnets to update_kwargs
+                continue
 
             # at this point, we know it's an updatable parameter that changed
             if key == 'prompt':
