@@ -193,50 +193,39 @@ class StreamDiffusion(Pipeline):
             'seed_interpolation_method', 'controlnets'
         }
 
-        only_updatable_changed = True
+        update_kwargs = {}
         controlnet_scale_changes: List[Tuple[int, float]] = []
         curr_params = self.params.model_dump() if self.params else {}
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
-            if key not in updatable_params and new_value != curr_value:
-                only_updatable_changed = False
+            if new_value == curr_value:
+                continue
+            elif key not in updatable_params and new_value != curr_value:
                 logging.info(f"Non-updatable parameter changed: {key}")
-                break
+                return False
             elif key == 't_index_list' and len(new_value) != len(curr_value or []):
-                only_updatable_changed = False
                 logging.info(f"Non-updatable parameter changed: length of t_index_list")
-                break
+                return False
             elif key == 'controlnets':
                 updatable, controlnet_scale_changes = _is_controlnet_change_updatable(self.params, new_params)
                 if not updatable:
-                    only_updatable_changed = False
                     logging.info(f"Non-updatable parameter changed: controlnets")
-                    break
+                    return False
 
-        if not only_updatable_changed:
-            return False
-
-        update_kwargs = {
-            k: v for k, v
-            in new_params.model_dump().items()
-            if k in updatable_params and k != 'controlnets' and v != getattr(self.params, k)
-        }
-
-        # Some fields are named/typed differently from our params in the update_stream_params method
-        if 'prompt' in update_kwargs:
-            prompt = update_kwargs.pop('prompt')
-            update_kwargs['prompt_list'] = [(prompt, 1.0)] if isinstance(prompt, str) else prompt
-        if 'prompt_interpolation_method' in update_kwargs:
-            update_kwargs['interpolation_method'] = update_kwargs.pop('prompt_interpolation_method')
-        if 'seed' in update_kwargs:
-            seed = update_kwargs.pop('seed')
-            update_kwargs['seed_list'] = [(seed, 1.0)] if isinstance(seed, int) else seed
+            # at this point, we know it's an updatable parameter that changed
+            if key == 'prompt':
+                update_kwargs['prompt_list'] = [(new_value, 1.0)] if isinstance(new_value, str) else new_value
+            elif key == 'prompt_interpolation_method':
+                update_kwargs['interpolation_method'] = new_value
+            elif key == 'seed':
+                update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
+            else:
+                update_kwargs[key] = new_value
 
         logging.info(f"Updating parameters dynamically update_kwargs={update_kwargs} controlnet_scale_changes={controlnet_scale_changes}")
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
-
         for i, scale in controlnet_scale_changes:
             self.pipe.update_controlnet_scale(i, scale)
 
