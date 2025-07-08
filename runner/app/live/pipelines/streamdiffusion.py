@@ -207,27 +207,14 @@ class StreamDiffusion(Pipeline):
                 logging.info(f"Non-updatable parameter changed: length of t_index_list")
                 break
             elif key == 'controlnets':
-                # check if only the scale of the controlnets changed
-                curr_value = curr_value or []
-                if len(new_value) != len(curr_value):
+                updatable, controlnet_scale_changes = _is_controlnet_change_updatable(self.params, new_params)
+                if not updatable:
                     only_updatable_changed = False
-                    logging.info(f"Non-updatable parameter changed: length of controlnets")
-                    break
-                for i, new_cn in enumerate(new_value):
-                    curr_cn = curr_value[i]
-                    curr_cn_with_new_scale = {**curr_cn, 'conditioning_scale': new_cn['conditioning_scale']}
-                    if curr_cn_with_new_scale != new_cn:
-                        only_updatable_changed = False
-                        logging.info(f"Non-updatable parameter changed: controlnets[{i}]")
-                        break
-                    elif curr_cn['conditioning_scale'] != new_cn['conditioning_scale']:
-                        controlnet_scale_changes.append((i, new_cn['conditioning_scale']))
-                if only_updatable_changed:
+                    logging.info(f"Non-updatable parameter changed: controlnets")
                     break
 
         if not only_updatable_changed:
             return False
-
 
         update_kwargs = {
             k: v for k, v
@@ -261,6 +248,28 @@ class StreamDiffusion(Pipeline):
             self.pipe = None
             self.frame_queue = asyncio.Queue()
 
+
+def _is_controlnet_change_updatable(curr_params: StreamDiffusionParams | None, new_params: StreamDiffusionParams | None) -> Tuple[bool, list[Tuple[int, float]]]:
+    curr = curr_params.controlnets if curr_params and curr_params.controlnets else []
+    new = new_params.controlnets if new_params and new_params.controlnets else []
+
+    if len(new) != len(curr):
+        return False, []
+
+    scale_changes: list[Tuple[int, float]] = []
+    for i, new_cn in enumerate(new):
+        curr_cn = curr[i]
+        if curr_cn == new_cn:
+            continue
+
+        curr_cn_with_new_scale = curr_cn.model_copy(update={'conditioning_scale': new_cn.conditioning_scale})
+        if curr_cn_with_new_scale != new_cn:
+            # more than just the scale changed
+            return False, []
+
+        scale_changes.append((i, new_cn.conditioning_scale))
+
+    return True, scale_changes
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
