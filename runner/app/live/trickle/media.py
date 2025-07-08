@@ -162,6 +162,7 @@ async def run_publish(publish_url: str, image_generator, get_metadata, monitorin
                 reader = asyncio.StreamReader()
                 protocol = asyncio.StreamReaderProtocol(reader)
                 transport, _ = await loop.connect_read_pipe(lambda: protocol, pipe_file)
+                start_time = time.time()
                 while True:
                     sz = 32 * 1024 # read in chunks of 32KB
                     data = await reader.read(sz)
@@ -175,6 +176,7 @@ async def run_publish(publish_url: str, image_generator, get_metadata, monitorin
                             "timestamp": int(time.time() * 1000)
                         }, queue_event_type="stream_trace")
                 transport.close()
+                logging.info(f"Published seq={segment.seq()} took={time.time()-start_time}s")
 
         def sync_callback(pipe_reader, pipe_writer, pipe_name):
             def do_schedule():
