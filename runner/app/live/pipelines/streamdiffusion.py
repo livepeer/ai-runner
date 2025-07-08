@@ -208,26 +208,26 @@ class StreamDiffusion(Pipeline):
                 break
             elif key == 'controlnets':
                 # check if only the scale of the controlnets changed
-                if len(new_value) != len(curr_value or []):
+                curr_value = curr_value or []
+                if len(new_value) != len(curr_value):
                     only_updatable_changed = False
                     logging.info(f"Non-updatable parameter changed: length of controlnets")
                     break
                 for i, new_cn in enumerate(new_value):
                     curr_cn = curr_value[i]
-                    curr_cn_with_new_scale = {**curr_cn, 'conditioning_scale': new_cn.conditioning_scale}
+                    curr_cn_with_new_scale = {**curr_cn, 'conditioning_scale': new_cn['conditioning_scale']}
                     if curr_cn_with_new_scale != new_cn:
                         only_updatable_changed = False
                         logging.info(f"Non-updatable parameter changed: controlnets[{i}]")
                         break
                     elif curr_cn['conditioning_scale'] != new_cn['conditioning_scale']:
-                        controlnet_scale_changes.append((i, new_cn.conditioning_scale))
+                        controlnet_scale_changes.append((i, new_cn['conditioning_scale']))
                 if only_updatable_changed:
                     break
 
         if not only_updatable_changed:
             return False
 
-        logging.info("Updating parameters via update_stream_params")
 
         update_kwargs = {
             k: v for k, v
@@ -244,6 +244,8 @@ class StreamDiffusion(Pipeline):
         if 'seed' in update_kwargs:
             seed = update_kwargs.pop('seed')
             update_kwargs['seed_list'] = [(seed, 1.0)] if isinstance(seed, int) else seed
+
+        logging.info(f"Updating parameters dynamically update_kwargs={update_kwargs} controlnet_scale_changes={controlnet_scale_changes}")
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
