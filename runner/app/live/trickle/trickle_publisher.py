@@ -29,7 +29,7 @@ class TricklePublisher:
         logging.debug(f"Preconnecting to URL: {url}")
         try:
             # we will be incrementally writing data into this queue
-            queue = asyncio.Queue()
+            queue = asyncio.Queue(maxsize=1)
             asyncio.create_task(self._run_post(url, queue))
             return queue
         except aiohttp.ClientError as e:
