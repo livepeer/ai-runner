@@ -104,7 +104,7 @@ class TricklePublisher:
                     await self._run_delete()
                     await self.session.close()
                 except Exception:
-                    logging.error(f"Error closing trickle subscriber", exc_info=True)
+                    logging.error(f"Error closing trickle publisher", exc_info=True)
                 finally:
                     self.session = None
 
