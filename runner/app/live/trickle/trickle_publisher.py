@@ -46,9 +46,9 @@ class TricklePublisher:
             # TODO propagate errors?
             if resp.status != 200:
                 body = await resp.text()
-                logging.error(f"Trickle POST failed {self.streamIdx()}, status code: {resp.status}, msg: {body}")
+                logging.error(f"Trickle POST failed {url}, status code: {resp.status}, msg: {body}")
         except Exception as e:
-            logging.error(f"Trickle POST  exception {self.streamIdx()} - {e}")
+            logging.exception(f"Trickle POST exception {url}")
         return None
 
     async def _run_delete(self):
