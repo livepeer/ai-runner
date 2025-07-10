@@ -340,6 +340,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
         similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
         use_denoising_batch=params.use_denoising_batch,
         seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
+        normalize_weights=params.normalize_weights,
         use_controlnet=bool(controlnet_config),
         controlnet_config=controlnet_config,
         engine_dir=engine_dir,
