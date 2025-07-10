@@ -32,6 +32,7 @@ class StreamDiffusionParams(BaseModel):
     # Generation parameters
     prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
     prompt_interpolation_method: Literal["linear", "slerp"] = "slerp"
+    normalize_weights: bool = True
     negative_prompt: str = "blurry, low quality, flat, 2d"
     guidance_scale: float = 1.0
     delta: float = 0.7
@@ -190,11 +191,12 @@ class StreamDiffusion(Pipeline):
         updatable_params = {
             'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
             'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt',
-            'seed_interpolation_method', 'controlnets'
+            'seed_interpolation_method', 'controlnets', 'normalize_weights'
         }
 
         update_kwargs = {}
         controlnet_scale_changes: List[Tuple[int, float]] = []
+        normalize_weights_changed = False
         curr_params = self.params.model_dump() if self.params else {}
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
@@ -213,6 +215,10 @@ class StreamDiffusion(Pipeline):
                     return False
                 # do not add controlnets to update_kwargs
                 continue
+            elif key == 'normalize_weights':
+                normalize_weights_changed = True
+                # do not add normalize_weights to update_kwargs
+                continue
 
             # at this point, we know it's an updatable parameter that changed
             if key == 'prompt':
@@ -228,6 +234,8 @@ class StreamDiffusion(Pipeline):
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
+        if normalize_weights_changed:
+            self.pipe.set_normalize_weights(new_params.normalize_weights)
         for i, scale in controlnet_scale_changes:
             self.pipe.update_controlnet_scale(i, scale)
 
