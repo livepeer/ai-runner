@@ -17,7 +17,7 @@ sys.path.insert(0, infer_root)
 
 from api import start_http_server
 from log import config_logging, log_timing
-from streamer.protocol.trickle import TrickleProtocol
+from streamer.protocol.trickle import TrickleProtocol, DEFAULT_WIDTH, DEFAULT_HEIGHT
 from streamer.protocol.zeromq import ZeroMQProtocol
 
 
@@ -62,9 +62,11 @@ async def main(
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
+        width = params.get('width', DEFAULT_WIDTH)
+        height = params.get('height', DEFAULT_HEIGHT)
         if stream_protocol == "trickle":
             protocol = TrickleProtocol(
-                subscribe_url, publish_url, control_url, events_url
+                subscribe_url, publish_url, control_url, events_url, width, height
             )
         elif stream_protocol == "zeromq":
             protocol = ZeroMQProtocol(subscribe_url, publish_url)

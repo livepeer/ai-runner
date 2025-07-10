@@ -22,7 +22,7 @@ To build a pipeline-specific container, you need to build the base container fir
 2. **Build the Base Container**:
 
    ```bash
-   docker build -t livepeer/ai-runner:base .
+   docker build --build-arg VERSION=$(./print_version.sh) -t livepeer/ai-runner:base .
    ```
 
    This command builds the base container and tags it as `livepeer/ai-runner:base`.
@@ -76,8 +76,8 @@ This will start the container with all necessary configurations, including GPU s
 1. Build Docker images
 ```
 export PIPELINE=noop
-docker build -t livepeer/ai-runner:live-base -f docker/Dockerfile.live-base .
-docker build -t livepeer/ai-runner:live-app-${PIPELINE} -f docker/Dockerfile.live-app-noop .
+docker build --build-arg VERSION=$(./print_version.sh) -t livepeer/ai-runner:live-base -f docker/Dockerfile.live-base .
+docker build --build-arg VERSION=$(./print_version.sh) -t livepeer/ai-runner:live-app-${PIPELINE} -f docker/Dockerfile.live-app-noop .
 ```
 
 2. Start Docker container

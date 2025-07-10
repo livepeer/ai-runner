@@ -1,4 +1,4 @@
-name: Build comfyui ai-runner images
+name: Build streamdiffusion ai-runner images
 
 on:
   pull_request:
@@ -6,7 +6,6 @@ on:
       - "runner/docker/Dockerfile.live-*"
       - "runner/app/**"
       - "runner/images/**"
-      - "runner/VERSION"
   push:
     branches:
       - main
@@ -16,7 +15,6 @@ on:
       - "runner/docker/Dockerfile.live-*"
       - "runner/app/**"
       - "runner/images/**"
-      - "runner/VERSION"
   workflow_dispatch:
 
 concurrency:
@@ -25,7 +23,7 @@ concurrency:
 
 jobs:
   base:
-    name: comfyui-base image
+    name: streamdiffusion-base image
     runs-on: [self-hosted, linux, amd64]
     outputs:
       image-digest: ${{ steps.build-base.outputs.digest }}
@@ -42,13 +40,13 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=live-base-comfyui,enable={{is_default_branch}}
-            type=sha,prefix=live-base-comfyui-sha-
-            type=sha,format=long,prefix=live-base-comfyui-sha-
-            type=ref,event=pr,prefix=live-base-comfyui-pr-
-            type=ref,event=tag,prefix=live-base-comfyui-
-            type=ref,event=branch,prefix=live-base-comfyui-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-base-comfyui-
+            type=raw,value=live-base-streamdiffusion,enable={{is_default_branch}}
+            type=sha,prefix=live-base-streamdiffusion-sha-
+            type=sha,format=long,prefix=live-base-streamdiffusion-sha-
+            type=ref,event=pr,prefix=live-base-streamdiffusion-pr-
+            type=ref,event=tag,prefix=live-base-streamdiffusion-
+            type=ref,event=branch,prefix=live-base-streamdiffusion-
+            type=raw,value=latest,enable={{is_default_branch}},prefix=live-base-streamdiffusion-
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
@@ -61,7 +59,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
-          file: docker/Dockerfile.live-base-comfyui
+          file: docker/Dockerfile.live-base-streamdiffusion
           provenance: mode=max
           sbom: true
           push: true
@@ -69,8 +67,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=livepeer/ai-runner:live-base-comfyui-dockerbuildcache
-          cache-to: type=registry,ref=livepeer/ai-runner:live-base-comfyui-dockerbuildcache,mode=max
+          cache-from: type=registry,ref=livepeer/ai-runner:live-base-streamdiffusion-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-base-streamdiffusion-dockerbuildcache,mode=max
 
   runner:
     name: Build pipeline image for runner
@@ -92,13 +90,13 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=live-app-comfyui,enable={{is_default_branch}}
-            type=sha,prefix=live-app-comfyui-sha-
-            type=sha,format=long,prefix=live-app-comfyui-sha-
-            type=ref,event=pr,prefix=live-app-comfyui-pr-
-            type=ref,event=tag,prefix=live-app-comfyui-
-            type=ref,event=branch,prefix=live-app-comfyui-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-comfyui-
+            type=raw,value=live-app-streamdiffusion,enable={{is_default_branch}}
+            type=sha,prefix=live-app-streamdiffusion-sha-
+            type=sha,format=long,prefix=live-app-streamdiffusion-sha-
+            type=ref,event=pr,prefix=live-app-streamdiffusion-pr-
+            type=ref,event=tag,prefix=live-app-streamdiffusion-
+            type=ref,event=branch,prefix=live-app-streamdiffusion-
+            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-streamdiffusion-
 
       - name: Get version information (for docker build tag)
         id: version
@@ -120,7 +118,7 @@ jobs:
           push: true
           file: docker/Dockerfile.live-app__PIPELINE__
           build-args: |
-            PIPELINE=comfyui
+            PIPELINE=streamdiffusion
             GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
             VERSION=${{ steps.version.outputs.version }}
             # only specify base image if we just built it above, otherwise use whatever default is in the Dockerfile
@@ -129,8 +127,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=livepeer/ai-runner:live-app-comfyui-dockerbuildcache
-          cache-to: type=registry,ref=livepeer/ai-runner:live-app-comfyui-dockerbuildcache,mode=max
+          cache-from: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion-dockerbuildcache,mode=max
 
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev

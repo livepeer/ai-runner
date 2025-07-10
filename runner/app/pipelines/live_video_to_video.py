@@ -34,7 +34,7 @@ class LiveVideoToVideoPipeline(Pipeline):
     ):
         if not self.process:
             raise RuntimeError("Pipeline process not running")
-
+        
         max_retries = 10
         thrown_ex = None
         for attempt in range(max_retries):

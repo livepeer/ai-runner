@@ -14,12 +14,8 @@ class Pipeline(ABC):
       exceptions propagate for optimal error reporting.
     """
 
-    def __init__(self, **params):
-        """Initialize pipeline with optional parameters.
-
-        Args:
-            **params: Parameters to initalize the pipeline with.
-        """
+    def __init__(self):
+        """Initialize pipeline with optional parameters."""
         pass
 
     @abstractmethod

@@ -1,4 +1,3 @@
-import asyncio
 import av
 import time
 import datetime
@@ -7,8 +6,9 @@ import os
 from typing import Optional
 from fractions import Fraction
 from collections import deque
+from PIL import Image
 
-from .frame import VideoOutput, AudioOutput, InputFrame
+from .frame import VideoOutput, AudioOutput, InputFrame, DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 # use mpegts default time base
 OUT_TIME_BASE=Fraction(1, 90_000)
@@ -56,7 +56,9 @@ def encode_av(
 
     if video_meta and video_codec:
         # Add a new stream to the output using the desired video codec
-        video_opts = { 'video_size':'512x512', 'bf':'0' }
+        target_width = video_meta.get('target_width', DEFAULT_WIDTH)
+        target_height = video_meta.get('target_height', DEFAULT_HEIGHT)  
+        video_opts = { 'video_size':f'{target_width}x{target_height}', 'bf':'0' }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
         output_video_stream = output_container.add_stream(video_codec, options=video_opts)
@@ -91,7 +93,12 @@ def encode_av(
                 continue
             avframe.log_timestamps["frame_end"] = time.time()
             log_frame_timestamps("Video", avframe.frame)
-            frame = av.video.frame.VideoFrame.from_image(avframe.image)
+
+            tensor = avframe.tensor.squeeze(0)
+            image_np = (tensor * 255).byte().cpu().numpy()
+            image = Image.fromarray(image_np)
+
+            frame = av.video.frame.VideoFrame.from_image(image)
             frame.pts = rescale_ts(avframe.timestamp, avframe.time_base, output_video_stream.codec_context.time_base)
             frame.time_base = output_video_stream.codec_context.time_base
             current = avframe.timestamp * avframe.time_base

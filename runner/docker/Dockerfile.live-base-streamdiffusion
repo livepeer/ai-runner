@@ -1,0 +1,53 @@
+ARG BASE_IMAGE=livepeer/ai-runner:live-base
+FROM ${BASE_IMAGE}
+
+# Install Miniconda and create the 'comfystream' environment
+ARG PYTHON_VERSION=3.11
+ENV CONDA_DIR /workspace/miniconda3
+ENV PATH $CONDA_DIR/bin:$PATH
+
+RUN apt-get update && apt-get install -y --no-install-recommends wget curl ca-certificates && \
+    wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.11.0-2-Linux-x86_64.sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p $CONDA_DIR && \
+    rm ~/miniconda.sh && \
+    conda init bash && \
+    conda config --set auto_activate_base false && \
+    conda clean -a -y && \
+    conda create -n comfystream python=$PYTHON_VERSION -y && \
+    conda run -n comfystream pip install --no-cache-dir --upgrade pip==23.3.2 setuptools==69.5.1 wheel==0.43.0 && \
+    conda clean -a -y && \
+    apt-get purge -y --auto-remove wget curl && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV PIP_PREFER_BINARY=1
+
+# Install StreamDiffusion dependencies into the comfystream environment
+RUN conda run -n comfystream pip install --no-cache-dir \
+    torch==2.7.0 \
+    torchvision==0.22.0 \
+    torchaudio==2.7.0 \
+    xformers===0.0.30 \
+    --index-url https://download.pytorch.org/whl/cu126
+
+# Install StreamDiffusion @ v0.0.1-cnet.3 (latest with controlnet support) into the comfystream environment
+RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@v0.0.1-cnet.3#egg=streamdiffusion[tensorrt]
+
+# Pin versions of ONNX runtime which are too loose on streamdiffusion setup.py
+RUN conda run -n comfystream pip install --no-cache-dir \
+    onnx==1.18.0 onnxruntime==1.22.0 onnxruntime-gpu==1.22.0
+
+# Install TensorRT bindings and libraries into the comfystream environment
+# TODO: update install-tensorrt script in streamdiffusion and use it instead of this
+RUN conda run -n comfystream pip install --no-cache-dir --upgrade --root-user-action=ignore \
+    tensorrt==10.12.0.36 \
+    tensorrt-cu12-bindings==10.12.0.36 \
+    tensorrt-cu12-libs==10.12.0.36 \
+    polygraphy==0.49.24 \
+    onnx-graphsurgeon==0.5.8 \
+    controlnet-aux==0.0.10 \
+    mediapipe==0.10.21
+
+WORKDIR /app
+
+# Create symlink for where StreamDiffusion builds TensorRT engines at runtime
+RUN ln -s /models/StreamDiffusion--engines ./engines

@@ -13,6 +13,7 @@ from typing import Annotated, Dict
 from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
+from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 MAX_FILE_AGE = 86400  # 1 day
 
@@ -95,7 +96,6 @@ async def parse_request_data(request: web.Request) -> Dict:
     else:
         raise ValueError(f"Unknown content type: {request.content_type}")
 
-
 async def handle_start_stream(request: web.Request):
     try:
         stream_request_timestamp = int(time.time() * 1000)
@@ -122,11 +122,24 @@ async def handle_start_stream(request: web.Request):
 
         config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
+        # Try to get dimensions from workflow first
+        width = params.params.get("width", DEFAULT_WIDTH)
+        height = params.params.get("height", DEFAULT_HEIGHT)
+        if process.pipeline == "comfyui":
+            # TODO: Remove this once ComfyUI pipeline supports different resolutions without a restart
+            width = height = 512
+            params.params = params.params | {"width": width, "height": height}
+            logging.warning("Using default dimensions for ComfyUI pipeline")
+        else:
+            logging.info(f"Using dimensions from params: {width}x{height}")
+
         protocol = TrickleProtocol(
             params.subscribe_url,
             params.publish_url,
             params.control_url,
             params.events_url,
+            width,
+            height,
         )
         streamer = PipelineStreamer(
             protocol,
