@@ -179,8 +179,15 @@ class StreamDiffusion(Pipeline):
                 logging.error(f"Error updating parameters dynamically: {e}")
 
             logging.info(f"Resetting pipeline for params change")
+
             self.pipe = None
-            self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+            try:
+                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+            except Exception as e:
+                logging.error(f"Error resetting pipeline, reloading with previous params: {e}")
+                new_params = self.params or StreamDiffusionParams()
+                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+
             self.params = new_params
             self.first_frame = True
 
