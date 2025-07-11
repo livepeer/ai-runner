@@ -183,8 +183,8 @@ class StreamDiffusion(Pipeline):
             self.pipe = None
             try:
                 self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
-            except Exception as e:
-                logging.error(f"Error resetting pipeline, reloading with previous params: {e}")
+            except Exception:
+                logging.error(f"Error resetting pipeline, reloading with previous params", exc_info=True)
                 new_params = self.params or StreamDiffusionParams()
                 self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
 
