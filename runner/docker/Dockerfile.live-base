@@ -1,29 +1,32 @@
 # Based on https://github.com/huggingface/api-inference-community/blob/main/docker_images/diffusers/Dockerfile
-FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04
 
-ENV DEBIAN_FRONTEND="noninteractive" \
-    NVIDIA_VISIBLE_DEVICES="all" \
-    NVIDIA_DRIVER_CAPABILITIES="compute,utility,video"
+ENV DEBIAN_FRONTEND=noninteractive
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
 
 # Install prerequisites
-RUN apt update && \
-    apt install -yqq build-essential libssl-dev zlib1g-dev libbz2-dev \
+RUN apt-get update && \
+    apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
     libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
     xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git runit libzmq3-dev && \
-    apt clean && rm -rf /var/lib/apt/lists/*
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install pyenv
 RUN curl https://pyenv.run | bash
 
 # Set environment variables for pyenv
-ENV PYENV_ROOT="/root/.pyenv"
-ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
+ENV PYENV_ROOT=/root/.pyenv
+ENV PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
+
+# We do not install any specific Python version here, since each pipeline might need a different version.
 
 # Install ffmpeg
-RUN apt update && apt install -yqq --no-install-recommends \
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf automake build-essential cmake git-core libtool pkg-config wget \
     nasm yasm zlib1g-dev libpng-dev libx264-dev libopus-dev libfdk-aac-dev && \
-    apt clean && rm -rf /var/lib/apt/lists/*
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up environment variables
 ENV NV_CODEC_HEADERS=/usr/local/cuda/include/ffnvcodec/

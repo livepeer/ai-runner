@@ -1,42 +1,28 @@
 ARG PIPELINE=comfyui
 ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
-
 ARG PIPELINE
 ENV PIPELINE=${PIPELINE}
 
 # Install latest stable Go version and system dependencies
-RUN apt update && apt install -yqq \
+RUN apt-get update && apt-get install -y \
     wget \
     libcairo2-dev \
     libgirepository1.0-dev \
     pkg-config \
-    && apt clean && rm -rf /var/lib/apt/lists/*
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-RUN --mount=type=bind,source=requirements.live-ai.txt,target=/tmp/requirements.txt \
-    conda run -n comfystream pip install --root-user-action ignore --requirement /tmp/requirements.txt
+# Install any additional Python packages
+COPY requirements.live-ai.txt /app/requirements.txt
 
-RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
-    torch \
-    torchvision \
-    torchaudio \
-    pytorch_triton \
-    --index-url https://download.pytorch.org/whl/cu128 && \
-    # due to installation from requirements.txt the numpy version should be 1.26.4 for compatibility
-    conda run -n comfystream pip install --no-cache-dir \
-    numpy==1.26.4 --no-deps
-
-#     # the new hardware capability for 5090 is only available in v.3.3 which is not installed by default
-# RUN rm -rf /workspace/miniconda3/envs/comfystream/lib/python3.11/site-packages/*triton* && \
-#     conda run -n comfystream pip install --no-cache-dir \
-#     https://download.pytorch.org/whl/nightly/pytorch_triton-3.3.1%2Bgitc8757738-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl --no-deps
-
+# Also install in conda env
+RUN conda run -n comfystream pip install -r /app/requirements.txt --root-user-action ignore
 
 # Set environment variables
-ENV MAX_WORKERS=1 \
-    HUGGINGFACE_HUB_CACHE=/models \
-    DIFFUSERS_CACHE=/models \
-    MODEL_DIR=/models
+ENV MAX_WORKERS=1
+ENV HUGGINGFACE_HUB_CACHE=/models
+ENV DIFFUSERS_CACHE=/models
+ENV MODEL_DIR=/models
 
 # Copy application files
 COPY app/ /app/app
@@ -50,4 +36,4 @@ ENV GIT_SHA="$GIT_SHA"
 ARG VERSION="undefined"
 ENV VERSION="${VERSION}"
 
-CMD [ "/workspace/miniconda3/envs/comfystream/bin/uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000" ]
+CMD ["/workspace/miniconda3/envs/comfystream/bin/uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
