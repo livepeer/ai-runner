@@ -40,8 +40,8 @@ class StreamDiffusionParams(BaseModel):
     t_index_list: List[int] = [12, 20, 32]
 
     # Image dimensions
-    width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024)
-    height: int = Field(default=DEFAULT_HEIGHT, ge=384, le=1024)
+    width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024, multiple_of=64)
+    height: int = Field(default=DEFAULT_HEIGHT, ge=384, le=1024, multiple_of=64)
 
     # LoRA settings
     lora_dict: Optional[Dict[str, float]] = None
