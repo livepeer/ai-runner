@@ -17,10 +17,10 @@ RUN --mount=type=bind,source=requirements.live-ai.txt,target=/tmp/requirements.t
     conda run -n comfystream pip install --root-user-action ignore --requirement /tmp/requirements.txt
 
 RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
-    torch \
-    torchvision \
-    torchaudio \
-    pytorch_triton \
+    torch==2.7.1+cu128 \
+    torchvision==0.22.1+cu128 \
+    torchaudio==2.7.1+cu128 \
+    pytorch_triton==3.3.0 \
     --index-url https://download.pytorch.org/whl/cu128 && \
     # due to installation from requirements.txt the numpy version should be 1.26.4 for compatibility
     conda run -n comfystream pip install --no-cache-dir \

@@ -22,9 +22,9 @@ RUN apt update && apt install -yqq --no-install-recommends wget curl ca-certific
 
 # Install StreamDiffusion dependencies into the comfystream environment
 RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
-    torch \
-    torchvision \
-    torchaudio \
+    torch==2.7.1+cu128 \
+    torchvision==0.22.1+cu128 \
+    torchaudio==2.7.1+cu128 \
     --index-url https://download.pytorch.org/whl/cu128 && \
     conda run -n comfystream pip install --no-cache-dir \
     xformers==0.0.30 --no-deps
