@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, List, Literal, Optional, Any, Tuple, cast
 
 import torch
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from streamdiffusion import StreamDiffusionWrapper
 
 from .interface import Pipeline
@@ -40,8 +40,8 @@ class StreamDiffusionParams(BaseModel):
     t_index_list: List[int] = [12, 20, 32]
 
     # Image dimensions
-    width: int = DEFAULT_WIDTH
-    height: int = DEFAULT_HEIGHT
+    width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024)
+    height: int = Field(default=DEFAULT_HEIGHT, ge=384, le=1024)
 
     # LoRA settings
     lora_dict: Optional[Dict[str, float]] = None
