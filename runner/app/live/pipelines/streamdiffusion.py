@@ -199,7 +199,6 @@ class StreamDiffusion(Pipeline):
             'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
             'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt',
             'seed_interpolation_method', 'controlnets', 'normalize_weights',
-            'width', 'height',
         }
 
         update_kwargs = {}
