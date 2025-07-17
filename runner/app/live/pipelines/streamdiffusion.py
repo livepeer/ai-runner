@@ -210,8 +210,9 @@ class StreamDiffusion(Pipeline):
 
         updatable_params = {
             'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
-            'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt',
-            'seed_interpolation_method', 'controlnets', 'normalize_weights',
+            'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
+            'seed', 'seed_interpolation_method', 'normalize_seed_weights',
+            'controlnets', # handled separately below
         }
 
         update_kwargs = {}
@@ -221,7 +222,7 @@ class StreamDiffusion(Pipeline):
             curr_value = curr_params.get(key, None)
             if new_value == curr_value:
                 continue
-            elif key not in updatable_params and new_value != curr_value:
+            elif key not in updatable_params:
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
             elif key == 't_index_list' and len(new_value) != len(curr_value or []):
