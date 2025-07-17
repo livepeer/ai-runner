@@ -13,7 +13,13 @@ from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 class ControlNetConfig(BaseModel):
     """ControlNet configuration model"""
-    model_id: str
+    model_id: Literal[
+        "thibaud/controlnet-sd21-openpose-diffusers",
+        "thibaud/controlnet-sd21-hed-diffusers",
+        "thibaud/controlnet-sd21-canny-diffusers",
+        "thibaud/controlnet-sd21-depth-diffusers",
+        "thibaud/controlnet-sd21-color-diffusers"
+    ]
     conditioning_scale: float = 1.0
     preprocessor: Optional[str] = None
     preprocessor_params: Optional[Dict[str, Any]] = None
@@ -27,7 +33,10 @@ class StreamDiffusionParams(BaseModel):
         extra = "forbid"
 
     # Model configuration
-    model_id: str = "stabilityai/sd-turbo"
+    model_id: Literal[
+        "stabilityai/sd-turbo",
+        "KBlueLeaf/kohaku-v2.1",
+    ] = "stabilityai/sd-turbo"
 
     # Generation parameters
     prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
