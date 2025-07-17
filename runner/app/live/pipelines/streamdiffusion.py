@@ -248,8 +248,6 @@ class StreamDiffusion(Pipeline):
             # at this point, we know it's an updatable parameter that changed
             if key == 'prompt':
                 update_kwargs['prompt_list'] = [(new_value, 1.0)] if isinstance(new_value, str) else new_value
-            elif key == 'prompt_interpolation_method':
-                update_kwargs['interpolation_method'] = new_value
             elif key == 'seed':
                 update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
             else:
@@ -374,7 +372,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
 
     pipe.prepare(
         prompt=params.prompt,
-        interpolation_method=params.prompt_interpolation_method,
+        prompt_interpolation_method=params.prompt_interpolation_method,
         negative_prompt=params.negative_prompt,
         num_inference_steps=params.num_inference_steps,
         guidance_scale=params.guidance_scale,
