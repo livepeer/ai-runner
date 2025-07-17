@@ -6,10 +6,13 @@ from typing import Dict, List, Literal, Optional, Any, Tuple, cast
 import torch
 from pydantic import BaseModel, Field
 from streamdiffusion import StreamDiffusionWrapper
+from streamdiffusion.controlnet.preprocessors import list_preprocessors
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
+
+AVAILABLE_PREPROCESSORS = list_preprocessors()
 
 class ControlNetConfig(BaseModel):
     """ControlNet configuration model"""
@@ -299,10 +302,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         preprocessor_params = (cn_config.preprocessor_params or {}).copy()
 
         # Inject preprocessor-specific parameters
-        if cn_config.preprocessor in ["canny", "hed", "soft_edge", "passthrough"]:
-            # no enforced params
-            pass
-        elif cn_config.preprocessor == "depth_tensorrt":
+        if cn_config.preprocessor == "depth_tensorrt":
             preprocessor_params.update({
                 "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
             })
@@ -316,8 +316,8 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             preprocessor_params.update({
                 "engine_path": engine_path,
             })
-        else:
-            raise ValueError(f"Unrecognized preprocessor: {cn_config.preprocessor}")
+        elif cn_config.preprocessor not in AVAILABLE_PREPROCESSORS:
+            raise ValueError(f"Unrecognized preprocessor: '{cn_config.preprocessor}'. Must be one of {AVAILABLE_PREPROCESSORS}")
 
         controlnet_config = {
             'model_id': cn_config.model_id,
