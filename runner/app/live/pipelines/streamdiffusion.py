@@ -44,7 +44,7 @@ class StreamDiffusionParams(BaseModel):
     # Generation parameters
     prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
     prompt_interpolation_method: Literal["linear", "slerp"] = "slerp"
-    normalize_weights: bool = True
+    normalize_prompt_weights: bool = True
     negative_prompt: str = "blurry, low quality, flat, 2d"
     guidance_scale: float = 1.0
     delta: float = 0.7
@@ -68,6 +68,7 @@ class StreamDiffusionParams(BaseModel):
     do_add_noise: bool = True
     seed: int | List[Tuple[int, float]] = 789
     seed_interpolation_method: Literal["linear", "slerp"] = "linear"
+    normalize_seed_weights: bool = True
 
     # Similar image filter settings
     enable_similar_image_filter: bool = False
@@ -215,7 +216,8 @@ class StreamDiffusion(Pipeline):
 
         update_kwargs = {}
         controlnet_scale_changes: List[Tuple[int, float]] = []
-        normalize_weights_changed = False
+        normalize_prompt_weights_changed = False
+        normalize_seed_weights_changed = False
         curr_params = self.params.model_dump() if self.params else {}
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
@@ -234,8 +236,12 @@ class StreamDiffusion(Pipeline):
                     return False
                 # do not add controlnets to update_kwargs
                 continue
-            elif key == 'normalize_weights':
-                normalize_weights_changed = True
+            elif key == 'normalize_prompt_weights':
+                normalize_prompt_weights_changed = True
+                # do not add normalize_weights to update_kwargs
+                continue
+            elif key == 'normalize_seed_weights':
+                normalize_seed_weights_changed = True
                 # do not add normalize_weights to update_kwargs
                 continue
 
@@ -253,8 +259,10 @@ class StreamDiffusion(Pipeline):
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
-        if normalize_weights_changed:
-            self.pipe.set_normalize_weights(new_params.normalize_weights)
+        if normalize_prompt_weights_changed:
+            self.pipe.set_normalize_prompt_weights(new_params.normalize_prompt_weights)
+        if normalize_seed_weights_changed:
+            self.pipe.set_normalize_seed_weights(new_params.normalize_seed_weights)
         for i, scale in controlnet_scale_changes:
             self.pipe.update_controlnet_scale(i, scale)
 
@@ -356,7 +364,8 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
         similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
         use_denoising_batch=params.use_denoising_batch,
         seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
-        normalize_weights=params.normalize_weights,
+        normalize_seed_weights=params.normalize_seed_weights,
+        normalize_prompt_weights=params.normalize_prompt_weights,
         use_controlnet=bool(controlnet_config),
         controlnet_config=controlnet_config,
         engine_dir=engine_dir,
