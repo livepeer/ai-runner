@@ -216,8 +216,6 @@ class StreamDiffusion(Pipeline):
 
         update_kwargs = {}
         controlnet_scale_changes: List[Tuple[int, float]] = []
-        normalize_prompt_weights_changed = False
-        normalize_seed_weights_changed = False
         curr_params = self.params.model_dump() if self.params else {}
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
@@ -236,14 +234,6 @@ class StreamDiffusion(Pipeline):
                     return False
                 # do not add controlnets to update_kwargs
                 continue
-            elif key == 'normalize_prompt_weights':
-                normalize_prompt_weights_changed = True
-                # do not add normalize_weights to update_kwargs
-                continue
-            elif key == 'normalize_seed_weights':
-                normalize_seed_weights_changed = True
-                # do not add normalize_weights to update_kwargs
-                continue
 
             # at this point, we know it's an updatable parameter that changed
             if key == 'prompt':
@@ -257,10 +247,6 @@ class StreamDiffusion(Pipeline):
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
-        if normalize_prompt_weights_changed:
-            self.pipe.set_normalize_prompt_weights(new_params.normalize_prompt_weights)
-        if normalize_seed_weights_changed:
-            self.pipe.set_normalize_seed_weights(new_params.normalize_seed_weights)
         for i, scale in controlnet_scale_changes:
             self.pipe.update_controlnet_scale(i, scale)
 
