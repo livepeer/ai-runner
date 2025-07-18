@@ -4,16 +4,25 @@ import asyncio
 from typing import Dict, List, Literal, Optional, Any, Tuple, cast
 
 import torch
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from streamdiffusion import StreamDiffusionWrapper
+from streamdiffusion.controlnet.preprocessors import list_preprocessors
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
+AVAILABLE_PREPROCESSORS = list_preprocessors()
+
 class ControlNetConfig(BaseModel):
     """ControlNet configuration model"""
-    model_id: str
+    model_id: Literal[
+        "thibaud/controlnet-sd21-openpose-diffusers",
+        "thibaud/controlnet-sd21-hed-diffusers",
+        "thibaud/controlnet-sd21-canny-diffusers",
+        "thibaud/controlnet-sd21-depth-diffusers",
+        "thibaud/controlnet-sd21-color-diffusers"
+    ]
     conditioning_scale: float = 1.0
     preprocessor: Optional[str] = None
     preprocessor_params: Optional[Dict[str, Any]] = None
@@ -27,11 +36,15 @@ class StreamDiffusionParams(BaseModel):
         extra = "forbid"
 
     # Model configuration
-    model_id: str = "stabilityai/sd-turbo"
+    model_id: Literal[
+        "stabilityai/sd-turbo",
+        "KBlueLeaf/kohaku-v2.1",
+    ] = "stabilityai/sd-turbo"
 
     # Generation parameters
     prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
     prompt_interpolation_method: Literal["linear", "slerp"] = "slerp"
+    normalize_prompt_weights: bool = True
     negative_prompt: str = "blurry, low quality, flat, 2d"
     guidance_scale: float = 1.0
     delta: float = 0.7
@@ -39,8 +52,8 @@ class StreamDiffusionParams(BaseModel):
     t_index_list: List[int] = [12, 20, 32]
 
     # Image dimensions
-    width: int = DEFAULT_WIDTH
-    height: int = DEFAULT_HEIGHT
+    width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024, multiple_of=64)
+    height: int = Field(default=DEFAULT_HEIGHT, ge=384, le=1024, multiple_of=64)
 
     # LoRA settings
     lora_dict: Optional[Dict[str, float]] = None
@@ -55,6 +68,7 @@ class StreamDiffusionParams(BaseModel):
     do_add_noise: bool = True
     seed: int | List[Tuple[int, float]] = 789
     seed_interpolation_method: Literal["linear", "slerp"] = "linear"
+    normalize_seed_weights: bool = True
 
     # Similar image filter settings
     enable_similar_image_filter: bool = False
@@ -165,68 +179,108 @@ class StreamDiffusion(Pipeline):
         return await self.frame_queue.get()
 
     async def update_params(self, **params):
+        new_params = StreamDiffusionParams(**params)
+        if new_params == self.params:
+            logging.info("No parameters changed")
+            return
+
         async with self._pipeline_lock:
-            new_params = StreamDiffusionParams(**params)
-            if new_params == self.params:
-                logging.info("No parameters changed")
-                return
-
-            if self.pipe is not None:
-                updatable_params = {
-                    'num_inference_steps', 'guidance_scale', 'delta', 't_index_list', 'seed', 'prompt', 'prompt_interpolation_method', 'negative_prompt', 'seed_interpolation_method'
-                }
-
-                only_updatable_changed = True
-                curr_params = self.params.model_dump() if self.params else {}
-                for key, new_value in new_params.model_dump().items():
-                    curr_value = curr_params.get(key, None)
-                    if key not in updatable_params and new_value != curr_value:
-                        only_updatable_changed = False
-                        logging.info(f"Non-updatable parameter changed: {key}")
-                        break
-                    elif key == 't_index_list' and len(new_value) != len(curr_value or []):
-                        only_updatable_changed = False
-                        logging.info(f"Non-updatable parameter changed: length of t_index_list")
-                        break
-
-                if only_updatable_changed:
-                    logging.info("Updating parameters via update_stream_params")
-
-                    update_kwargs = {
-                        k: v for k, v
-                        in new_params.model_dump().items()
-                        if k in updatable_params and v != getattr(self.params, k)
-                    }
-
-                    # Some fields are named/typed differently from our params in the update_stream_params method
-                    if 'prompt' in update_kwargs:
-                        prompt = update_kwargs.pop('prompt')
-                        update_kwargs['prompt_list'] = [(prompt, 1.0)] if isinstance(prompt, str) else prompt
-                    if 'prompt_interpolation_method' in update_kwargs:
-                        update_kwargs['interpolation_method'] = update_kwargs.pop('prompt_interpolation_method')
-                    if 'seed' in update_kwargs:
-                        seed = update_kwargs.pop('seed')
-                        update_kwargs['seed_list'] = [(seed, 1.0)] if isinstance(seed, int) else seed
-
-                    try:
-                        self.pipe.update_stream_params(**update_kwargs)
-                        self.params = new_params
-                        return
-                    except Exception as e:
-                        logging.error(f"Error updating parameters dynamically: {e}")
+            try:
+                if await self._update_params_dynamic(new_params):
+                    return
+            except Exception as e:
+                logging.error(f"Error updating parameters dynamically: {e}")
 
             logging.info(f"Resetting pipeline for params change")
 
             self.pipe = None
-            self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+            try:
+                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+            except Exception:
+                logging.error(f"Error resetting pipeline, reloading with previous params", exc_info=True)
+                new_params = self.params or StreamDiffusionParams()
+                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+
             self.params = new_params
             self.first_frame = True
+
+    async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
+        if self.pipe is None:
+            return False
+
+        updatable_params = {
+            'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
+            'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
+            'seed', 'seed_interpolation_method', 'normalize_seed_weights',
+            'controlnets', # handled separately below
+        }
+
+        update_kwargs = {}
+        controlnet_scale_changes: List[Tuple[int, float]] = []
+        curr_params = self.params.model_dump() if self.params else {}
+        for key, new_value in new_params.model_dump().items():
+            curr_value = curr_params.get(key, None)
+            if new_value == curr_value:
+                continue
+            elif key not in updatable_params:
+                logging.info(f"Non-updatable parameter changed: {key}")
+                return False
+            elif key == 't_index_list' and len(new_value) != len(curr_value or []):
+                logging.info(f"Non-updatable parameter changed: length of t_index_list")
+                return False
+            elif key == 'controlnets':
+                updatable, controlnet_scale_changes = _is_controlnet_change_updatable(self.params, new_params)
+                if not updatable:
+                    logging.info(f"Non-updatable parameter changed: controlnets")
+                    return False
+                # do not add controlnets to update_kwargs
+                continue
+
+            # at this point, we know it's an updatable parameter that changed
+            if key == 'prompt':
+                update_kwargs['prompt_list'] = [(new_value, 1.0)] if isinstance(new_value, str) else new_value
+            elif key == 'seed':
+                update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
+            else:
+                update_kwargs[key] = new_value
+
+        logging.info(f"Updating parameters dynamically update_kwargs={update_kwargs} controlnet_scale_changes={controlnet_scale_changes}")
+
+        if update_kwargs:
+            self.pipe.update_stream_params(**update_kwargs)
+        for i, scale in controlnet_scale_changes:
+            self.pipe.update_controlnet_scale(i, scale)
+
+        self.params = new_params
+        return True
 
     async def stop(self):
         async with self._pipeline_lock:
             self.pipe = None
             self.frame_queue = asyncio.Queue()
 
+
+def _is_controlnet_change_updatable(curr_params: StreamDiffusionParams | None, new_params: StreamDiffusionParams | None) -> Tuple[bool, list[Tuple[int, float]]]:
+    curr = curr_params.controlnets if curr_params and curr_params.controlnets else []
+    new = new_params.controlnets if new_params and new_params.controlnets else []
+
+    if len(new) != len(curr):
+        return False, []
+
+    scale_changes: list[Tuple[int, float]] = []
+    for i, new_cn in enumerate(new):
+        curr_cn = curr[i]
+        if curr_cn == new_cn:
+            continue
+
+        curr_cn_with_new_scale = curr_cn.model_copy(update={'conditioning_scale': new_cn.conditioning_scale})
+        if curr_cn_with_new_scale != new_cn:
+            # more than just the scale changed
+            return False, []
+
+        scale_changes.append((i, new_cn.conditioning_scale))
+
+    return True, scale_changes
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
@@ -241,10 +295,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         preprocessor_params = (cn_config.preprocessor_params or {}).copy()
 
         # Inject preprocessor-specific parameters
-        if cn_config.preprocessor in ["canny", "hed", "soft_edge", "passthrough"]:
-            # no enforced params
-            pass
-        elif cn_config.preprocessor == "depth_tensorrt":
+        if cn_config.preprocessor == "depth_tensorrt":
             preprocessor_params.update({
                 "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
             })
@@ -258,8 +309,8 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             preprocessor_params.update({
                 "engine_path": engine_path,
             })
-        else:
-            raise ValueError(f"Unrecognized preprocessor: {cn_config.preprocessor}")
+        elif cn_config.preprocessor not in AVAILABLE_PREPROCESSORS:
+            raise ValueError(f"Unrecognized preprocessor: '{cn_config.preprocessor}'. Must be one of {AVAILABLE_PREPROCESSORS}")
 
         controlnet_config = {
             'model_id': cn_config.model_id,
@@ -298,6 +349,8 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
         similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
         use_denoising_batch=params.use_denoising_batch,
         seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
+        normalize_seed_weights=params.normalize_seed_weights,
+        normalize_prompt_weights=params.normalize_prompt_weights,
         use_controlnet=bool(controlnet_config),
         controlnet_config=controlnet_config,
         engine_dir=engine_dir,
@@ -306,7 +359,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
 
     pipe.prepare(
         prompt=params.prompt,
-        interpolation_method=params.prompt_interpolation_method,
+        prompt_interpolation_method=params.prompt_interpolation_method,
         negative_prompt=params.negative_prompt,
         num_inference_steps=params.num_inference_steps,
         guidance_scale=params.guidance_scale,

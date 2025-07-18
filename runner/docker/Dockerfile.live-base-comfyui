@@ -4,27 +4,23 @@ FROM ${BASE_IMAGE}
 # -----------------------------------------------------------------------------
 # live-base: This section was copied from live-base since we don't use it as base image above
 # -----------------------------------------------------------------------------
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
-ENV PATH="/workspace/miniconda3/bin:${PATH}"
+ENV DEBIAN_FRONTEND="noninteractive" \
+    NVIDIA_VISIBLE_DEVICES="all" \
+    NVIDIA_DRIVER_CAPABILITIES="compute,utility,video" \
+    PATH="/workspace/miniconda3/bin:${PATH}"
 
 # Install prerequisites
-RUN apt-get update && \
-    apt-get install -y build-essential libssl-dev zlib1g-dev libbz2-dev \
+RUN apt update && \
+    apt install -yqq build-essential libssl-dev zlib1g-dev libbz2-dev \
     libreadline-dev libsqlite3-dev wget curl llvm libncurses5-dev libncursesw5-dev \
     xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git runit libzmq3-dev && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Keep python installation from base image
+    apt clean && rm -rf /var/lib/apt/lists/*
 
 # Install ffmpeg
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt update && apt install -yqq --no-install-recommends \
     autoconf automake build-essential cmake git-core libtool pkg-config wget \
     nasm yasm zlib1g-dev libpng-dev libx264-dev libopus-dev libfdk-aac-dev && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
+    apt clean && rm -rf /var/lib/apt/lists/*
 
 # Set up environment variables
 ENV NV_CODEC_HEADERS=/usr/local/cuda/include/ffnvcodec/
@@ -73,4 +69,3 @@ ENV COMFY_UI_WORKSPACE="/workspace/ComfyUI"
 RUN mkdir -p /workspace/ComfyUI
 RUN rm -rf /workspace/ComfyUI/models && ln -s /models/ComfyUI--models /workspace/ComfyUI/models
 RUN rm -rf /workspace/ComfyUI/output && ln -s /models/ComfyUI--output /workspace/ComfyUI/output
-

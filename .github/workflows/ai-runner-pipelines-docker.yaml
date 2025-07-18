@@ -9,7 +9,7 @@ on:
     branches:
       - main
     tags:
-      - '*'
+      - "*"
     paths:
       - "runner/**"
       - "!runner/.devcontainer/**"
@@ -87,8 +87,10 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
-          platforms: linux/amd64
+          provenance: mode=max
+          sbom: true
           push: true
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           file: ${{ matrix.dockerfile }}
           labels: ${{ steps.meta.outputs.labels }}

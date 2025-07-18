@@ -105,23 +105,23 @@ function download_all_models() {
 function download_live_models() {
   # Check PIPELINE environment variable and download accordingly
   case "$PIPELINE" in
-    "streamdiffusion")
-      printf "\nDownloading StreamDiffusion live models only...\n"
-      download_streamdiffusion_live_models
-      ;;
-    "comfyui")
-      printf "\nDownloading ComfyUI live models only...\n"
-      download_comfyui_live_models
-      ;;
-    "all")
-      printf "\nDownloading all live models...\n"
-      download_streamdiffusion_live_models
-      download_comfyui_live_models
-      ;;
-    *)
-      printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, all\n" "$PIPELINE"
-      exit 1
-      ;;
+  "streamdiffusion")
+    printf "\nDownloading StreamDiffusion live models only...\n"
+    download_streamdiffusion_live_models
+    ;;
+  "comfyui")
+    printf "\nDownloading ComfyUI live models only...\n"
+    download_comfyui_live_models
+    ;;
+  "all")
+    printf "\nDownloading all live models...\n"
+    download_streamdiffusion_live_models
+    download_comfyui_live_models
+    ;;
+  *)
+    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, all\n" "$PIPELINE"
+    exit 1
+    ;;
   esac
 }
 
@@ -162,8 +162,7 @@ function download_comfyui_live_models() {
   docker run --rm -v ./models:/models --gpus all -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream && \
                  $CONDA_PYTHON src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
-                 adduser $(id -u -n) && \
-                 chown -R $(id -u -n):$(id -g -n) /models" ||
+                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI setup_models.py"
       exit 1
@@ -182,23 +181,23 @@ function build_tensorrt_models() {
 
   # Check PIPELINE environment variable and build accordingly
   case "$PIPELINE" in
-    "streamdiffusion")
-      printf "\nBuilding StreamDiffusion TensorRT models only...\n"
-      build_streamdiffusion_tensorrt
-      ;;
-    "comfyui")
-      printf "\nBuilding ComfyUI TensorRT models only...\n"
-      build_comfyui_tensorrt
-      ;;
-    "all")
-      printf "\nBuilding all TensorRT models...\n"
-      build_streamdiffusion_tensorrt
-      build_comfyui_tensorrt
-      ;;
-    *)
-      printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, all\n" "$PIPELINE"
-      exit 1
-      ;;
+  "streamdiffusion")
+    printf "\nBuilding StreamDiffusion TensorRT models only...\n"
+    build_streamdiffusion_tensorrt
+    ;;
+  "comfyui")
+    printf "\nBuilding ComfyUI TensorRT models only...\n"
+    build_comfyui_tensorrt
+    ;;
+  "all")
+    printf "\nBuilding all TensorRT models...\n"
+    build_streamdiffusion_tensorrt
+    build_comfyui_tensorrt
+    ;;
+  *)
+    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, all\n" "$PIPELINE"
+    exit 1
+    ;;
   esac
 }
 
@@ -216,14 +215,15 @@ function build_streamdiffusion_tensorrt() {
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
               --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
               --timesteps '3' \
-              --dimensions '384x704 512x512 704x384' \
               --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
               --build-depth-anything \
               --build-pose \
               && \
-            adduser $(id -u -n) && \
-            chown -R $(id -u -n):$(id -g -n) /models" \
-    || (echo "failed streamdiffusion tensorrt"; exit 1)
+            chown -R $(id -u):$(id -g) /models" ||
+    (
+      echo "failed streamdiffusion tensorrt"
+      exit 1
+    )
 }
 
 function build_comfyui_tensorrt() {
@@ -234,8 +234,7 @@ function build_comfyui_tensorrt() {
     bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
                 $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
                 $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
-                adduser $(id -u -n) && \
-                chown -R $(id -u -n):$(id -g -n) /models" ||
+                chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI Depth-Anything-Tensorrt"
       exit 1
@@ -247,8 +246,7 @@ function build_comfyui_tensorrt() {
                 $CONDA_PYTHON ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
-                adduser $(id -u -n) && \
-                 chown -R $(id -u -n):$(id -g -n) /models" ||
+                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI build_trt.py"
       exit 1
@@ -266,8 +264,7 @@ function build_comfyui_tensorrt() {
                 --min-height 448 \
                 --max-width 704 \
                 --max-height 704 && \
-                adduser $(id -u -n) && \
-                chown -R $(id -u -n):$(id -g -n) /models" ||
+                chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI build_trt.py dynamic engine"
       exit 1
@@ -278,8 +275,7 @@ function build_comfyui_tensorrt() {
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "conda run -n comfystream --no-capture-output /workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
              $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR && \
-                adduser $(id -u -n) && \
-                chown -R $(id -u -n):$(id -g -n) /models" ||
+                chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI FasterLivePortrait Tensorrt Engines"
       exit 1

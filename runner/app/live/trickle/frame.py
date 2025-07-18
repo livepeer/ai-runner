@@ -5,8 +5,8 @@ from typing import List
 import numpy as np
 import torch
 
-DEFAULT_WIDTH = 704
-DEFAULT_HEIGHT = 384
+DEFAULT_WIDTH = 512
+DEFAULT_HEIGHT = 512
 
 class SideData:
     """
