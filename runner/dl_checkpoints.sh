@@ -162,7 +162,6 @@ function download_comfyui_live_models() {
   docker run --rm -v ./models:/models --gpus all -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream && \
                  $CONDA_PYTHON src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
-                 adduser $(id -u) && \
                  chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI setup_models.py"
@@ -220,7 +219,6 @@ function build_streamdiffusion_tensorrt() {
               --build-depth-anything \
               --build-pose \
               && \
-            adduser $(id -u) && \
             chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed streamdiffusion tensorrt"
@@ -236,7 +234,6 @@ function build_comfyui_tensorrt() {
     bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
                 $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
                 $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
-                adduser $(id -u) && \
                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI Depth-Anything-Tensorrt"
@@ -249,7 +246,6 @@ function build_comfyui_tensorrt() {
                 $CONDA_PYTHON ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
-                adduser $(id -u) && \
                  chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI build_trt.py"
@@ -268,7 +264,6 @@ function build_comfyui_tensorrt() {
                 --min-height 448 \
                 --max-width 704 \
                 --max-height 704 && \
-                adduser $(id -u) && \
                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI build_trt.py dynamic engine"
@@ -280,7 +275,6 @@ function build_comfyui_tensorrt() {
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "conda run -n comfystream --no-capture-output /workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
              $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR && \
-                adduser $(id -u) && \
                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI FasterLivePortrait Tensorrt Engines"
