@@ -141,7 +141,7 @@ function download_streamdiffusion_live_models() {
 
   # Preprocessor models
   huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
-  huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_*.onnx" --cache-dir models
+  huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
 }
 
 function download_comfyui_live_models() {

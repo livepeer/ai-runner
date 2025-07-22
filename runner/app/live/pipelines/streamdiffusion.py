@@ -81,9 +81,7 @@ class StreamDiffusionParams(BaseModel):
             model_id="thibaud/controlnet-sd21-openpose-diffusers",
             conditioning_scale=0.711,
             preprocessor="pose_tensorrt",
-            preprocessor_params={
-                "confidence_threshold": 0.5,
-            },
+            preprocessor_params={},
             enabled=True,
             control_guidance_start=0.0,
             control_guidance_end=1.0,
