@@ -290,6 +290,10 @@ class ProcessGuardian:
                 if state == self.status.state:
                     continue
 
+                if state == PipelineState.OFFLINE:
+                    # Revert to initial params when the stream stops
+                    self.process.update_params(self.initial_params)
+
                 if state != PipelineState.ERROR:
                     # avoid thrashing the state to ERROR if we're going to restart the process below
                     self.status.update_state(state)
