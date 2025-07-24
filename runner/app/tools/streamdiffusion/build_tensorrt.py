@@ -76,7 +76,7 @@ def main():
     args = parse_args()
 
     # Create t_index_list based on number of timesteps. Only the size matters...
-    t_index_list = list(range(0, 50, 50 // args.timesteps))[:args.timesteps]
+    t_index_list = list(range(1, 50, 50 // args.timesteps))[:args.timesteps]
 
     print(f"Building TensorRT engines for model: {args.model_id}")
     print(f"Using {args.timesteps} timesteps: {t_index_list}")

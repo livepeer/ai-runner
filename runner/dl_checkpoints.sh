@@ -141,7 +141,7 @@ function download_streamdiffusion_live_models() {
 
   # Preprocessor models
   huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
-  huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_*.onnx" --cache-dir models
+  huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
 }
 
 function download_comfyui_live_models() {
@@ -214,7 +214,7 @@ function build_streamdiffusion_tensorrt() {
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
               --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
-              --timesteps '3' \
+              --timesteps '1 2 3 4' \
               --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
               --build-depth-anything \
               --build-pose \
