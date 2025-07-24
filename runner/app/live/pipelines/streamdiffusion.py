@@ -263,6 +263,7 @@ def _is_controlnet_change_updatable(curr_params: StreamDiffusionParams | None, n
     new = new_params.controlnets if new_params and new_params.controlnets else []
 
     if len(new) != len(curr):
+        logging.info(f"Controlnets length changed. previous={len(curr)} new={len(new)}")
         return False, []
 
     scale_changes: list[Tuple[int, float]] = []
@@ -273,7 +274,7 @@ def _is_controlnet_change_updatable(curr_params: StreamDiffusionParams | None, n
 
         curr_cn_with_new_scale = curr_cn.model_copy(update={'conditioning_scale': new_cn.conditioning_scale})
         if curr_cn_with_new_scale != new_cn:
-            # more than just the scale changed
+            logging.info(f"Controlnet {i} config changed. previous={curr_cn} new={new_cn}")
             return False, []
 
         scale_changes.append((i, new_cn.conditioning_scale))
