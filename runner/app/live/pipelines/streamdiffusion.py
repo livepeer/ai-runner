@@ -133,10 +133,10 @@ class StreamDiffusionParams(BaseModel):
         if not (1 <= len(model.t_index_list) <= 4):
             raise ValueError("t_index_list must have between 1 and 4 elements")
 
-        for value in model.t_index_list:
+        for i, value in enumerate(model.t_index_list):
             if not (0 <= value <= model.num_inference_steps):
                 raise ValueError(
-                    f"Each t_index_list value must be between 0 and num_inference_steps ({model.num_inference_steps}). Found {value}"
+                    f"Each t_index_list value must be between 0 and num_inference_steps ({model.num_inference_steps}). Found {value} at index {i}."
                 )
 
         for i in range(1, len(model.t_index_list)):
