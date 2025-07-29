@@ -176,7 +176,7 @@ class ProcessGuardian:
         if not active_after_load:
             is_params_update = (inference.last_params_update_time or 0) > start_time
             load_grace_period = 2 if is_params_update else 10
-            load_timeout = 30 if is_params_update else 120
+            load_timeout = 60 if is_params_update else 120
             return (
                 PipelineState.ONLINE
                 if time_since_pipeline_load < load_grace_period
