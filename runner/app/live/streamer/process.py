@@ -28,8 +28,8 @@ class PipelineProcess:
         self.pipeline_name = pipeline_name
         self.ctx = mp.get_context("spawn")
 
-        self.input_queue = self.ctx.Queue(maxsize=2)
-        self.output_queue = self.ctx.Queue()
+        self.input_queue = self.ctx.Queue(maxsize=1)
+        self.output_queue = self.ctx.Queue(maxsize=1)
         self.param_update_queue = self.ctx.Queue()
         self.error_queue = self.ctx.Queue()
         self.log_queue = self.ctx.Queue(maxsize=100)  # Keep last 100 log lines
