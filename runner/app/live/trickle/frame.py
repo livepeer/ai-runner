@@ -1,14 +1,19 @@
+from fractions import Fraction
 import av
 from PIL import Image
-from typing import List, Union
+from typing import List
 import numpy as np
+import torch
+
+DEFAULT_WIDTH = 512
+DEFAULT_HEIGHT = 512
 
 class SideData:
     """
         Base class for side data, needed to keep it consistent with av frame side_data
     """
     skipped: bool = True
-    input: Union[Image.Image, np.ndarray] = None
+    input: Image.Image | np.ndarray | None
 
 class InputFrame:
     """
@@ -18,33 +23,30 @@ class InputFrame:
     """
 
     timestamp: int
-    time_base: int
+    time_base: Fraction
     log_timestamps: dict[str, float] = {}
     side_data: SideData = SideData()
 
-    def __init__(self):
-        self.timestamp = av.AV_NOPTS_VALUE
-        self.time_base = av.AV_TIME_BASE
+    @classmethod
+    def from_av_video(cls, tensor: torch.Tensor, timestamp: int, time_base: Fraction):
+        return VideoFrame(tensor, timestamp, time_base)
 
     @classmethod
-    def from_av_video(cls, frame: av.video.frame.VideoFrame):
-        return VideoFrame(frame.to_image(), frame.pts, frame.time_base)
-
-    @classmethod
-    def from_av_audio(cls, frame: av.audio.frame.AudioFrame):
+    def from_av_audio(cls, frame: av.AudioFrame):
         return AudioFrame(frame)
 
 class VideoFrame(InputFrame):
-    image: Image.Image
+    tensor: torch.Tensor
 
-    def __init__(self, image: Image.Image, timestamp: int, time_base: int, log_timestamps: dict[str, float] = {}):
-        self.image = image
+    def __init__(self, tensor: torch.Tensor, timestamp: int, time_base: Fraction, log_timestamps: dict[str, float] = {}):
+        self.tensor = tensor
         self.timestamp = timestamp
         self.time_base = time_base
         self.log_timestamps = log_timestamps
-    # Returns a copy of an existing VideoFrame with its image replaced
-    def replace_image(self, image: Image.Image):
-        new_frame = VideoFrame(image, self.timestamp, self.time_base, self.log_timestamps)
+
+    # Returns a copy of an existing VideoFrame with its tensor replaced
+    def replace_tensor(self, tensor: torch.Tensor):
+        new_frame = VideoFrame(tensor, self.timestamp, self.time_base, self.log_timestamps)
         new_frame.side_data = self.side_data
         return new_frame
 
@@ -54,7 +56,10 @@ class AudioFrame(InputFrame):
     layout: str # av.audio.layout.AudioLayout
     rate: int
     nb_samples: int
-    def __init__(self, frame: av.audio.frame.AudioFrame):
+
+    def __init__(self, frame: av.AudioFrame):
+        if frame.pts is None:
+            raise ValueError("Audio frame has no timestamp")
         self.samples = frame.to_ndarray()
         self.nb_samples = frame.samples
         self.format = frame.format.name
@@ -72,17 +77,18 @@ class OutputFrame:
 class VideoOutput(OutputFrame):
     frame: VideoFrame
     request_id: str
+
     def __init__(self, frame: VideoFrame, request_id: str = ''):
         self.frame = frame
         self.request_id = request_id
 
-    def replace_image(self, image: Image.Image):
-        new_frame = self.frame.replace_image(image)
+    def replace_tensor(self, tensor: torch.Tensor):
+        new_frame = self.frame.replace_tensor(tensor)
         return VideoOutput(new_frame, self.request_id)
 
     @property
-    def image(self):
-        return self.frame.image
+    def tensor(self):
+        return self.frame.tensor
 
     @property
     def timestamp(self):

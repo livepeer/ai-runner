@@ -4,9 +4,9 @@ import logging
 import sys
 
 class TrickleSubscriber:
-    def __init__(self, url: str, max_retries=5):
+    def __init__(self, url: str, start_seq=-2, max_retries=5):
         self.base_url = url
-        self.idx = -1  # Start with -1 for 'latest' index
+        self.idx = start_seq
         self.pending_get: aiohttp.ClientResponse | None = None  # Pre-initialized GET request
         self.lock = asyncio.Lock()  # Lock to manage concurrent access
         self.session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(verify_ssl=False))
@@ -56,8 +56,8 @@ class TrickleSubscriber:
                 resp.release()
                 logging.error(f"Trickle sub Failed GET {url} status code: {resp.status}, msg: {body}")
 
-            except aiohttp.ClientError as e:
-                logging.error(f"Trickle sub Failed to complete GET {url} error: {e}")
+            except Exception:
+                logging.exception(f"Trickle sub Failed to complete GET {url}", stack_info=True)
 
             if attempt < self.max_retries - 1:
                 await asyncio.sleep(0.5)

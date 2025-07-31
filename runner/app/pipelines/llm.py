@@ -150,7 +150,6 @@ class LLMPipeline(Pipeline):
 
         logger.info(f"Model loaded: {self.model_id}")
         logger.info(f"Using GPU memory utilization: {mem_utilization}")
-        self.engine.start_background_loop()
 
     @staticmethod
     def _get_model_dir() -> str:

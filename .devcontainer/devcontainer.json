@@ -8,12 +8,13 @@
             "PIPELINE": "comfyui"
         },
         "build": {
+			// "dockerfile": "../runner/Dockerfile",
+			// "dockerfile": "../docker/Dockerfile.text_to_speech",
             "dockerfile": "../runner/docker/Dockerfile.live-app__PIPELINE__",
             "args": {
-                "PIPELINE": "comfyui"
+                "PIPELINE": "comfyui",
+                "VERSION": "0.0.0-dev"
             },
-            // "dockerfile": "../Dockerfile",
-            // "dockerfile": "../docker/Dockerfile.text_to_speech",
             "context": "../runner"
         },
         "runArgs": [
@@ -46,6 +47,7 @@
         // Use 'mounts' to make a list of local folders available inside the container.
         "mounts": [
             // "source=${localWorkspaceFolder}/models,target=/models,type=bind"
+            // "source=${localEnv:HOME}/.lpData/models,target=/models,type=bind"
             "source=${localEnv:HOME}/models/ComfyUI--models/,target=/workspace/ComfyUI/models,type=bind",
             "source=${localEnv:HOME}/models/ComfyUI--output/,target=/workspace/ComfyUI/output,type=bind"
         ]

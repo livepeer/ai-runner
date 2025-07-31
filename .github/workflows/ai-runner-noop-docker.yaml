@@ -1,4 +1,4 @@
-name: Build ai-runner live pipeline Docker images
+name: Build ai-runner noop docker image
 
 on:
   pull_request:
@@ -26,6 +26,8 @@ jobs:
     name: Build common live base image
     permissions:
       pull-requests: read
+    outputs:
+      digest: ${{ steps.build-base.outputs.digest }}
     runs-on: [self-hosted, linux, amd64]
     steps:
       - name: Check out code
@@ -64,6 +66,7 @@ jobs:
 
       - name: Build and push live-base image
         uses: docker/build-push-action@v6
+        id: build-base
         if: steps.check_build.outputs.should_build == 'true'
         with:
           context: "{{defaultContext}}:runner"
@@ -73,100 +76,6 @@ jobs:
           file: docker/Dockerfile.live-base
           cache-from: type=registry,ref=livepeer/ai-runner:live-base-dockerbuildcache
           cache-to: type=registry,ref=livepeer/ai-runner:live-base-dockerbuildcache,mode=max
-
-  build-pipeline-images:
-    name: Build pipeline images
-    needs: build-common-base
-    runs-on: [self-hosted, linux, amd64]
-    permissions:
-      pull-requests: read
-    strategy:
-      fail-fast: false
-      matrix:
-        pipeline: [comfyui]
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@823fcebdb31bb35fdf2229d9f769b400309430d0 # v46.0.3
-        with:
-          files_yaml: |
-            base_dockerfile:
-              - runner/docker/Dockerfile.live-base-${{ matrix.pipeline }}
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
-          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
-
-      - name: Build and push pipeline base image
-        uses: docker/build-push-action@v6
-        if: |
-          github.event_name == 'workflow_dispatch' ||
-          github.event_name == 'push' ||
-          (
-            github.event_name == 'pull_request' &&
-            github.event.pull_request.head.repo.full_name == github.repository &&
-            (
-              steps.changed-files.outputs.base_dockerfile_any_changed == 'true'
-            )
-          )
-        with:
-          context: "{{defaultContext}}:runner"
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: livepeer/ai-runner:live-base-${{ matrix.pipeline }}
-          file: docker/Dockerfile.live-base-${{ matrix.pipeline }}
-          build-args: |
-            PIPELINE=${{ matrix.pipeline }}
-          cache-from: type=registry,ref=livepeer/ai-runner:live-base-${{ matrix.pipeline }}-dockerbuildcache
-          cache-to: type=registry,ref=livepeer/ai-runner:live-base-${{ matrix.pipeline }}-dockerbuildcache,mode=max
-
-      - name: Extract metadata for app image
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: livepeer/ai-runner
-          tags: |
-            type=raw,value=live-app-${{ matrix.pipeline }},enable={{is_default_branch}}
-            type=sha,prefix=live-app-${{ matrix.pipeline }}-
-            type=ref,event=pr,prefix=live-app-${{ matrix.pipeline }}-
-            type=ref,event=tag,prefix=live-app-${{ matrix.pipeline }}-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-${{ matrix.pipeline }}-
-
-      - name: Get version information (for docker build tag)
-        id: version
-        run: |
-          echo "version=$(bash runner/print_version.sh)" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push pipeline app image
-        uses: docker/build-push-action@v6
-        with:
-          context: "{{defaultContext}}:runner"
-          file: docker/Dockerfile.live-app__PIPELINE__
-          build-args: |
-            PIPELINE=${{ matrix.pipeline }}
-            GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
-            VERSION=${{ steps.version.outputs.version }}
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          annotations: ${{ steps.meta.outputs.annotations }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-dockerbuildcache
-          cache-to: type=registry,ref=livepeer/ai-runner:live-app-${{ matrix.pipeline }}-dockerbuildcache,mode=max
-
-      - name: Notify new build upload
-        run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
 
   build-noop:
     name: Build pipeline image (noop)
@@ -238,6 +147,8 @@ jobs:
           context: "{{defaultContext}}:runner"
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
+            # only specify base image if we just built it above, otherwise use whatever default is in the Dockerfile
+            ${{ needs.build-common-base.outputs.digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.build-common-base.outputs.digest) }}
           file: docker/Dockerfile.live-app-noop
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}

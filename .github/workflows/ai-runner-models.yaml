@@ -1,18 +1,18 @@
-name: Pull and dockerize huggingface models
+name: Pull and dockerize huggingface models (deprecated)
 
 on:
-  push:
-    branches:
-      - "main"
-    paths:
-      - "runner/dl_checkpoints.sh"
-      - "runner/docker/Dockerfile.models"
-      - ".github/workflows/ai-runner-models.yaml"
-  pull_request:
-    paths:
-      - "runner/dl_checkpoints.sh"
-      - "runner/docker/Dockerfile.models"
-      - ".github/workflows/ai-runner-models.yaml"
+  #push:
+  #  branches:
+  #    - "main"
+  #  paths:
+  #    - "runner/dl_checkpoints.sh"
+  #    - "runner/docker/Dockerfile.models"
+  #    - ".github/workflows/ai-runner-models.yaml"
+  #pull_request:
+  #  paths:
+  #    - "runner/dl_checkpoints.sh"
+  #    - "runner/docker/Dockerfile.models"
+  #    - ".github/workflows/ai-runner-models.yaml"
   workflow_dispatch:
 
 concurrency:
@@ -33,7 +33,7 @@ jobs:
 
       - name: dl_checkpoints.sh
         env:
-          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui-89570ca"
+          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui"
           # If models are smaller than this size, the build will fail
           MIN_MODELS_SIZE_MB: 500
         run: |
@@ -109,7 +109,7 @@ jobs:
 
       - name: dl_checkpoints.sh
         env:
-          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui-89570ca"
+          AI_RUNNER_COMFYUI_IMAGE: "livepeer/ai-runner:live-app-comfyui"
           # If models are smaller than this size, the build will fail
           MIN_MODELS_SIZE_MB: 500
         run: |

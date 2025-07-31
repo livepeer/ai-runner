@@ -2,15 +2,13 @@ import os
 import json
 import torch
 import asyncio
-import numpy as np
-from PIL import Image
 from typing import Union
 from pydantic import BaseModel, field_validator
 import pathlib
 
 from .interface import Pipeline
 from comfystream.client import ComfyStreamClient
-from trickle import VideoFrame, VideoOutput
+from trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 import logging
 
@@ -27,6 +25,10 @@ class ComfyUIParams(BaseModel):
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
+
+    # NOTE: Dimensions must be maintained with the workflow dimensions and is shared with other pipelines
+    width: int = DEFAULT_WIDTH
+    height: int = DEFAULT_HEIGHT
 
     @field_validator('prompt')
     @classmethod
@@ -57,6 +59,7 @@ class ComfyUI(Pipeline):
         self.video_incoming_frames: asyncio.Queue[VideoOutput] = asyncio.Queue()
 
     async def initialize(self, **params):
+        """Initialize the ComfyUI pipeline with given parameters."""
         new_params = ComfyUIParams(**params)
         logging.info(f"Initializing ComfyUI Pipeline with prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
@@ -65,7 +68,7 @@ class ComfyUI(Pipeline):
 
         # Warm up the pipeline
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, 512, 512, 3)
+        dummy_frame.side_data.input = torch.randn(1, new_params.height, new_params.width, 3)
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)
@@ -73,8 +76,11 @@ class ComfyUI(Pipeline):
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        image_np = np.array(frame.image.convert("RGB")).astype(np.float32) / 255.0
-        frame.side_data.input = torch.tensor(image_np).unsqueeze(0)
+        tensor = frame.tensor
+        if tensor.is_cuda:
+            # Clone the tensor to be able to send it on comfystream internal queue
+            tensor = tensor.clone()
+        frame.side_data.input = tensor
         frame.side_data.skipped = True
         self.client.put_video_input(frame)
         await self.video_incoming_frames.put(VideoOutput(frame, request_id))
@@ -84,20 +90,40 @@ class ComfyUI(Pipeline):
         out = await self.video_incoming_frames.get()
         while out.frame.side_data.skipped:
             out = await self.video_incoming_frames.get()
-
-        result_tensor = result_tensor.squeeze(0)
-        result_image_np = (result_tensor * 255).byte()
-        result_image = Image.fromarray(result_image_np.cpu().numpy())
-        return out.replace_image(result_image)
+        return out.replace_tensor(result_tensor)
 
     async def update_params(self, **params):
         new_params = ComfyUIParams(**params)
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
-        await self.client.update_prompts([new_params.prompt])
+        try:
+            await self.client.update_prompts([new_params.prompt])
+        except Exception as e:
+            logging.error(f"Error updating ComfyUI Pipeline Prompt: {e}")
+            raise e
         self.params = new_params
 
     async def stop(self):
-        logging.info("Stopping ComfyUI pipeline")
-        await self.client.stop()
-        logging.info("ComfyUI pipeline stopped")
+        try:
+            logging.info("Stopping ComfyUI pipeline")
+            # Wait for the pipeline to stop
+            # Clear the video_incoming_frames queue
+            while not self.video_incoming_frames.empty():
+                try:
+                    self.video_incoming_frames.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+            logging.info("Waiting for ComfyUI client to cleanup")
+            await self.client.cleanup()
+            await asyncio.sleep(1)
+            logging.info("ComfyUI client cleanup complete")
+            # Force CUDA cache clear
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()  # Wait for all CUDA operations to complete
+                torch.cuda.empty_cache()
+                
+        except Exception as e:
+            logging.error(f"Error stopping ComfyUI pipeline: {e}")
+        finally:
+            self.client = None
+            logging.info("ComfyUI pipeline stopped")

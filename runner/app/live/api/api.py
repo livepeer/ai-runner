@@ -13,9 +13,9 @@ from typing import Annotated, Dict
 from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
+from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 MAX_FILE_AGE = 86400  # 1 day
-STREAMER_INPUT_TIMEOUT = 60  # 60s
 
 # File to store the last params that a stream was started with. Used to cleanup
 # left over resources (e.g. trickle channels) left by a crashed process.
@@ -58,6 +58,10 @@ class StartStreamParams(BaseModel):
         str,
         Field(default="", description="Unique identifier for the request."),
     ]
+    manifest_id: Annotated[
+        str,
+        Field(default="", description="Orchestrator identifier for the request."),
+    ]
     stream_id: Annotated[
         str,
         Field(default="", description="Unique identifier for the stream."),
@@ -92,7 +96,6 @@ async def parse_request_data(request: web.Request) -> Dict:
     else:
         raise ValueError(f"Unknown content type: {request.content_type}")
 
-
 async def handle_start_stream(request: web.Request):
     try:
         stream_request_timestamp = int(time.time() * 1000)
@@ -102,7 +105,8 @@ async def handle_start_stream(request: web.Request):
             # Stop the previous streamer before starting a new one
             try:
                 logging.info("Stopping previous streamer")
-                await prev_streamer.stop(timeout=10)
+                prev_streamer.trigger_stop_stream()
+                await prev_streamer.wait(timeout=10)
             except asyncio.TimeoutError as e:
                 logging.error(f"Timeout stopping streamer: {e}")
                 raise web.HTTPBadRequest(text="Timeout stopping previous streamer")
@@ -116,19 +120,32 @@ async def handle_start_stream(request: web.Request):
         except Exception as e:
             logging.error(f"Error saving last params to file: {e}")
 
-        config_logging(request_id=params.request_id, stream_id=params.stream_id)
+        config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
+
+        # Try to get dimensions from workflow first
+        width = params.params.get("width", DEFAULT_WIDTH)
+        height = params.params.get("height", DEFAULT_HEIGHT)
+        if process.pipeline == "comfyui":
+            # TODO: Remove this once ComfyUI pipeline supports different resolutions without a restart
+            width = height = 512
+            params.params = params.params | {"width": width, "height": height}
+            logging.warning("Using default dimensions for ComfyUI pipeline")
+        else:
+            logging.info(f"Using dimensions from params: {width}x{height}")
 
         protocol = TrickleProtocol(
             params.subscribe_url,
             params.publish_url,
             params.control_url,
             params.events_url,
+            width,
+            height,
         )
         streamer = PipelineStreamer(
             protocol,
-            STREAMER_INPUT_TIMEOUT,
             process,
             params.request_id,
+            params.manifest_id,
             params.stream_id,
         )
 

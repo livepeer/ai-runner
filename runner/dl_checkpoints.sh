@@ -1,10 +1,14 @@
 #!/bin/bash
 
+set -e
 [ -v DEBUG ] && set -x
 
 # ComfyUI image configuration
+PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
+AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion}
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
+PIPELINE=${PIPELINE:-all}
 
 # Checks HF_TOKEN and huggingface-cli login status and throw warning if not authenticated.
 check_hf_auth() {
@@ -25,6 +29,14 @@ function display_help() {
   echo "  --tensorrt  Download livestreaming models and build tensorrt models."
   echo "  --batch  Download all models for batch processing."
   echo "  --help   Display this help message."
+  echo ""
+  echo "Environment Variables:"
+  echo "  PULL_IMAGES  Whether to pull Docker images (default: true)"
+  echo "  AI_RUNNER_COMFYUI_IMAGE  ComfyUI Docker image (default: livepeer/ai-runner:live-app-comfyui)"
+  echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion Docker image (default: livepeer/ai-runner:live-app-streamdiffusion)"
+  echo "  PIPELINE  When using --live or --tensorrt, specify which pipeline to use: 'streamdiffusion', 'comfyui', or 'all' (default)"
+  echo "  HF_TOKEN  HuggingFace token for downloading token-gated models"
+  echo "  DEBUG  Enable debug mode with set -x"
 }
 
 # Download recommended models during beta phase.
@@ -91,7 +103,54 @@ function download_all_models() {
 
 # Download models only for the live-video-to-video pipeline.
 function download_live_models() {
-  docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
+  # Check PIPELINE environment variable and download accordingly
+  case "$PIPELINE" in
+  "streamdiffusion")
+    printf "\nDownloading StreamDiffusion live models only...\n"
+    download_streamdiffusion_live_models
+    ;;
+  "comfyui")
+    printf "\nDownloading ComfyUI live models only...\n"
+    download_comfyui_live_models
+    ;;
+  "all")
+    printf "\nDownloading all live models...\n"
+    download_streamdiffusion_live_models
+    download_comfyui_live_models
+    ;;
+  *)
+    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, all\n" "$PIPELINE"
+    exit 1
+    ;;
+  esac
+}
+
+function download_streamdiffusion_live_models() {
+  printf "\nDownloading StreamDiffusion live models...\n"
+
+  # StreamDiffusion
+  huggingface-cli download KBlueLeaf/kohaku-v2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+
+  # ControlNet models
+  huggingface-cli download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download thibaud/controlnet-sd21-hed-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download thibaud/controlnet-sd21-canny-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download thibaud/controlnet-sd21-depth-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download thibaud/controlnet-sd21-color-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+
+  # Preprocessor models
+  huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
+  huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
+}
+
+function download_comfyui_live_models() {
+  printf "\nDownloading ComfyUI live models...\n"
+
+  # ComfyUI
+  if [ "$PULL_IMAGES" = true ]; then
+    docker pull "${AI_RUNNER_COMFYUI_IMAGE}"
+  fi
 
   # ComfyUI models
   if ! docker image inspect $AI_RUNNER_COMFYUI_IMAGE >/dev/null 2>&1; then
@@ -103,8 +162,7 @@ function download_live_models() {
   docker run --rm -v ./models:/models --gpus all -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream && \
                  $CONDA_PYTHON src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
-                 adduser $(id -u -n) && \
-                 chown -R $(id -u -n):$(id -g -n) /models" ||
+                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI setup_models.py"
       exit 1
@@ -121,13 +179,62 @@ function build_tensorrt_models() {
   fi
   printf "\nBuilding TensorRT models...\n"
 
+  # Check PIPELINE environment variable and build accordingly
+  case "$PIPELINE" in
+  "streamdiffusion")
+    printf "\nBuilding StreamDiffusion TensorRT models only...\n"
+    build_streamdiffusion_tensorrt
+    ;;
+  "comfyui")
+    printf "\nBuilding ComfyUI TensorRT models only...\n"
+    build_comfyui_tensorrt
+    ;;
+  "all")
+    printf "\nBuilding all TensorRT models...\n"
+    build_streamdiffusion_tensorrt
+    build_comfyui_tensorrt
+    ;;
+  *)
+    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, all\n" "$PIPELINE"
+    exit 1
+    ;;
+  esac
+}
+
+function build_streamdiffusion_tensorrt() {
+  printf "\nBuilding StreamDiffusion TensorRT models...\n"
+
+  # StreamDiffusion (compile a matrix of models and timesteps)
+  if [ "$PULL_IMAGES" = true ]; then
+    docker pull $AI_RUNNER_STREAMDIFFUSION_IMAGE
+  fi
+  # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
+  docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
+
+  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
+    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
+              --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
+              --timesteps '1 2 3 4' \
+              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
+              --build-depth-anything \
+              --build-pose \
+              && \
+            chown -R $(id -u):$(id -g) /models" ||
+    (
+      echo "failed streamdiffusion tensorrt"
+      exit 1
+    )
+}
+
+function build_comfyui_tensorrt() {
+  printf "\nBuilding ComfyUI TensorRT models...\n"
+
   # Depth-Anything-Tensorrt
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
                 $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
                 $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
-                adduser $(id -u -n) && \
-                chown -R $(id -u -n):$(id -g -n) /models" ||
+                chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI Depth-Anything-Tensorrt"
       exit 1
@@ -139,13 +246,12 @@ function build_tensorrt_models() {
                 $CONDA_PYTHON ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
-                adduser $(id -u -n) && \
-                 chown -R $(id -u -n):$(id -g -n) /models" ||
+                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI build_trt.py"
       exit 1
     )
-  
+
   # Dreamshaper-8-Dmd-1kstep static dynamic 488x704
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
@@ -158,11 +264,21 @@ function build_tensorrt_models() {
                 --min-height 448 \
                 --max-width 704 \
                 --max-height 704 && \
-                adduser $(id -u -n) && \
-                chown -R $(id -u -n):$(id -g -n) /models" ||
+                chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI build_trt.py dynamic engine"
-      return 1
+      exit 1
+    )
+
+  # FasterLivePortrait
+  FASTERLIVEPORTRAIT_DIR="/workspace/ComfyUI/models/liveportrait_onnx"
+  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+    bash -c "conda run -n comfystream --no-capture-output /workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
+             $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR && \
+                chown -R $(id -u):$(id -g) /models" ||
+    (
+      echo "failed ComfyUI FasterLivePortrait Tensorrt Engines"
+      exit 1
     )
 }
 
@@ -226,7 +342,7 @@ done
 
 echo "Starting livepeer AI subnet model downloader..."
 echo "Creating 'models' directory in the current working directory..."
-mkdir -p models/checkpoints models/ComfyUI--{models,output}
+mkdir -p models/checkpoints models/StreamDiffusion--engines models/ComfyUI--{models,output}
 
 # Ensure 'huggingface-cli' is installed.
 echo "Checking if 'huggingface-cli' is installed..."
