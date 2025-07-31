@@ -373,6 +373,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
         controlnet_config=controlnet_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
+        model_cache_dir=os.getenv("DIFFUSERS_CACHE", "/models")
     )
 
     pipe.prepare(
