@@ -14,6 +14,8 @@ from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
 
+from streamdiffusion.image_utils import denormalize
+
 class PipelineProcess:
     @staticmethod
     def start(pipeline_name: str, params: dict):
@@ -96,8 +98,15 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
-        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
-            frame = frame.replace_tensor(frame.tensor.cuda())
+        if isinstance(frame, VideoFrame):
+            img_tensor = frame.tensor
+            if not img_tensor.is_cuda and torch.cuda.is_available():
+                img_tensor = img_tensor.cuda()
+            img_tensor = img_tensor.permute(0, 3, 1, 2)
+            img_tensor = denormalize(img_tensor)
+            # img_tensor = self.pipe.preprocess_image(img_tensor)
+            frame = frame.replace_tensor(img_tensor)
+
         self._try_queue_put(self.input_queue, frame)
 
     async def recv_output(self) -> OutputFrame | None:
