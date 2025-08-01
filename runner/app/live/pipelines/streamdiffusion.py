@@ -175,7 +175,7 @@ class StreamDiffusion(Pipeline):
         # VaeImageProcessor inside the wrapper expects (B, C, H, W) in [0, 1].
         # img_tensor = img_tensor.permute(0, 3, 1, 2)
         # img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
-        # img_tensor = self.pipe.preprocess_image(img_tensor)
+        img_tensor = self.pipe.preprocess_image(img_tensor)
 
         if self.params and self.params.controlnets:
             self.pipe.update_control_image_efficient(img_tensor)
