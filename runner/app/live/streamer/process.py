@@ -102,11 +102,13 @@ class PipelineProcess:
     def send_input(self, frame: InputFrame):
         if isinstance(frame, VideoFrame):
             img_tensor = frame.tensor
-            if not img_tensor.is_cuda and torch.cuda.is_available():
-                img_tensor = img_tensor.cuda()
+            if img_tensor.is_cuda:
+                img_tensor = img_tensor.cpu()
             img_tensor = img_tensor.permute(0, 3, 1, 2)
             # img_tensor = self.image_processor.denormalize(img_tensor)
             img_tensor = self.image_processor.preprocess(img_tensor)
+            if torch.cuda.is_available() and not img_tensor.is_cuda:
+                img_tensor = img_tensor.cuda()
             frame = frame.replace_tensor(img_tensor)
 
         self._try_queue_put(self.input_queue, frame)
