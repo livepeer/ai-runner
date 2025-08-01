@@ -42,7 +42,7 @@ class PipelineProcess:
         self.start_time = 0.0
         self.request_id = ""
 
-        self.image_processor = VaeImageProcessor()
+        self.image_processor = VaeImageProcessor(do_normalize=False)
 
     def is_alive(self):
         return self.process.is_alive()
@@ -105,7 +105,7 @@ class PipelineProcess:
             if not img_tensor.is_cuda and torch.cuda.is_available():
                 img_tensor = img_tensor.cuda()
             img_tensor = img_tensor.permute(0, 3, 1, 2)
-            img_tensor = self.image_processor.denormalize(img_tensor)
+            # img_tensor = self.image_processor.denormalize(img_tensor)
             img_tensor = self.image_processor.preprocess(img_tensor)
             frame = frame.replace_tensor(img_tensor)
 
