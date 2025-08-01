@@ -77,54 +77,54 @@ class StreamDiffusionParams(BaseModel):
 
     # ControlNet settings
     controlnets: Optional[List[ControlNetConfig]] = [
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-openpose-diffusers",
-            conditioning_scale=0.711,
-            preprocessor="pose_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-hed-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="soft_edge",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-canny-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="canny",
-            preprocessor_params={
-                "low_threshold": 100,
-                "high_threshold": 200
-            },
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-depth-diffusers",
-            conditioning_scale=0.5,
-            preprocessor="depth_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-color-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="passthrough",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        )
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-openpose-diffusers",
+        #     conditioning_scale=0.711,
+        #     preprocessor="pose_tensorrt",
+        #     preprocessor_params={},
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # ),
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-hed-diffusers",
+        #     conditioning_scale=0.2,
+        #     preprocessor="soft_edge",
+        #     preprocessor_params={},
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # ),
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-canny-diffusers",
+        #     conditioning_scale=0.2,
+        #     preprocessor="canny",
+        #     preprocessor_params={
+        #         "low_threshold": 100,
+        #         "high_threshold": 200
+        #     },
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # ),
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-depth-diffusers",
+        #     conditioning_scale=0.5,
+        #     preprocessor="depth_tensorrt",
+        #     preprocessor_params={},
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # ),
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-color-diffusers",
+        #     conditioning_scale=0.2,
+        #     preprocessor="passthrough",
+        #     preprocessor_params={},
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # )
     ]
 
     @model_validator(mode="after")
@@ -177,8 +177,8 @@ class StreamDiffusion(Pipeline):
         img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
-        # Noop if ControlNets are not enabled
-        self.pipe.update_control_image_efficient(img_tensor)
+        if self.params and self.params.controlnets:
+            self.pipe.update_control_image_efficient(img_tensor)
 
         if self.first_frame:
             self.first_frame = False
