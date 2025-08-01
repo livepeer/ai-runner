@@ -14,6 +14,8 @@ from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
 
+from diffusers.image_processor import VaeImageProcessor
+
 class PipelineProcess:
     @staticmethod
     def start(pipeline_name: str, params: dict):
@@ -39,6 +41,8 @@ class PipelineProcess:
         self.process = self.ctx.Process(target=self.process_loop, args=())
         self.start_time = 0.0
         self.request_id = ""
+
+        self.image_processor = VaeImageProcessor(do_normalize=False)
 
     def is_alive(self):
         return self.process.is_alive()
@@ -96,8 +100,17 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
-        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
-            frame = frame.replace_tensor(frame.tensor.cuda())
+        if isinstance(frame, VideoFrame):
+            img_tensor = frame.tensor
+            if img_tensor.is_cuda:
+                img_tensor = img_tensor.cpu()
+            img_tensor = img_tensor.permute(0, 3, 1, 2)
+            # img_tensor = self.image_processor.denormalize(img_tensor)
+            img_tensor = self.image_processor.preprocess(img_tensor)
+            if torch.cuda.is_available() and not img_tensor.is_cuda:
+                img_tensor = img_tensor.cuda()
+            frame = frame.replace_tensor(img_tensor)
+
         self._try_queue_put(self.input_queue, frame)
 
     async def recv_output(self) -> OutputFrame | None:
