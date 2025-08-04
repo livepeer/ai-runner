@@ -131,6 +131,7 @@ function download_streamdiffusion_live_models() {
   # StreamDiffusion
   huggingface-cli download KBlueLeaf/kohaku-v2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download stabilityai/sdxl-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
   # ControlNet models
   huggingface-cli download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
@@ -213,9 +214,9 @@ function build_streamdiffusion_tensorrt() {
 
   docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
-              --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
-              --timesteps '1 2 3 4' \
-              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
+              --models 'stabilityai/sdxl-turbo' \
+              --timesteps '1 2 3' \
+              --controlnets '' \
               --build-depth-anything \
               --build-pose \
               && \
