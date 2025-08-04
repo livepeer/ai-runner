@@ -21,7 +21,9 @@ class ControlNetConfig(BaseModel):
         "thibaud/controlnet-sd21-hed-diffusers",
         "thibaud/controlnet-sd21-canny-diffusers",
         "thibaud/controlnet-sd21-depth-diffusers",
-        "thibaud/controlnet-sd21-color-diffusers"
+        "thibaud/controlnet-sd21-color-diffusers",
+        "lllyasviel/control_v11f1p_sd15_depth",
+        "lllyasviel/control_v11f1e_sd15_tile",
     ]
     conditioning_scale: float = 1.0
     preprocessor: Optional[str] = None
@@ -38,7 +40,7 @@ class StreamDiffusionParams(BaseModel):
     # Model configuration
     model_id: Literal[
         "stabilityai/sd-turbo",
-        "KBlueLeaf/kohaku-v2.1",
+        "ryanontheinside/PerfectPhotonV2.1",
     ] = "stabilityai/sd-turbo"
 
     # Generation parameters
