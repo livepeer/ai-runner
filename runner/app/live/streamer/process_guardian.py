@@ -311,10 +311,13 @@ class ProcessGuardian:
                         if restart_count >= 3:
                             raise Exception(f"Pipeline process max restarts reached ({restart_count})")
 
-                        # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
-                        # So we skip the restart here and move the state to ERROR so the worker will restart the whole container.
-                        # TODO: Remove this exception once pipeline shutdown is fixed and restarting process is useful again.
-                        raise Exception("Skipping process restart due to pipeline shutdown issues")
+                        if self.pipeline == "comfyui":
+                            # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
+                            # So we skip the restart here and move the state to ERROR so the worker will restart the whole container.
+                            # TODO: Remove this exception once pipeline shutdown is fixed and restarting process is useful again.
+                            raise Exception(
+                                "Skipping process restart due to pipeline shutdown issues"
+                            )
                         await self._restart_process()
                     except Exception:
                         logging.exception("Failed to stop streamer and restart process. Moving to ERROR state", stack_info=True)
