@@ -118,15 +118,18 @@ class ProcessGuardian:
         self.process.update_params(params)
         self.status.update_params(params)
 
-        await self.streamer.emit_monitoring_event(
-            {
-                "type": "params_update",
-                "pipeline": self.pipeline,
-                "params": params,
-                "params_hash": self.status.inference_status.last_params_hash,
-                "update_time": self.status.inference_status.last_params_update_time,
-            }
-        )
+        # The gateway is having trouble keeping up with a high frequency of events, while we still want to support high
+        # frequency of parameter updates. So we're skipping the event for now.
+        # TODO: Re-enable this once the trickle protocol is udpated to support higher event throughput (e.g. #720)
+        # await self.streamer.emit_monitoring_event(
+        #     {
+        #         "type": "params_update",
+        #         "pipeline": self.pipeline,
+        #         "params": params,
+        #         "params_hash": self.status.inference_status.last_params_hash,
+        #         "update_time": self.status.inference_status.last_params_update_time,
+        #     }
+        # )
         logging.info(
             f"ProcessGuardian: Parameter update queued. hash={self.status.inference_status.last_params_hash} params={params}"
         )
