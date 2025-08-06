@@ -10,7 +10,7 @@ set -e
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 MODELS="stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1"
 TIMESTEPS="3 4" # This is basically the supported sizes for the t_index_list
-DIMENSIONS="512x512" # Engines are now compiled for the 384-1024 range, but keep this in case it's useful in the future
+DIMENSIONS="1024x1024" # Engines are now compiled for the 384-1024 range, but keep this in case it's useful in the future
 CONTROLNETS="" # Default empty, will be set from command line
 
 # Function to display help

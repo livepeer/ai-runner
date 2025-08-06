@@ -9,7 +9,7 @@ import torch
 
 from .frame import InputFrame
 
-MAX_FRAMERATE=24
+MAX_FRAMERATE=120
 
 def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_height):
     """

@@ -6,13 +6,13 @@ from typing import Dict, List, Literal, Optional, Any, Tuple, cast
 import torch
 from pydantic import BaseModel, Field, model_validator
 from streamdiffusion import StreamDiffusionWrapper
-from streamdiffusion.controlnet.preprocessors import list_preprocessors
+# from streamdiffusion.controlnet.preprocessors import list_preprocessors
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
-AVAILABLE_PREPROCESSORS = list_preprocessors()
+AVAILABLE_PREPROCESSORS = []
 
 class ControlNetConfig(BaseModel):
     """ControlNet configuration model"""
@@ -39,7 +39,8 @@ class StreamDiffusionParams(BaseModel):
     model_id: Literal[
         "stabilityai/sd-turbo",
         "KBlueLeaf/kohaku-v2.1",
-    ] = "stabilityai/sd-turbo"
+        "stabilityai/sdxl-turbo",
+    ] = "stabilityai/sdxl-turbo"
 
     # Generation parameters
     prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
@@ -77,54 +78,54 @@ class StreamDiffusionParams(BaseModel):
 
     # ControlNet settings
     controlnets: Optional[List[ControlNetConfig]] = [
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-openpose-diffusers",
-            conditioning_scale=0.711,
-            preprocessor="pose_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-hed-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="soft_edge",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-canny-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="canny",
-            preprocessor_params={
-                "low_threshold": 100,
-                "high_threshold": 200
-            },
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-depth-diffusers",
-            conditioning_scale=0.5,
-            preprocessor="depth_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-color-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="passthrough",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        )
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-openpose-diffusers",
+        #     conditioning_scale=0.711,
+        #     preprocessor="pose_tensorrt",
+        #     preprocessor_params={},
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # ),
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-hed-diffusers",
+        #     conditioning_scale=0.2,
+        #     preprocessor="soft_edge",
+        #     preprocessor_params={},
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # ),
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-canny-diffusers",
+        #     conditioning_scale=0.2,
+        #     preprocessor="canny",
+        #     preprocessor_params={
+        #         "low_threshold": 100,
+        #         "high_threshold": 200
+        #     },
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # ),
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-depth-diffusers",
+        #     conditioning_scale=0.5,
+        #     preprocessor="depth_tensorrt",
+        #     preprocessor_params={},
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # ),
+        # ControlNetConfig(
+        #     model_id="thibaud/controlnet-sd21-color-diffusers",
+        #     conditioning_scale=0.2,
+        #     preprocessor="passthrough",
+        #     preprocessor_params={},
+        #     enabled=True,
+        #     control_guidance_start=0.0,
+        #     control_guidance_end=1.0,
+        # )
     ]
 
     @model_validator(mode="after")
@@ -173,12 +174,12 @@ class StreamDiffusion(Pipeline):
 
         # The incoming frame.tensor is (B, H, W, C) in range [-1, 1] while the
         # VaeImageProcessor inside the wrapper expects (B, C, H, W) in [0, 1].
-        img_tensor = img_tensor.permute(0, 3, 1, 2)
-        img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
-        img_tensor = self.pipe.preprocess_image(img_tensor)
+        # img_tensor = img_tensor.permute(0, 3, 1, 2)
+        # img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
+        # img_tensor = self.pipe.preprocess_image(img_tensor)
 
-        # Noop if ControlNets are not enabled
-        self.pipe.update_control_image_efficient(img_tensor)
+        if self.params and self.params.controlnets:
+            self.pipe.update_control_image_efficient(img_tensor)
 
         if self.first_frame:
             self.first_frame = False
