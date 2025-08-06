@@ -3,7 +3,7 @@ import logging
 import queue
 import json
 import time
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, Any
 
 from trickle import media, TricklePublisher, TrickleSubscriber, InputFrame, OutputFrame, AudioFrame, AudioOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
 
@@ -28,8 +28,8 @@ class TrickleProtocol(StreamProtocol):
         self.height = height
 
     async def start(self):
-        self.subscribe_queue = queue.Queue[InputFrame]()
-        self.publish_queue = queue.Queue[OutputFrame]()
+        self.subscribe_queue = queue.Queue[InputFrame | None]()
+        self.publish_queue = queue.Queue[OutputFrame | None]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
             media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, self.width, self.height)
@@ -158,20 +158,50 @@ class TrickleProtocol(StreamProtocol):
         logging.info("Starting Control subscriber at %s", self.control_url)
         keepalive_message = {"keep": "alive"}
 
+        def read_event_line(line: str) -> Any:
+            """Read a single event line. Returns None for JSON decode errors and keepalive messages."""
+            try:
+                data = json.loads(line)
+                if data == keepalive_message:
+                    # Ignore periodic keepalive messages
+                    return None
+
+                logging.info("Received control message with params: %s", data)
+                return data
+            except json.JSONDecodeError as e:
+                logging.error(f"Failed to parse JSON line: {line}, error: {e}")
+                return None
+
         while not done.is_set():
             try:
                 segment = await self.control_subscriber.next()
                 if not segment or segment.eos():
                     return
 
-                params = await segment.read()
-                data = json.loads(params)
-                if data == keepalive_message:
-                    # Ignore periodic keepalive messages
-                    continue
+                buffer = ""
 
-                logging.info("Received control message with params: %s", data)
-                yield data
+                while True:
+                    chunk = await segment.read()
+                    if not chunk:
+                        break
+
+                    buffer += chunk.decode('utf-8')
+
+                    while '\n' in buffer:
+                        line, buffer = buffer.split('\n', 1)
+                        line = line.strip()
+                        if not line:
+                            continue
+
+                        event = read_event_line(line)
+                        if event:
+                            yield event
+
+                buffer = buffer.strip()
+                if buffer:
+                    event = read_event_line(buffer)
+                    if event:
+                        yield event
 
             except Exception:
                 logging.error(f"Error in control loop", exc_info=True)
