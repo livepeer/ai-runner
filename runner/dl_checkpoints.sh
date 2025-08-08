@@ -211,7 +211,9 @@ function build_streamdiffusion_tensorrt() {
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
 
-  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_STREAMDIFFUSION_IMAGE \
+  docker run --rm -v ./models:/models --gpus all \
+    -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
+    -n streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
               --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
               --timesteps '1 2 3 4' \
