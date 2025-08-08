@@ -213,7 +213,7 @@ function build_streamdiffusion_tensorrt() {
 
   docker run --rm -v ./models:/models --gpus all \
     -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
-    -n streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
+    --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
               --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
               --timesteps '1 2 3 4' \
