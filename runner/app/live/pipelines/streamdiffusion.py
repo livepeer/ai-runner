@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from streamdiffusion import StreamDiffusionWrapper
 from streamdiffusion.controlnet.preprocessors import list_preprocessors
 
+from ..log import log_timing
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
@@ -212,11 +213,13 @@ class StreamDiffusion(Pipeline):
 
             self.pipe = None
             try:
-                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+                with log_timing("loading streamdiffusion with new params"):
+                    self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
             except Exception:
                 logging.error(f"Error resetting pipeline, reloading with previous params", exc_info=True)
                 new_params = self.params or StreamDiffusionParams()
-                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+                with log_timing("loading streamdiffusion with previous/default params"):
+                    self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
 
             self.params = new_params
             self.first_frame = True
@@ -348,41 +351,43 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
     # Prepare ControlNet configuration
     controlnet_config = _prepare_controlnet_configs(params)
 
-    pipe = StreamDiffusionWrapper(
-        model_id_or_path=params.model_id,
-        t_index_list=params.t_index_list,
-        lora_dict=params.lora_dict,
-        mode="img2img",
-        output_type="pt",
-        lcm_lora_id=params.lcm_lora_id,
-        frame_buffer_size=1,
-        width=params.width,
-        height=params.height,
-        warmup=10,
-        acceleration=params.acceleration,
-        do_add_noise=params.do_add_noise,
-        use_lcm_lora=params.use_lcm_lora,
-        enable_similar_image_filter=params.enable_similar_image_filter,
-        similar_image_filter_threshold=params.similar_image_filter_threshold,
-        similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
-        use_denoising_batch=params.use_denoising_batch,
-        seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
-        normalize_seed_weights=params.normalize_seed_weights,
-        normalize_prompt_weights=params.normalize_prompt_weights,
-        use_controlnet=bool(controlnet_config),
-        controlnet_config=controlnet_config,
-        engine_dir=engine_dir,
-        build_engines_if_missing=build_engines_if_missing,
-    )
+    with log_timing("loading StreamDiffusionWrapper"):
+        pipe = StreamDiffusionWrapper(
+            model_id_or_path=params.model_id,
+            t_index_list=params.t_index_list,
+            lora_dict=params.lora_dict,
+            mode="img2img",
+            output_type="pt",
+            lcm_lora_id=params.lcm_lora_id,
+            frame_buffer_size=1,
+            width=params.width,
+            height=params.height,
+            warmup=10,
+            acceleration=params.acceleration,
+            do_add_noise=params.do_add_noise,
+            use_lcm_lora=params.use_lcm_lora,
+            enable_similar_image_filter=params.enable_similar_image_filter,
+            similar_image_filter_threshold=params.similar_image_filter_threshold,
+            similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
+            use_denoising_batch=params.use_denoising_batch,
+            seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
+            normalize_seed_weights=params.normalize_seed_weights,
+            normalize_prompt_weights=params.normalize_prompt_weights,
+            use_controlnet=bool(controlnet_config),
+            controlnet_config=controlnet_config,
+            engine_dir=engine_dir,
+            build_engines_if_missing=build_engines_if_missing,
+        )
 
-    pipe.prepare(
-        prompt=params.prompt,
-        prompt_interpolation_method=params.prompt_interpolation_method,
-        negative_prompt=params.negative_prompt,
-        num_inference_steps=params.num_inference_steps,
-        guidance_scale=params.guidance_scale,
-        delta=params.delta,
-        seed_list=[(params.seed, 1.0)] if isinstance(params.seed, int) else params.seed,
-        seed_interpolation_method=params.seed_interpolation_method,
-    )
+    with log_timing("preparing streamdiffusion"):
+        pipe.prepare(
+            prompt=params.prompt,
+            prompt_interpolation_method=params.prompt_interpolation_method,
+            negative_prompt=params.negative_prompt,
+            num_inference_steps=params.num_inference_steps,
+            guidance_scale=params.guidance_scale,
+            delta=params.delta,
+            seed_list=[(params.seed, 1.0)] if isinstance(params.seed, int) else params.seed,
+            seed_interpolation_method=params.seed_interpolation_method,
+        )
     return pipe
