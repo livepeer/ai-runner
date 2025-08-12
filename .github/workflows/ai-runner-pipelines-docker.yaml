@@ -37,7 +37,7 @@ jobs:
           - docker/Dockerfile.llm
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           # Check https://github.com/livepeer/go-livepeer/pull/1891
