@@ -9,9 +9,9 @@ set -e
 # Configuration
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 MODELS="stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1"
-OPT_TIMESTEPS="3" # This is basically the optimal number of timesteps for the t_index_list
-MIN_TIMESTEPS="1" # This is basically the minimum number of timesteps for the t_index_list
-MAX_TIMESTEPS="4" # This is basically the maximum number of timesteps for the t_index_list
+OPT_TIMESTEPS="3" # Optimal number of timesteps for the t_index_list
+MIN_TIMESTEPS="1" # Minimum number of timesteps for the t_index_list
+MAX_TIMESTEPS="4" # Maximum number of timesteps for the t_index_list
 DIMENSIONS="512x512" # Engines are now compiled for the 384-1024 range, but keep this in case it's useful in the future
 CONTROLNETS="" # Default empty, will be set from command line
 

@@ -50,8 +50,6 @@ class StreamDiffusionParams(BaseModel):
     delta: float = 0.7
     num_inference_steps: int = 50
     t_index_list: List[int] = [12, 20, 32]
-    min_batch_size: int = 1
-    max_batch_size: int = 4
 
     # Image dimensions
     width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024, multiple_of=64)
@@ -343,15 +341,15 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
     return controlnet_configs
 
 
-def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engines", build_engines_if_missing = False):
+def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size: int, max_batch_size: int, engine_dir = "engines", build_engines_if_missing = False):
     # Prepare ControlNet configuration
     controlnet_config = _prepare_controlnet_configs(params)
 
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
         t_index_list=params.t_index_list,
-        min_batch_size=params.min_batch_size,
-        max_batch_size=params.max_batch_size,
+        min_batch_size=min_batch_size,
+        max_batch_size=max_batch_size,
         lora_dict=params.lora_dict,
         mode="img2img",
         output_type="pt",

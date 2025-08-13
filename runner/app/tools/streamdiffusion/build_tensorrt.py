@@ -116,10 +116,8 @@ def main():
         width=args.width,
         height=args.height,
         controlnets=controlnets,
-        min_batch_size=args.min_timesteps,
-        max_batch_size=args.max_timesteps,
     )
-    load_streamdiffusion_sync(params, engine_dir=args.engine_dir, build_engines_if_missing=True)
+    load_streamdiffusion_sync(params, min_batch_size=args.min_timesteps, max_batch_size=args.max_timesteps, engine_dir=args.engine_dir, build_engines_if_missing=True)
     print("TensorRT engine building completed successfully!")
 
 if __name__ == "__main__":
