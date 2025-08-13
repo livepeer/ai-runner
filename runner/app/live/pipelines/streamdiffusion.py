@@ -50,6 +50,8 @@ class StreamDiffusionParams(BaseModel):
     delta: float = 0.7
     num_inference_steps: int = 50
     t_index_list: List[int] = [12, 20, 32]
+    min_batch_size: int = 1
+    max_batch_size: int = 4
 
     # Image dimensions
     width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024, multiple_of=64)
@@ -130,8 +132,8 @@ class StreamDiffusionParams(BaseModel):
     @model_validator(mode="after")
     @staticmethod
     def check_t_index_list(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
-        if not (1 <= len(model.t_index_list) <= 4):
-            raise ValueError("t_index_list must have between 1 and 4 elements")
+        if not (model.min_batch_size <= len(model.t_index_list) <= model.max_batch_size):
+            raise ValueError(f"t_index_list must have between {model.min_batch_size} and {model.max_batch_size} elements")
 
         for i, value in enumerate(model.t_index_list):
             if not (0 <= value <= model.num_inference_steps):
@@ -242,9 +244,6 @@ class StreamDiffusion(Pipeline):
             elif key not in updatable_params:
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
-            elif key == 't_index_list' and len(new_value) != len(curr_value or []):
-                logging.info(f"Non-updatable parameter changed: length of t_index_list")
-                return False
             elif key == 'controlnets':
                 updatable, controlnet_scale_changes = _is_controlnet_change_updatable(self.params, new_params)
                 if not updatable:
@@ -351,6 +350,8 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, engine_dir = "engin
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
         t_index_list=params.t_index_list,
+        min_batch_size=params.min_batch_size,
+        max_batch_size=params.max_batch_size,
         lora_dict=params.lora_dict,
         mode="img2img",
         output_type="pt",

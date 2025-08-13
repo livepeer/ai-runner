@@ -9,7 +9,9 @@ set -e
 # Configuration
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 MODELS="stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1"
-TIMESTEPS="3 4" # This is basically the supported sizes for the t_index_list
+OPT_TIMESTEPS="3" # This is basically the optimal number of timesteps for the t_index_list
+MIN_TIMESTEPS="1" # This is basically the minimum number of timesteps for the t_index_list
+MAX_TIMESTEPS="4" # This is basically the maximum number of timesteps for the t_index_list
 DIMENSIONS="512x512" # Engines are now compiled for the 384-1024 range, but keep this in case it's useful in the future
 CONTROLNETS="" # Default empty, will be set from command line
 
@@ -19,7 +21,9 @@ function display_help() {
     echo "Usage: $0 [options]"
     echo "Options:"
     echo "  --models MODEL_LIST     Comma-separated list of models (default: stabilityai/sd-turbo,KBlueLeaf/kohaku-v2.1)"
-    echo "  --timesteps TIMESTEPS   Space-separated list of timesteps (default: 4)"
+    echo "  --opt-timesteps TIMESTEPS   Optimal number of timesteps in t_index_list (default: 3)"
+    echo "  --min-timesteps TIMESTEPS   Minimum number of timesteps in t_index_list (default: 1)"
+    echo "  --max-timesteps TIMESTEPS   Maximum number of timesteps in t_index_list (default: 4)"
     echo "  --dimensions DIMS       Space-separated list of dimensions in WxH format (default: 384x704 704x384)"
     echo "  --output-dir DIR        Output directory for TensorRT engines (default: engines)"
     echo "  --controlnets CONTROLNETS Space-separated list of controlnet models"
@@ -41,8 +45,16 @@ while [[ $# -gt 0 ]]; do
             MODELS="${2//,/ }"  # Convert comma-separated to space-separated
             shift 2
             ;;
-        --timesteps)
-            TIMESTEPS="$2"
+        --opt-timesteps)
+            OPT_TIMESTEPS="$2"
+            shift 2
+            ;;
+        --min-timesteps)
+            MIN_TIMESTEPS="$2"
+            shift 2
+            ;;
+        --max-timesteps)
+            MAX_TIMESTEPS="$2"
             shift 2
             ;;
         --dimensions)
@@ -109,7 +121,9 @@ fi
 # Build TensorRT engines
 echo "Starting TensorRT engine build process..."
 echo "Models: $MODELS"
-echo "Timesteps: $TIMESTEPS"
+echo "Opt Timesteps: $OPT_TIMESTEPS"
+echo "Min Timesteps: $MIN_TIMESTEPS"
+echo "Max Timesteps: $MAX_TIMESTEPS"
 echo "Dimensions: $DIMENSIONS"
 echo "Output directory: $OUTPUT_DIR"
 if [ -n "$CONTROLNETS" ]; then
@@ -133,10 +147,8 @@ total_builds=0
 
 # Calculate total number of builds
 for model in $MODELS; do
-    for timestep in $TIMESTEPS; do
-        for dim in $DIMENSIONS; do
-            total_builds=$((total_builds + 1))
-        done
+    for dim in $DIMENSIONS; do
+        total_builds=$((total_builds + 1))
     done
 done
 
@@ -156,13 +168,17 @@ for model in $MODELS; do
 
             echo "[$current_build/$total_builds] Building TensorRT engine for:"
             echo "  Model: $model"
-            echo "  Timesteps: $timestep"
+            echo "  Opt Timesteps: $OPT_TIMESTEPS"
+            echo "  Min Timesteps: $MIN_TIMESTEPS"
+            echo "  Max Timesteps: $MAX_TIMESTEPS"
             echo "  Dimensions: ${width}x${height}"
 
             # Build the engine
             if $CONDA_PYTHON "$BUILD_SCRIPT" \
                 --model-id "$model" \
-                --timesteps "$timestep" \
+                --opt-timesteps "$OPT_TIMESTEPS" \
+                --min-timesteps "$MIN_TIMESTEPS" \
+                --max-timesteps "$MAX_TIMESTEPS" \
                 --width "$width" \
                 --height "$height" \
                 --engine-dir "$OUTPUT_DIR" \

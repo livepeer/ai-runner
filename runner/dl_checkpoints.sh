@@ -216,7 +216,9 @@ function build_streamdiffusion_tensorrt() {
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
               --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
-              --timesteps '1 2 3 4' \
+              --opt-timesteps '3' \
+              --min-timesteps '1' \
+              --max-timesteps '4' \
               --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
               --build-depth-anything \
               --build-pose \

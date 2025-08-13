@@ -41,10 +41,22 @@ def parse_args():
         help="Model ID or path to load (e.g. KBlueLeaf/kohaku-v2.1, stabilityai/sd-turbo)"
     )
     parser.add_argument(
-        "--timesteps",
+        "--opt-timesteps",
         type=int,
         default=3,
         help="Number of timesteps in t_index_list (default: 3)"
+    )
+    parser.add_argument(
+        "--min-timesteps",
+        type=int,
+        default=1,
+        help="Minimum number of timesteps in t_index_list (default: 1)"
+    )
+    parser.add_argument(
+        "--max-timesteps",
+        type=int,
+        default=4,
+        help="Maximum number of timesteps in t_index_list (default: 4)"
     )
     parser.add_argument(
         "--engine-dir",
@@ -76,10 +88,10 @@ def main():
     args = parse_args()
 
     # Create t_index_list based on number of timesteps. Only the size matters...
-    t_index_list = list(range(1, 50, 50 // args.timesteps))[:args.timesteps]
+    t_index_list = list(range(1, 50, 50 // args.opt_timesteps))[:args.opt_timesteps]
 
     print(f"Building TensorRT engines for model: {args.model_id}")
-    print(f"Using {args.timesteps} timesteps: {t_index_list}")
+    print(f"Using {args.opt_timesteps} opt timesteps: {t_index_list} with min {args.min_timesteps} and max {args.max_timesteps}")
     print(f"Image dimensions: {args.width}x{args.height}")
 
     # Calculate latent dimensions (VAE downscales by factor of 8)
@@ -104,6 +116,8 @@ def main():
         width=args.width,
         height=args.height,
         controlnets=controlnets,
+        min_batch_size=args.min_timesteps,
+        max_batch_size=args.max_timesteps,
     )
     load_streamdiffusion_sync(params, engine_dir=args.engine_dir, build_engines_if_missing=True)
     print("TensorRT engine building completed successfully!")
