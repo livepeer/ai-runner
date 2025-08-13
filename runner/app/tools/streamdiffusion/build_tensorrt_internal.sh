@@ -158,39 +158,37 @@ echo
 current_build=0
 
 for model in $MODELS; do
-    for timestep in $TIMESTEPS; do
-        for dim in $DIMENSIONS; do
-            current_build=$((current_build + 1))
+    for dim in $DIMENSIONS; do
+        current_build=$((current_build + 1))
 
-            # Parse dimensions
-            width=${dim%x*}
-            height=${dim#*x}
+        # Parse dimensions
+        width=${dim%x*}
+        height=${dim#*x}
 
-            echo "[$current_build/$total_builds] Building TensorRT engine for:"
-            echo "  Model: $model"
-            echo "  Opt Timesteps: $OPT_TIMESTEPS"
-            echo "  Min Timesteps: $MIN_TIMESTEPS"
-            echo "  Max Timesteps: $MAX_TIMESTEPS"
-            echo "  Dimensions: ${width}x${height}"
+        echo "[$current_build/$total_builds] Building TensorRT engine for:"
+        echo "  Model: $model"
+        echo "  Opt Timesteps: $OPT_TIMESTEPS"
+        echo "  Min Timesteps: $MIN_TIMESTEPS"
+        echo "  Max Timesteps: $MAX_TIMESTEPS"
+        echo "  Dimensions: ${width}x${height}"
 
-            # Build the engine
-            if $CONDA_PYTHON "$BUILD_SCRIPT" \
-                --model-id "$model" \
-                --opt-timesteps "$OPT_TIMESTEPS" \
-                --min-timesteps "$MIN_TIMESTEPS" \
-                --max-timesteps "$MAX_TIMESTEPS" \
-                --width "$width" \
-                --height "$height" \
-                --engine-dir "$OUTPUT_DIR" \
-                --controlnets "$CONTROLNETS"; then
-                echo "  ✓ Success"
-            else
-                echo "  ✗ Failed"
-                echo "Aborting build process due to failure."
-                exit 1
-            fi
-            echo
-        done
+        # Build the engine
+        if $CONDA_PYTHON "$BUILD_SCRIPT" \
+            --model-id "$model" \
+            --opt-timesteps "$OPT_TIMESTEPS" \
+            --min-timesteps "$MIN_TIMESTEPS" \
+            --max-timesteps "$MAX_TIMESTEPS" \
+            --width "$width" \
+            --height "$height" \
+            --engine-dir "$OUTPUT_DIR" \
+            --controlnets "$CONTROLNETS"; then
+            echo "  ✓ Success"
+        else
+            echo "  ✗ Failed"
+            echo "Aborting build process due to failure."
+            exit 1
+        fi
+        echo
     done
 done
 
