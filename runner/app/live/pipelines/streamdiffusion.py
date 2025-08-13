@@ -130,8 +130,8 @@ class StreamDiffusionParams(BaseModel):
     @model_validator(mode="after")
     @staticmethod
     def check_t_index_list(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
-        if not (model.min_batch_size <= len(model.t_index_list) <= model.max_batch_size):
-            raise ValueError(f"t_index_list must have between {model.min_batch_size} and {model.max_batch_size} elements")
+        if not (1 <= len(model.t_index_list) <= 4):
+            raise ValueError("t_index_list must have between 1 and 4 elements")
 
         for i, value in enumerate(model.t_index_list):
             if not (0 <= value <= model.num_inference_steps):
