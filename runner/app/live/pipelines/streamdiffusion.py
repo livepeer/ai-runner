@@ -341,7 +341,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
     return controlnet_configs
 
 
-def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size: int, max_batch_size: int, engine_dir = "engines", build_engines_if_missing = False):
+def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1, max_batch_size = 4, engine_dir = "engines", build_engines_if_missing = False):
     # Prepare ControlNet configuration
     controlnet_config = _prepare_controlnet_configs(params)
 
