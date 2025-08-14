@@ -160,6 +160,7 @@ class StreamDiffusion(Pipeline):
         super().__init__()
         self.pipe: Optional[StreamDiffusionWrapper] = None
         self.params: Optional[StreamDiffusionParams] = None
+        self.applied_controlnets: Optional[List[ControlNetConfig]] = None
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
@@ -227,6 +228,7 @@ class StreamDiffusion(Pipeline):
                 self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
 
             self.params = new_params
+            self.applied_controlnets = new_params.controlnets
             self.first_frame = True
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
@@ -251,14 +253,12 @@ class StreamDiffusion(Pipeline):
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
             elif key == 'controlnets':
-                patched_controlnets = _compute_controlnet_patch(self.params, new_params)
+                patched_controlnets = _compute_controlnet_patch(
+                    self.applied_controlnets, new_params.controlnets
+                )
                 if patched_controlnets is None:
                     logging.info("Non-updatable parameter changed: controlnets")
                     return False
-
-                new_params = new_params.model_copy(
-                    update={"controlnets": patched_controlnets}
-                )
                 # do not add controlnets to update_kwargs
                 continue
 
@@ -277,31 +277,36 @@ class StreamDiffusion(Pipeline):
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
         if patched_controlnets:
+            applied_controlnets = self.applied_controlnets or []
             for i, patched in enumerate(patched_controlnets):
-                old_scale = self.params.controlnets[i].conditioning_scale  # type: ignore
+                old_scale = applied_controlnets[i].conditioning_scale
                 if patched.conditioning_scale != old_scale:
                     self.pipe.update_controlnet_scale(i, patched.conditioning_scale)
 
         self.params = new_params
+        self.applied_controlnets = patched_controlnets
         self.first_frame = True
         return True
 
     async def stop(self):
         async with self._pipeline_lock:
             self.pipe = None
+            self.params = None
+            self.applied_controlnets = None
             self.frame_queue = asyncio.Queue()
 
 
 def _compute_controlnet_patch(
-    curr_params: StreamDiffusionParams | None, new_params: StreamDiffusionParams | None
+    curr: Optional[List[ControlNetConfig]],
+    new: Optional[List[ControlNetConfig]],
 ) -> Optional[List[ControlNetConfig]]:
     """
-    Reconcile a controlnet update as a patch to the currently loaded list. Returns None if the new controlnets cannot be
+    Reconcile a controlnet update as a patch to the currently applied list. Returns None if the new controlnets cannot be
     patched without a full reload. This is only possible if there are no new controlnets or config changes compared to
-    the currently loaded list. Returns a list of patched controlnets if the update can be applied dynamically.
+    the currently applied list. Returns a list of patched controlnets if the update can be applied dynamically.
     """
-    curr = curr_params.controlnets if curr_params and curr_params.controlnets else []
-    new = new_params.controlnets if new_params and new_params.controlnets else []
+    curr = curr or []
+    new = new or []
 
     index_by_model: Dict[str, int] = {cn.model_id: i for i, cn in enumerate(curr)}
 
