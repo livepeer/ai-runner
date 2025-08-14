@@ -295,32 +295,37 @@ def _compute_controlnet_patch(
     curr = curr_params.controlnets if curr_params and curr_params.controlnets else []
     new = new_params.controlnets if new_params and new_params.controlnets else []
 
+    index_by_model: Dict[str, int] = {cn.model_id: i for i, cn in enumerate(curr)}
+
     # Start with 0 scales for every current controlnet and apply scales of the new params below
     patched_list = [
         cn.model_copy(deep=True, update={"conditioning_scale": 0.0}) for cn in curr
     ]
-    index_by_model: Dict[str, int] = {
-        cn.model_id: i for i, cn in enumerate(patched_list) if cn.enabled
-    }
-
     for new_cn in new:
-        idx = index_by_model.get(new_cn.model_id)
-        if idx is None:
-            logging.info(
-                f"Controlnet config changed. Adding new controlnet model: '{new_cn.model_id}'"
-            )
-            return None
         if not new_cn.enabled or new_cn.conditioning_scale == 0:
             # We can ignore disabled controlnets here and keep them out of the patched list (or with scale 0)
             continue
 
+        idx = index_by_model.get(new_cn.model_id)
+        if idx is None:
+            logging.info(
+                f"Controlnet config changed, adding new controlnet. model_id={new_cn.model_id}"
+            )
+            return None
+
         curr_cn = curr[idx]
+        if not curr_cn.enabled:
+            logging.info(
+                f"Controlnet config changed, enabling controlnet. model_id={new_cn.model_id}"
+            )
+            return None
+
         patched_cn = curr_cn.model_copy(
-            update={"conditioning_scale": new_cn.conditioning_scale, "enabled": True}
+            update={"conditioning_scale": new_cn.conditioning_scale}
         )
         if patched_cn != new_cn:
             logging.info(
-                f"Controlnet config changed. model_id={new_cn.model_id} previous={curr[idx]} new={new_cn}"
+                f"Controlnet config changed, params updated. model_id={new_cn.model_id} previous={curr_cn} new={new_cn}"
             )
             return None
 
