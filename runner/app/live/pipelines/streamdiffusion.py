@@ -233,6 +233,7 @@ class StreamDiffusion(Pipeline):
         }
 
         update_kwargs = {}
+        patched_controlnets = None
         curr_params = self.params.model_dump() if self.params else {}
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
@@ -242,15 +243,14 @@ class StreamDiffusion(Pipeline):
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
             elif key == 'controlnets':
-                updatable, patched_controlnets = _is_controlnet_change_updatable(
-                    self.params, new_params
-                )
-                if not updatable:
-                    logging.info(f"Non-updatable parameter changed: controlnets")
+                patched_controlnets = _compute_controlnet_patch(self.params, new_params)
+                if patched_controlnets is None:
+                    logging.info("Non-updatable parameter changed: controlnets")
                     return False
-                # ensure params persist canonical order and flags
-                if patched_controlnets is not None:
-                    new_params.controlnets = patched_controlnets
+
+                new_params = new_params.model_copy(
+                    update={"controlnets": patched_controlnets}
+                )
                 # do not add controlnets to update_kwargs
                 continue
 
@@ -262,23 +262,17 @@ class StreamDiffusion(Pipeline):
             else:
                 update_kwargs[key] = new_value
 
-        logging.info(f"Updating parameters dynamically update_kwargs={update_kwargs}")
+        logging.info(
+            f"Updating parameters dynamically update_kwargs={update_kwargs} patched_controlnets={patched_controlnets}"
+        )
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
-        # Apply controlnet scale diffs based on patched list vs current canonical
-        if (
-            new_params.controlnets is not None
-            and self.params is not None
-            and self.params.controlnets is not None
-        ):
-            for i in range(
-                min(len(self.params.controlnets), len(new_params.controlnets))
-            ):
-                old_scale = self.params.controlnets[i].conditioning_scale
-                new_scale = new_params.controlnets[i].conditioning_scale
-                if new_scale != old_scale:
-                    self.pipe.update_controlnet_scale(i, new_scale)
+        if patched_controlnets:
+            for i, patched in enumerate(patched_controlnets):
+                old_scale = self.params.controlnets[i].conditioning_scale  # type: ignore
+                if patched.conditioning_scale != old_scale:
+                    self.pipe.update_controlnet_scale(i, patched.conditioning_scale)
 
         self.params = new_params
         self.first_frame = True
@@ -290,91 +284,49 @@ class StreamDiffusion(Pipeline):
             self.frame_queue = asyncio.Queue()
 
 
-def _is_controlnet_change_updatable(
+def _compute_controlnet_patch(
     curr_params: StreamDiffusionParams | None, new_params: StreamDiffusionParams | None
-) -> Tuple[bool, Optional[List[ControlNetConfig]]]:
+) -> Optional[List[ControlNetConfig]]:
     """
-    Reconcile controlnets using the currently loaded list as canonical.
-
-    Rules:
-    - Additions (new model_id not in canonical) -> not updatable (requires reload)
-    - Structural changes (preprocessor, preprocessor_params, control guidance) -> not updatable
-    - Removals or reorderings -> updatable by setting scale to 0 in canonical positions
-    - enabled should never be False; treat enabled=False as enabled=True with scale=0
-    - If new list is empty/None, disable all by setting all scales to 0
+    Reconcile a controlnet update as a patch to the currently loaded list. Returns None if the new controlnets cannot be
+    patched without a full reload. This is only possible if there are no new controlnets or config changes compared to
+    the currently loaded list. Returns a list of patched controlnets if the update can be applied dynamically.
     """
-    canonical: List[ControlNetConfig] = (
-        curr_params.controlnets if curr_params and curr_params.controlnets else []
-    )
-    new_list: List[ControlNetConfig] = (
-        new_params.controlnets if new_params and new_params.controlnets else []
-    )
+    curr = curr_params.controlnets if curr_params and curr_params.controlnets else []
+    new = new_params.controlnets if new_params and new_params.controlnets else []
 
-    # Nothing loaded yet; cannot dynamically add controlnets
-    if not canonical:
-        if not new_list:
-            return True, []
-        logging.info(
-            "No canonical controlnets are loaded; addition requested -> reload needed"
-        )
-        return False, None
+    # Start with 0 scales for every current controlnet and apply scales of the new params below
+    patched_list = [
+        cn.model_copy(deep=True, update={"conditioning_scale": 0.0}) for cn in curr
+    ]
+    index_by_model: Dict[str, int] = {
+        cn.model_id: i for i, cn in enumerate(patched_list) if cn.enabled
+    }
 
-    # Map model_id -> index in canonical order
-    index_by_model: Dict[str, int] = {cn.model_id: i for i, cn in enumerate(canonical)}
-
-    # Start with current scales
-    desired_scales: List[float] = [cn.conditioning_scale for cn in canonical]
-    seen_models: set[str] = set()
-
-    if not new_list:
-        # Disable all
-        desired_scales = [0.0 for _ in canonical]
-    else:
-        for new_cn in new_list:
-            idx = index_by_model.get(new_cn.model_id)
-            if idx is None:
-                logging.info(
-                    f"Attempted to add new controlnet model '{new_cn.model_id}' not present in the loaded pipeline"
-                )
-                return False, None
-
-            curr_cn = canonical[idx]
-
-            # Detect structural changes (anything except conditioning_scale)
-            if (
-                curr_cn.preprocessor != new_cn.preprocessor
-                or (curr_cn.preprocessor_params or {})
-                != (new_cn.preprocessor_params or {})
-                or curr_cn.control_guidance_start != new_cn.control_guidance_start
-                or curr_cn.control_guidance_end != new_cn.control_guidance_end
-            ):
-                logging.info(
-                    f"Controlnet '{new_cn.model_id}' structural params changed; requires reload"
-                )
-                return False, None
-
-            # enabled=False is treated as enabled=True with scale=0
-            desired_scale = (
-                0.0
-                if (new_cn.enabled is False or new_cn.conditioning_scale == 0.0)
-                else new_cn.conditioning_scale
+    for new_cn in new:
+        idx = index_by_model.get(new_cn.model_id)
+        if idx is None:
+            logging.info(
+                f"Controlnet config changed. Adding new controlnet model: '{new_cn.model_id}'"
             )
-            desired_scales[idx] = desired_scale
-            seen_models.add(new_cn.model_id)
+            return None
+        if not new_cn.enabled or new_cn.conditioning_scale == 0:
+            # We can ignore disabled controlnets here and keep them out of the patched list (or with scale 0)
+            continue
 
-        # Any canonical controlnet not present in the new list -> desired scale 0
-        for i, cn in enumerate(canonical):
-            if cn.model_id not in seen_models:
-                desired_scales[i] = 0.0
-
-    # Compute patched list (force enabled=True)
-    patched_list: List[ControlNetConfig] = []
-    for i, cn in enumerate(canonical):
-        new_scale = desired_scales[i]
-        patched_list.append(
-            cn.model_copy(update={"conditioning_scale": new_scale, "enabled": True})
+        curr_cn = curr[idx]
+        patched_cn = curr_cn.model_copy(
+            update={"conditioning_scale": new_cn.conditioning_scale, "enabled": True}
         )
-    return True, patched_list
+        if patched_cn != new_cn:
+            logging.info(
+                f"Controlnet config changed. model_id={new_cn.model_id} previous={curr[idx]} new={new_cn}"
+            )
+            return None
+
+        patched_list[idx] = patched_cn
+
+    return patched_list
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
