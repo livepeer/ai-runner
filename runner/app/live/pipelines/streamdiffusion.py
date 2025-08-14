@@ -242,6 +242,8 @@ class StreamDiffusion(Pipeline):
             elif key not in updatable_params:
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
+            elif key == 't_index_list' and len(new_value) != len(curr_value or []):
+                self.first_frame = True
             elif key == 'controlnets':
                 updatable, controlnet_scale_changes = _is_controlnet_change_updatable(self.params, new_params)
                 if not updatable:
