@@ -144,6 +144,14 @@ class StreamDiffusionParams(BaseModel):
             if curr < prev:
                 raise ValueError(f"t_index_list must be in non-decreasing order. {curr} < {prev}")
 
+        # Check for duplicate controlnet model_ids
+        if model.controlnets:
+            seen_model_ids = set()
+            for cn in model.controlnets:
+                if cn.model_id in seen_model_ids:
+                    raise ValueError(f"Duplicate controlnet model_id: {cn.model_id}")
+                seen_model_ids.add(cn.model_id)
+
         return model
 
 
