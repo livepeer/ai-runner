@@ -11,6 +11,9 @@ from streamdiffusion.controlnet.preprocessors import list_preprocessors
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
+import time
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 AVAILABLE_PREPROCESSORS = list_preprocessors()
 
@@ -164,6 +167,9 @@ class StreamDiffusion(Pipeline):
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
+        self.is_reloading: bool = False
+        self.loading_start_time: float = 0.0
+        self.last_output_tensor: Optional[torch.Tensor] = None  # (1, H, W, C) float32 [0,1] CPU
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
@@ -171,8 +177,19 @@ class StreamDiffusion(Pipeline):
         logging.info("Pipeline initialization complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        # Fast path: if reloading or pipeline unavailable, render a loading overlay using the last output frame
+        if self.is_reloading or self.pipe is None:
+            out_tensor = await asyncio.to_thread(self._render_loading_overlay, frame)
+            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+            await self.frame_queue.put(output)
+            return
+
         async with self._pipeline_lock:
-            out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
+            # Re-check under the lock in case state changed
+            if self.is_reloading or self.pipe is None:
+                out_tensor = await asyncio.to_thread(self._render_loading_overlay, frame)
+            else:
+                out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
             await self.frame_queue.put(output)
 
@@ -199,7 +216,83 @@ class StreamDiffusion(Pipeline):
             out_tensor = out_tensor[0]
 
         # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
-        return out_tensor.permute(0, 2, 3, 1)
+        out_bhwc = out_tensor.permute(0, 2, 3, 1)
+        # Cache last output on CPU for use during reload overlays
+        try:
+            with torch.no_grad():
+                self.last_output_tensor = out_bhwc.detach().cpu().contiguous()
+        except Exception:
+            # Best-effort cache; ignore failures
+            pass
+        return out_bhwc
+
+    def _render_loading_overlay(self, frame: VideoFrame) -> torch.Tensor:
+        """Render a loading overlay on top of the last output frame without exposing the incoming pixels."""
+        # Base image: last output; if unavailable, neutral gray
+        base = self.last_output_tensor
+        if base is not None:
+            try:
+                base_np = (base.clamp(0, 1) * 255).byte().cpu().numpy()[0]
+            except Exception:
+                base_np = None
+        else:
+            base_np = None
+
+        _, h, w, c = frame.tensor.shape
+        if base_np is None or base_np.shape[0] != h or base_np.shape[1] != w:
+            base_np = np.full((h, w, 3), 128, dtype=np.uint8)
+        elif base_np.shape[-1] != 3:
+            base_np = base_np[..., :3]
+
+        img = Image.fromarray(base_np, mode="RGB")
+
+        # Desaturate and dim
+        gray = img.convert("L").convert("RGB")
+        img = gray
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 90))  # semi-transparent black
+        img = Image.alpha_composite(img, overlay)
+
+        # Draw spinner and text
+        draw = ImageDraw.Draw(img)
+        cx, cy = w // 2, h // 2
+        radius = max(12, int(min(w, h) * 0.08))
+        thickness = max(4, int(min(w, h) * 0.01))
+        bbox = (cx - radius, cy - radius, cx + radius, cy + radius)
+        elapsed = (time.time() - self.loading_start_time) if self.loading_start_time else 0.0
+        start_angle = (elapsed * 360.0) % 360.0
+        # Draw a 270-degree arc as spinner
+        spinner_color = (255, 255, 255, 220)
+        try:
+            draw.arc(bbox, start=start_angle, end=start_angle + 270, fill=spinner_color, width=thickness)
+        except Exception:
+            # Fallback: simple circle
+            draw.ellipse(bbox, outline=spinner_color, width=thickness)
+
+        # Text below spinner
+        try:
+            font = ImageFont.load_default()
+        except Exception:
+            font = None
+        text = "Reloading pipeline..."
+        try:
+            text_bbox = draw.textbbox((0, 0), text, font=font)
+            text_w = text_bbox[2] - text_bbox[0]
+            text_h = text_bbox[3] - text_bbox[1]
+        except Exception:
+            text_w, text_h = (len(text) * 6, 11)
+        text_x = int(cx - text_w / 2)
+        text_y = int(cy + radius + max(10, thickness))
+        shadow_offset = 2
+        draw.text((text_x + shadow_offset, text_y + shadow_offset), text, font=font, fill=(0, 0, 0, 200))
+        draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255, 255))
+
+        # Convert back to torch tensor in (1, H, W, C), float32 in [0,1]
+        img_rgb = img.convert("RGB")
+        out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
+        out_tensor = torch.from_numpy(out_np).unsqueeze(0)
+        return out_tensor
 
     async def get_processed_video_frame(self) -> VideoOutput:
         return await self.frame_queue.get()
@@ -210,6 +303,7 @@ class StreamDiffusion(Pipeline):
             logging.info("No parameters changed")
             return
 
+        # First try a dynamic update while holding the lock
         async with self._pipeline_lock:
             try:
                 if await self._update_params_dynamic(new_params):
@@ -217,19 +311,36 @@ class StreamDiffusion(Pipeline):
             except Exception as e:
                 logging.error(f"Error updating parameters dynamically: {e}")
 
+            # Signal reload and release the lock for heavy work
             logging.info(f"Resetting pipeline for params change")
-
+            self.is_reloading = True
+            self.loading_start_time = time.time()
+            prev_params = self.params
+            # Set pipe to None to avoid accidental usage under lock
             self.pipe = None
-            try:
-                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
-            except Exception:
-                logging.error(f"Error resetting pipeline, reloading with previous params", exc_info=True)
-                new_params = self.params or StreamDiffusionParams()
-                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
 
-            self.params = new_params
-            self.applied_controlnets = new_params.controlnets
+        # Perform heavy reload outside the lock so frames can continue with overlay
+        chosen_params = new_params
+        new_pipe: Optional[StreamDiffusionWrapper] = None
+        try:
+            new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+        except Exception:
+            logging.error(f"Error resetting pipeline, reloading with previous params", exc_info=True)
+            try:
+                fallback_params = prev_params or StreamDiffusionParams()
+                new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, fallback_params)
+                chosen_params = fallback_params
+            except Exception:
+                logging.exception("Failed to reload pipeline with fallback params", stack_info=True)
+                raise
+
+        # Swap in the new pipe and clear reload flag
+        async with self._pipeline_lock:
+            self.pipe = new_pipe
+            self.params = chosen_params
+            self.applied_controlnets = chosen_params.controlnets
             self.first_frame = True
+            self.is_reloading = False
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:
@@ -295,6 +406,9 @@ class StreamDiffusion(Pipeline):
             self.params = None
             self.applied_controlnets = None
             self.frame_queue = asyncio.Queue()
+            self.is_reloading = False
+            self.loading_start_time = 0.0
+            self.last_output_tensor = None
 
 
 def _compute_controlnet_patch(
