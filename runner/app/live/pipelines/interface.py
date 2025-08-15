@@ -1,5 +1,6 @@
 from PIL import Image
 from abc import ABC, abstractmethod
+from typing import Callable, Awaitable
 from trickle import VideoFrame, VideoOutput
 
 class Pipeline(ABC):
@@ -19,20 +20,13 @@ class Pipeline(ABC):
         pass
 
     @abstractmethod
-    async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        """Put a frame into the pipeline.
+    async def put_video_frame(self, frame: VideoFrame, request_id: str, output_cb: Callable[[VideoOutput], Awaitable[None]]):
+        """Put a frame into the pipeline and call output_cb with the result.
 
         Args:
             frame: Input VideoFrame
-        """
-        pass
-
-    @abstractmethod
-    async def get_processed_video_frame(self) -> VideoOutput:
-        """Get a processed frame from the pipeline.
-
-        Returns:
-            Processed VideoFrame
+            request_id: Request identifier
+            output_cb: Callback to invoke with processed VideoOutput
         """
         pass
 

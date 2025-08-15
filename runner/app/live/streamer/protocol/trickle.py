@@ -3,6 +3,7 @@ import logging
 import queue
 import json
 from typing import AsyncGenerator, Optional
+import torch.multiprocessing as mp
 
 from PIL import Image
 
@@ -12,13 +13,13 @@ from .protocol import StreamProtocol
 from .last_value_cache import LastValueCache
 
 class TrickleProtocol(StreamProtocol):
-    def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None, width: Optional[int] = DEFAULT_WIDTH, height: Optional[int] = DEFAULT_HEIGHT):
+    def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None, width: Optional[int] = DEFAULT_WIDTH, height: Optional[int] = DEFAULT_HEIGHT, input_queue: Optional[mp.Queue] = None, output_queue: Optional[mp.Queue] = None):
         self.subscribe_url = subscribe_url
         self.publish_url = publish_url
         self.control_url = control_url
         self.events_url = events_url
-        self.subscribe_queue = queue.Queue[InputFrame]()
-        self.publish_queue = queue.Queue[OutputFrame]()
+        self.in_q = input_queue
+        self.out_q = output_queue
         self.control_subscriber = None
         self.events_publisher = None
         self.subscribe_task = None
@@ -27,14 +28,12 @@ class TrickleProtocol(StreamProtocol):
         self.height = height
 
     async def start(self):
-        self.subscribe_queue = queue.Queue[InputFrame]()
-        self.publish_queue = queue.Queue[OutputFrame]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
-            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, self.width, self.height)
+            media.run_subscribe(self.subscribe_url, self.in_q.put if self.in_q else lambda x: None, metadata_cache.put, self.emit_monitoring_event, self.width, self.height)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event)
+            media.run_publish(self.publish_url, self.out_q.get if self.out_q else lambda: None, metadata_cache.get, self.emit_monitoring_event)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)
@@ -46,8 +45,10 @@ class TrickleProtocol(StreamProtocol):
             return # already stopped
 
         # send sentinel None values to stop the trickle tasks gracefully
-        self.subscribe_queue.put(None)
-        self.publish_queue.put(None)
+        if self.in_q:
+            self.in_q.put(None)
+        if self.out_q:
+            self.out_q.put(None)
 
         if self.control_subscriber:
             await self.control_subscriber.close()
@@ -68,30 +69,33 @@ class TrickleProtocol(StreamProtocol):
         self.publish_task = None
 
     async def ingress_loop(self, done: asyncio.Event) -> AsyncGenerator[InputFrame, None]:
-        subscribe_queue = self.subscribe_queue
-        publish_queue = self.publish_queue
+        if not self.in_q:
+            return
+            
         def dequeue_frame():
-            frame = subscribe_queue.get()
+            frame = self.in_q.get()
             if not frame:
                 return None
-
             return frame
 
         while not done.is_set():
             image = await asyncio.to_thread(dequeue_frame)
             if not image:
                 break
-            # TEMP: Put audio immediately into the publish queue
+            # TEMP: Put audio immediately into the output queue
             # TODO: Remove once there is ComfyUI audio support
             if isinstance(image, AudioFrame):
-                publish_queue.put(AudioOutput([image]))
+                if self.out_q:
+                    self.out_q.put(AudioOutput([image]))
                 continue
             yield image
 
     async def egress_loop(self, output_frames: AsyncGenerator[OutputFrame, None]):
-        publish_queue = self.publish_queue
+        if not self.out_q:
+            return
+            
         def enqueue_bytes(frame: OutputFrame):
-            publish_queue.put(frame)
+            self.out_q.put(frame)
 
         async for frame in output_frames:
             await asyncio.to_thread(enqueue_bytes, frame)

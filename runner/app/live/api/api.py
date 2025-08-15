@@ -5,6 +5,7 @@ import os
 import tempfile
 import time
 from typing import Optional, cast
+import torch.multiprocessing as mp
 
 from aiohttp import web
 from pydantic import BaseModel, Field
@@ -139,6 +140,8 @@ async def handle_start_stream(request: web.Request):
         else:
             logging.info(f"Using dimensions from params: {width}x{height}")
 
+        in_q = mp.Queue(maxsize=1)
+        out_q = mp.Queue(maxsize=1)
         protocol = TrickleProtocol(
             params.subscribe_url,
             params.publish_url,
@@ -146,7 +149,10 @@ async def handle_start_stream(request: web.Request):
             params.events_url,
             width,
             height,
+            in_q,
+            out_q,
         )
+        process = ProcessGuardian(process.pipeline, params.params or {}, in_q, out_q)
         streamer = PipelineStreamer(
             protocol,
             process,

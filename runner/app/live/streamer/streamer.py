@@ -157,41 +157,12 @@ class PipelineStreamer(StreamerCallbacks):
         logging.info("Ingress loop ended")
 
     async def run_egress_loop(self):
+        # The protocol now directly handles the output queue, so this is simplified
         request_id = self.request_id
         async def gen_output_frames() -> AsyncGenerator[OutputFrame, None]:
-            while not self.stop_event.is_set():
-                output = await self.process.recv_output()
-                if not output:
-                    continue
-
-                # TODO accounting for audio output
-                if isinstance(output, AudioOutput):
-                    logging.debug(
-                        f"Output audio received outputRequestId={output.request_id} numFrames={len(output.frames)}"
-                    )
-                    if output.request_id != request_id:
-                        logging.warning(
-                            f"Output audio request ID mismatch: expected {request_id}, got {output.request_id}, skipping frame"
-                        )
-                        continue
-                    yield output
-                    continue
-
-                if not isinstance(output, VideoOutput):
-                    logging.warning(
-                        f"Unknown output frame type {type(output)}, dropping"
-                    )
-                    continue
-                if output.request_id != request_id:
-                    logging.warning(
-                        f"Output video request ID mismatch: expected {request_id}, got {output.request_id}, dropping frame"
-                    )
-                    continue
-                logging.debug(
-                    f"Output image received outputRequestId={output.request_id} ts={output.timestamp} time_base={output.time_base}"
-                )
-
-                yield output
+            # This is now a no-op since protocol handles output queue directly
+            return
+            yield  # unreachable but keeps the generator signature
 
         await self.protocol.egress_loop(gen_output_frames())
         logging.info("Egress loop ended")

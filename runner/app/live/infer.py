@@ -8,6 +8,7 @@ import os
 import traceback
 import threading
 from typing import List
+import torch.multiprocessing as mp
 
 from streamer import PipelineStreamer, ProcessGuardian
 
@@ -58,21 +59,25 @@ async def main(
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(asyncio_exception_handler)
 
-    process = ProcessGuardian(pipeline, params or {})
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
         width = params.get('width', DEFAULT_WIDTH)
         height = params.get('height', DEFAULT_HEIGHT)
+        in_q = mp.Queue(maxsize=1)
+        out_q = mp.Queue(maxsize=1)
         if stream_protocol == "trickle":
             protocol = TrickleProtocol(
-                subscribe_url, publish_url, control_url, events_url, width, height
+                subscribe_url, publish_url, control_url, events_url, width, height, in_q, out_q
             )
         elif stream_protocol == "zeromq":
             protocol = ZeroMQProtocol(subscribe_url, publish_url)
         else:
             raise ValueError(f"Unsupported protocol: {stream_protocol}")
-        streamer = PipelineStreamer(protocol, process, request_id, stream_id)
+        process = ProcessGuardian(pipeline, params or {}, in_q, out_q)
+        streamer = PipelineStreamer(protocol, process, request_id, manifest_id, stream_id)
+    else:
+        process = ProcessGuardian(pipeline, params or {}, None, None)
 
     api = None
     try:

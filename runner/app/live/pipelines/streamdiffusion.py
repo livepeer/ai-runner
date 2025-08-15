@@ -162,7 +162,6 @@ class StreamDiffusion(Pipeline):
         self.params: Optional[StreamDiffusionParams] = None
         self.applied_controlnets: Optional[List[ControlNetConfig]] = None
         self.first_frame = True
-        self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
 
     async def initialize(self, **params):
@@ -170,11 +169,11 @@ class StreamDiffusion(Pipeline):
         await self.update_params(**params)
         logging.info("Pipeline initialization complete")
 
-    async def put_video_frame(self, frame: VideoFrame, request_id: str):
+    async def put_video_frame(self, frame: VideoFrame, request_id: str, output_cb):
         async with self._pipeline_lock:
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
-            await self.frame_queue.put(output)
+            await output_cb(output)
 
     def process_tensor_sync(self, img_tensor: torch.Tensor):
         if self.pipe is None:
@@ -201,8 +200,6 @@ class StreamDiffusion(Pipeline):
         # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
         return out_tensor.permute(0, 2, 3, 1)
 
-    async def get_processed_video_frame(self) -> VideoOutput:
-        return await self.frame_queue.get()
 
     async def update_params(self, **params):
         new_params = StreamDiffusionParams(**params)
@@ -294,7 +291,6 @@ class StreamDiffusion(Pipeline):
             self.pipe = None
             self.params = None
             self.applied_controlnets = None
-            self.frame_queue = asyncio.Queue()
 
 
 def _compute_controlnet_patch(
