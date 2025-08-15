@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, List, Optional, Any, cast
 
 import torch
-from streamdiffusion import StreamDiffusionWrapper
+from streamdiffusion import StreamDiffusionWrapper, list_preprocessors
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
@@ -252,8 +252,8 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
         t_index_list=params.t_index_list,
-        min_batch_size=min_batch_size,
-        max_batch_size=max_batch_size,
+        # min_batch_size=min_batch_size,
+        # max_batch_size=max_batch_size,
         lora_dict=params.lora_dict,
         mode="img2img",
         output_type="pt",
