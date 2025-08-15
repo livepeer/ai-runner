@@ -265,11 +265,7 @@ class PipelineProcess:
         level = (
             logging.DEBUG if os.environ.get("VERBOSE_LOGGING") == "1" else logging.INFO
         )
-        config_logging(log_level=level)
-        # capture all future log.log(...) calls
-        if hasattr(self, "log_queue") and self.log_queue is not None:
-            handler = logging.QueueHandler(self.log_queue)
-            logging.getLogger().addHandler(handler)
+        config_logging(log_level=level, log_queue=self.log_queue)
 
     def _reset_logging_fields(self, request_id: str, manifest_id: str, stream_id: str):
         config_logging(request_id=request_id, manifest_id=manifest_id, stream_id=stream_id)

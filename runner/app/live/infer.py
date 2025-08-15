@@ -10,7 +10,8 @@ import threading
 from typing import List
 import torch.multiprocessing as mp
 
-from streamer import PipelineStreamer, ProcessGuardian
+from streamer import PipelineStreamer
+from streamer.process_guardian import ProcessGuardian
 
 # loads neighbouring modules with absolute paths
 infer_root = os.path.abspath(os.path.dirname(__file__))
