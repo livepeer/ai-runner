@@ -15,10 +15,15 @@ class StreamDiffusion(Pipeline):
     def __init__(self):
         super().__init__()
         self.pipe: Optional[StreamDiffusionWrapper] = None
+
         self.params: Optional[StreamDiffusionParams] = None
         self.applied_controlnets: Optional[List[ControlNetConfig]] = None
         self.first_frame = True
-        self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
+
+        self.last_input_tensor: Optional[torch.Tensor] = None
+        self.last_controlnet_config: Optional[List[Dict[str, Any]]] = None
+
+        self._frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
 
     async def initialize(self, **params):
@@ -30,7 +35,7 @@ class StreamDiffusion(Pipeline):
         async with self._pipeline_lock:
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
-            await self.frame_queue.put(output)
+            await self._frame_queue.put(output)
 
     def process_tensor_sync(self, img_tensor: torch.Tensor):
         if self.pipe is None:
@@ -42,8 +47,11 @@ class StreamDiffusion(Pipeline):
         img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
-        # Noop if ControlNets are not enabled
-        self.pipe.update_control_image_efficient(img_tensor)
+        self.last_input_tensor = img_tensor
+        if self.last_controlnet_config is not None:
+            for cn_config in self.last_controlnet_config:
+                cn_config['control_image'] = img_tensor
+            self.pipe.update_stream_params(controlnet_config=self.last_controlnet_config)
 
         if self.first_frame:
             self.first_frame = False
@@ -58,7 +66,7 @@ class StreamDiffusion(Pipeline):
         return out_tensor.permute(0, 2, 3, 1)
 
     async def get_processed_video_frame(self) -> VideoOutput:
-        return await self.frame_queue.get()
+        return await self._frame_queue.get()
 
     async def update_params(self, **params):
         new_params = StreamDiffusionParams(**params)
@@ -77,11 +85,11 @@ class StreamDiffusion(Pipeline):
 
             self.pipe = None
             try:
-                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+                self.pipe, self.last_controlnet_config = await asyncio.to_thread(load_streamdiffusion_sync, new_params, self.last_input_tensor)
             except Exception:
                 logging.error(f"Error resetting pipeline, reloading with previous params", exc_info=True)
                 new_params = self.params or StreamDiffusionParams()
-                self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+                self.pipe, self.last_controlnet_config = await asyncio.to_thread(load_streamdiffusion_sync, new_params, self.last_input_tensor)
 
             self.params = new_params
             self.applied_controlnets = new_params.controlnets
@@ -140,6 +148,7 @@ class StreamDiffusion(Pipeline):
                     self.pipe.update_controlnet_scale(i, patched.conditioning_scale)
             # Only update the applied_controlnets if we actually patched something
             self.applied_controlnets = patched_controlnets
+            self.last_controlnet_config = _prepare_controlnet_configs(patched_controlnets, self.last_input_tensor)
 
         self.params = new_params
         self.first_frame = True
@@ -150,7 +159,7 @@ class StreamDiffusion(Pipeline):
             self.pipe = None
             self.params = None
             self.applied_controlnets = None
-            self.frame_queue = asyncio.Queue()
+            self._frame_queue = asyncio.Queue()
 
 
 def _compute_controlnet_patch(
@@ -203,13 +212,13 @@ def _compute_controlnet_patch(
 
     return patched_list
 
-def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
+def _prepare_controlnet_configs(controlnets: Optional[List[ControlNetConfig]], control_image: Optional[torch.Tensor] = None) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
-    if not params.controlnets:
+    if not controlnets:
         return None
 
     controlnet_configs = []
-    for cn_config in params.controlnets:
+    for cn_config in controlnets:
         if not cn_config.enabled:
             continue
 
@@ -240,14 +249,23 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             'control_guidance_start': cn_config.control_guidance_start,
             'control_guidance_end': cn_config.control_guidance_end,
         }
+        if control_image is not None:
+            controlnet_config['control_image'] = control_image
         controlnet_configs.append(controlnet_config)
 
     return controlnet_configs
 
 
-def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1, max_batch_size = 4, engine_dir = "engines", build_engines_if_missing = False):
+def load_streamdiffusion_sync(
+    params: StreamDiffusionParams,
+    control_image: Optional[torch.Tensor] = None,
+    min_batch_size = 1,
+    max_batch_size = 4,
+    engine_dir = "engines",
+    build_engines_if_missing = False,
+) -> Tuple[StreamDiffusionWrapper, Optional[List[Dict[str, Any]]]]:
     # Prepare ControlNet configuration
-    controlnet_config = _prepare_controlnet_configs(params)
+    controlnet_config = _prepare_controlnet_configs(params.controlnets, control_image)
 
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
@@ -288,4 +306,4 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         seed_list=[(params.seed, 1.0)] if isinstance(params.seed, int) else params.seed,
         seed_interpolation_method=params.seed_interpolation_method,
     )
-    return pipe
+    return pipe, controlnet_config
