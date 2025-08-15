@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import queue
 import sys
 import time
-from typing import Any
+from typing import Any, Optional
 import torch
 
 from pipelines import load_pipeline, Pipeline
