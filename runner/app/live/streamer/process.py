@@ -31,6 +31,9 @@ class PipelineProcess:
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.param_update_queue = self.ctx.Queue()
+        # restore error & log channels
+        self.error_queue = self.ctx.Queue()
+        self.log_queue = self.ctx.Queue()
 
         self.pipeline_initialized = self.ctx.Event()
         self.done = self.ctx.Event()
@@ -66,7 +69,8 @@ class PipelineProcess:
 
         logging.info("Pipeline process terminated, closing queues")
 
-        for q in [self.param_update_queue]:
+        # close all three queues
+        for q in (self.param_update_queue, self.error_queue, self.log_queue):
             q.cancel_join_thread()
             q.close()
 
@@ -84,7 +88,9 @@ class PipelineProcess:
     def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
         # we cannot clear the input_queue as we send CUDA tensors on it, which can't be received by the same process that sent it.
         # So we clear only the other queues, and rely on the request_id checks to avoid using frames from previous sessions.
-        clear_queue(self.param_update_queue)
+        # clear params, errors and logs on a fresh stream
+        for q in (self.param_update_queue, self.error_queue, self.log_queue):
+            clear_queue(q)
         self.param_update_queue.put({"request_id": request_id, "manifest_id": manifest_id, "stream_id": stream_id})
 
     # TODO: Once audio is implemented, combined send_input with input_loop
@@ -187,7 +193,10 @@ class PipelineProcess:
         try:
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         except Exception as e:
-            logging.error(f"Error in pipeline loops: {e}")
+            # capture fatal loop errors
+            self._try_queue_put(self.error_queue, e)
+            # also record a human‐readable log
+            self._try_queue_put(self.log_queue, f"Error in pipeline loops: {e}")
         finally:
             for task in tasks:
                 task.cancel()
@@ -257,6 +266,10 @@ class PipelineProcess:
             logging.DEBUG if os.environ.get("VERBOSE_LOGGING") == "1" else logging.INFO
         )
         config_logging(log_level=level)
+        # capture all future log.log(...) calls
+        if hasattr(self, "log_queue") and self.log_queue is not None:
+            handler = logging.QueueHandler(self.log_queue)
+            logging.getLogger().addHandler(handler)
 
     def _reset_logging_fields(self, request_id: str, manifest_id: str, stream_id: str):
         config_logging(request_id=request_id, manifest_id=manifest_id, stream_id=stream_id)
@@ -267,6 +280,21 @@ class PipelineProcess:
             _queue.put_nowait(item)
         except queue.Full:
             pass
+
+    def get_last_error(self) -> Optional[Any]:
+        try:
+            return self.error_queue.get_nowait()
+        except queue.Empty:
+            return None
+
+    def get_recent_logs(self) -> list[Any]:
+        logs = []
+        while True:
+            try:
+                logs.append(self.log_queue.get_nowait())
+            except queue.Empty:
+                break
+        return logs
 
 
 # Function to clear the queue
