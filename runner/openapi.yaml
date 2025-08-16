@@ -1158,6 +1158,12 @@ components:
           description: URL for publishing events via Trickle protocol for pipeline
             status and logs.
           default: ''
+        data_url:
+          type: string
+          title: Data Url
+          description: URL for publishing data via Trickle protocol for pipeline status
+            and logs.
+          default: ''
         model_id:
           type: string
           title: Model Id
