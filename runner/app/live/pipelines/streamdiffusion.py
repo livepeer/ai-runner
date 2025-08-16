@@ -177,21 +177,21 @@ class StreamDiffusion(Pipeline):
         logging.info("Pipeline initialization complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        # Fast path: if reloading or pipeline unavailable, render a loading overlay using the last output frame
+        async with self._pipeline_lock:
+            if await self._try_render_loading_overlay(frame, request_id):
+                return
+            out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
+            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+            await self.frame_queue.put(output)
+
+    async def _try_render_loading_overlay(self, frame: VideoFrame, request_id: str) -> bool:
+        """Render and enqueue a loading overlay if pipeline is unavailable or reloading. Returns True if it did."""
         if self.is_reloading or self.pipe is None:
             out_tensor = await asyncio.to_thread(self._render_loading_overlay, frame)
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
             await self.frame_queue.put(output)
-            return
-
-        async with self._pipeline_lock:
-            # Re-check under the lock in case state changed
-            if self.is_reloading or self.pipe is None:
-                out_tensor = await asyncio.to_thread(self._render_loading_overlay, frame)
-            else:
-                out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
-            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
-            await self.frame_queue.put(output)
+            return True
+        return False
 
     def process_tensor_sync(self, img_tensor: torch.Tensor):
         if self.pipe is None:
