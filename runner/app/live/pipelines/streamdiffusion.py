@@ -78,6 +78,9 @@ class StreamDiffusionParams(BaseModel):
     similar_image_filter_threshold: float = 0.98
     similar_image_filter_max_skip_frame: int = 10
 
+    # UI behavior
+    show_reloading_frame: bool = True
+
     # ControlNet settings
     controlnets: Optional[List[ControlNetConfig]] = [
         ControlNetConfig(
@@ -168,8 +171,9 @@ class StreamDiffusion(Pipeline):
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
         self.is_reloading: bool = False
-        self.loading_start_time: float = 0.0
         self.last_output_tensor: Optional[torch.Tensor] = None  # (1, H, W, C) float32 [0,1] CPU
+        self.last_output_wallclock: float = 0.0
+        self.show_reloading_frame: bool = True
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
@@ -185,11 +189,13 @@ class StreamDiffusion(Pipeline):
             await self.frame_queue.put(output)
 
     async def _try_render_loading_overlay(self, frame: VideoFrame, request_id: str) -> bool:
-        """Render and enqueue a loading overlay if pipeline is unavailable or reloading. Returns True if it did."""
+        """If reloading/unavailable, either enqueue overlay (if enabled) or freeze (drop) this frame. Returns True if handled."""
         if self.is_reloading or self.pipe is None:
-            out_tensor = await asyncio.to_thread(self._render_loading_overlay, frame)
-            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
-            await self.frame_queue.put(output)
+            if self.show_reloading_frame:
+                out_tensor = await asyncio.to_thread(self._render_loading_overlay, frame)
+                output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+                await self.frame_queue.put(output)
+            # else: freeze by not enqueuing any output for this input frame
             return True
         return False
 
@@ -221,6 +227,7 @@ class StreamDiffusion(Pipeline):
         try:
             with torch.no_grad():
                 self.last_output_tensor = out_bhwc.detach().cpu().contiguous()
+                self.last_output_wallclock = time.time()
         except Exception:
             # Best-effort cache; ignore failures
             pass
@@ -230,7 +237,8 @@ class StreamDiffusion(Pipeline):
         """Render a loading overlay on top of the last output frame without exposing the incoming pixels."""
         # Base image: last output; if unavailable, neutral gray
         base = self.last_output_tensor
-        if base is not None:
+        too_old = (time.time() - self.last_output_wallclock) > 5.0 if self.last_output_wallclock else True
+        if base is not None and not too_old:
             try:
                 base_np = (base.clamp(0, 1) * 255).byte().cpu().numpy()[0]
             except Exception:
@@ -260,8 +268,8 @@ class StreamDiffusion(Pipeline):
         radius = max(12, int(min(w, h) * 0.08))
         thickness = max(4, int(min(w, h) * 0.01))
         bbox = (cx - radius, cy - radius, cx + radius, cy + radius)
-        elapsed = (time.time() - self.loading_start_time) if self.loading_start_time else 0.0
-        start_angle = (elapsed * 360.0) % 360.0
+        # Spinner angle derives deterministically from current time (no stored timer)
+        start_angle = (time.time() * 180.0) % 360.0
         # Draw a 270-degree arc as spinner
         spinner_color = (255, 255, 255, 220)
         try:
@@ -314,7 +322,8 @@ class StreamDiffusion(Pipeline):
             # Signal reload and release the lock for heavy work
             logging.info(f"Resetting pipeline for params change")
             self.is_reloading = True
-            self.loading_start_time = time.time()
+            # reflect user preference immediately for overlay during reload
+            self.show_reloading_frame = new_params.show_reloading_frame
             prev_params = self.params
             # Set pipe to None to avoid accidental usage under lock
             self.pipe = None
@@ -341,6 +350,7 @@ class StreamDiffusion(Pipeline):
             self.applied_controlnets = chosen_params.controlnets
             self.first_frame = True
             self.is_reloading = False
+            self.show_reloading_frame = chosen_params.show_reloading_frame
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:
@@ -351,19 +361,22 @@ class StreamDiffusion(Pipeline):
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
             'controlnets', # handled separately below
+            'show_reloading_frame',
         }
 
         update_kwargs = {}
         patched_controlnets = None
         curr_params = self.params.model_dump() if self.params else {}
+        changed_keys = set()
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
             if new_value == curr_value:
                 continue
-            elif key not in updatable_params:
+            changed_keys.add(key)
+            if key not in updatable_params:
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
-            elif key == 'controlnets':
+            if key == 'controlnets':
                 patched_controlnets = _compute_controlnet_patch(
                     self.applied_controlnets, new_params.controlnets
                 )
@@ -371,6 +384,9 @@ class StreamDiffusion(Pipeline):
                     logging.info("Non-updatable parameter changed: controlnets")
                     return False
                 # do not add controlnets to update_kwargs
+                continue
+            if key == 'show_reloading_frame':
+                # Will apply below; do not add to update_kwargs
                 continue
 
             # at this point, we know it's an updatable parameter that changed
@@ -380,6 +396,12 @@ class StreamDiffusion(Pipeline):
                 update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
             else:
                 update_kwargs[key] = new_value
+
+        # Special-case: only UI flag changed -> do not reset first_frame
+        if changed_keys == {'show_reloading_frame'}:
+            self.show_reloading_frame = new_params.show_reloading_frame
+            self.params = new_params
+            return True
 
         logging.info(
             f"Updating parameters dynamically update_kwargs={update_kwargs} patched_controlnets={patched_controlnets}"
@@ -396,6 +418,8 @@ class StreamDiffusion(Pipeline):
             # Only update the applied_controlnets if we actually patched something
             self.applied_controlnets = patched_controlnets
 
+        # Apply UI flag change along with other dynamic changes
+        self.show_reloading_frame = new_params.show_reloading_frame
         self.params = new_params
         self.first_frame = True
         return True
@@ -407,8 +431,9 @@ class StreamDiffusion(Pipeline):
             self.applied_controlnets = None
             self.frame_queue = asyncio.Queue()
             self.is_reloading = False
-            self.loading_start_time = 0.0
             self.last_output_tensor = None
+            self.last_output_wallclock = 0.0
+            self.show_reloading_frame = True
 
 
 def _compute_controlnet_patch(
