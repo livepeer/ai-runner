@@ -174,6 +174,8 @@ class StreamDiffusion(Pipeline):
         self.last_output_tensor: Optional[torch.Tensor] = None  # (1, H, W, C) float32 [0,1] CPU
         self.last_output_wallclock: float = 0.0
         self.show_reloading_frame: bool = True
+        self.overlay_start_wallclock: float = 0.0
+        self.overlay_base_tensor: Optional[torch.Tensor] = None  # frozen base used during a reload session
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
@@ -235,16 +237,14 @@ class StreamDiffusion(Pipeline):
 
     def _render_loading_overlay(self, frame: VideoFrame) -> torch.Tensor:
         """Render a loading overlay on top of the last output frame without exposing the incoming pixels."""
-        # Base image: last output; if unavailable, neutral gray
-        base = self.last_output_tensor
-        too_old = (time.time() - self.last_output_wallclock) > 5.0 if self.last_output_wallclock else True
-        if base is not None and not too_old:
+        # Base image frozen at reload start; if not available, fall back to neutral gray
+        base = self.overlay_base_tensor
+        base_np = None
+        if base is not None:
             try:
                 base_np = (base.clamp(0, 1) * 255).byte().cpu().numpy()[0]
             except Exception:
                 base_np = None
-        else:
-            base_np = None
 
         _, h, w, c = frame.tensor.shape
         if base_np is None or base_np.shape[0] != h or base_np.shape[1] != w:
@@ -252,49 +252,82 @@ class StreamDiffusion(Pipeline):
         elif base_np.shape[-1] != 3:
             base_np = base_np[..., :3]
 
-        img = Image.fromarray(base_np, mode="RGB")
+        img_color = Image.fromarray(base_np, mode="RGB")
 
-        # Desaturate and dim
-        gray = img.convert("L").convert("RGB")
-        img = gray
-        if img.mode != "RGBA":
-            img = img.convert("RGBA")
-        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 90))  # semi-transparent black
-        img = Image.alpha_composite(img, overlay)
+        # Grey-in effect: blend color -> grayscale over fade_duration seconds
+        fade_duration = 0.6
+        t = 1.0
+        if self.overlay_start_wallclock:
+            t = max(0.0, min(1.0, (time.time() - self.overlay_start_wallclock) / fade_duration))
+        gray = img_color.convert("L").convert("RGB")
+        img = Image.blend(img_color, gray, t)
+        # Dim with increasing opacity
+        img = img.convert("RGBA")
+        dim_alpha = int(90 * t)
+        if dim_alpha > 0:
+            overlay = Image.new("RGBA", (w, h), (0, 0, 0, dim_alpha))
+            img = Image.alpha_composite(img, overlay)
 
         # Draw spinner and text
         draw = ImageDraw.Draw(img)
         cx, cy = w // 2, h // 2
-        radius = max(12, int(min(w, h) * 0.08))
-        thickness = max(4, int(min(w, h) * 0.01))
-        bbox = (cx - radius, cy - radius, cx + radius, cy + radius)
+        radius = max(12, int(min(w, h) * 0.085))
+        thickness = max(5, int(min(w, h) * 0.012))
+        # Anti-aliased spinner via supersampling
+        AA = 4
+        big_size = (w * AA, h * AA)
+        spinner_layer_big = Image.new("RGBA", big_size, (0, 0, 0, 0))
+        draw_big = ImageDraw.Draw(spinner_layer_big)
+        bbox_big = (
+            (cx - radius) * AA,
+            (cy - radius) * AA,
+            (cx + radius) * AA,
+            (cy + radius) * AA,
+        )
         # Spinner angle derives deterministically from current time (no stored timer)
         start_angle = (time.time() * 180.0) % 360.0
-        # Draw a 270-degree arc as spinner
-        spinner_color = (255, 255, 255, 220)
+        spinner_color = (255, 255, 255, 230)
         try:
-            draw.arc(bbox, start=start_angle, end=start_angle + 270, fill=spinner_color, width=thickness)
+            draw_big.arc(bbox_big, start=start_angle, end=start_angle + 270, fill=spinner_color, width=thickness * AA)
         except Exception:
-            # Fallback: simple circle
-            draw.ellipse(bbox, outline=spinner_color, width=thickness)
+            draw_big.ellipse(bbox_big, outline=spinner_color, width=thickness * AA)
+        spinner_layer = spinner_layer_big.resize((w, h), resample=Image.LANCZOS)
+        img.alpha_composite(spinner_layer)
 
         # Text below spinner
-        try:
-            font = ImageFont.load_default()
-        except Exception:
-            font = None
+        font = None
+        font_size = max(16, int(min(w, h) * 0.06))
+        for candidate in [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        ]:
+            try:
+                font = ImageFont.truetype(candidate, font_size)
+                break
+            except Exception:
+                continue
+        if font is None:
+            try:
+                font = ImageFont.load_default()
+            except Exception:
+                font = None
         text = "Reloading pipeline..."
         try:
-            text_bbox = draw.textbbox((0, 0), text, font=font)
+            text_bbox = draw.textbbox((0, 0), text, font=font, stroke_width=2)
             text_w = text_bbox[2] - text_bbox[0]
             text_h = text_bbox[3] - text_bbox[1]
         except Exception:
-            text_w, text_h = (len(text) * 6, 11)
+            text_w, text_h = (len(text) * 10, 20)
         text_x = int(cx - text_w / 2)
         text_y = int(cy + radius + max(10, thickness))
-        shadow_offset = 2
+        shadow_offset = max(2, int(font_size * 0.08))
+        # Draw shadow and stroke to improve readability
         draw.text((text_x + shadow_offset, text_y + shadow_offset), text, font=font, fill=(0, 0, 0, 200))
-        draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255, 255))
+        try:
+            draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 160))
+        except Exception:
+            draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255, 255))
 
         # Convert back to torch tensor in (1, H, W, C), float32 in [0,1]
         img_rgb = img.convert("RGB")
@@ -324,6 +357,17 @@ class StreamDiffusion(Pipeline):
             self.is_reloading = True
             # reflect user preference immediately for overlay during reload
             self.show_reloading_frame = new_params.show_reloading_frame
+            # Snapshot overlay base at reload start; only use last frame if it is recent (<=5s)
+            now = time.time()
+            self.overlay_start_wallclock = now
+            if self.last_output_tensor is not None and (now - self.last_output_wallclock) <= 5.0:
+                try:
+                    with torch.no_grad():
+                        self.overlay_base_tensor = self.last_output_tensor.detach().cpu().contiguous()
+                except Exception:
+                    self.overlay_base_tensor = None
+            else:
+                self.overlay_base_tensor = None
             prev_params = self.params
             # Set pipe to None to avoid accidental usage under lock
             self.pipe = None
@@ -351,6 +395,9 @@ class StreamDiffusion(Pipeline):
             self.first_frame = True
             self.is_reloading = False
             self.show_reloading_frame = chosen_params.show_reloading_frame
+            # Clear overlay session state
+            self.overlay_start_wallclock = 0.0
+            self.overlay_base_tensor = None
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:
@@ -434,6 +481,8 @@ class StreamDiffusion(Pipeline):
             self.last_output_tensor = None
             self.last_output_wallclock = 0.0
             self.show_reloading_frame = True
+            self.overlay_start_wallclock = 0.0
+            self.overlay_base_tensor = None
 
 
 def _compute_controlnet_patch(
