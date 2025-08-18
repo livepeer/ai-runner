@@ -104,8 +104,8 @@ class LoadingOverlayRenderer:
     def _ensure_spinner_frames(self, w: int, h: int) -> None:
         if self._spinner_frames and self._spinner_radius > 0 and self._spinner_thickness > 0:
             return
-        radius = max(12, int(min(w, h) * 0.085))
-        thickness = max(6, int(min(w, h) * 0.015))
+        radius = max(8, int(min(w, h) * 0.035))
+        thickness = max(3, int(min(w, h) * 0.008))
         canvas_size = 2 * radius + thickness
 
         # Supersampled canvas for smoother edges, later downsampled with Lanczos
@@ -147,10 +147,10 @@ class LoadingOverlayRenderer:
         self._spinner_thickness = thickness
 
     def _ensure_text(self, w: int, h: int) -> None:
-        text = "Reloading pipeline..."
+        text = "Pipeline is reloading"
         cx, cy = w // 2, h // 2
-        radius = max(12, int(min(w, h) * 0.085))
-        thickness = max(6, int(min(w, h) * 0.015))
+        radius = max(8, int(min(w, h) * 0.035))
+        thickness = max(3, int(min(w, h) * 0.008))
         desired_font_size = max(16, int(min(w, h) * 0.05))
         if self._text_image is not None and self._font_size == desired_font_size:
             return
@@ -185,7 +185,7 @@ class LoadingOverlayRenderer:
         except Exception:
             tdraw.text((4, 4), text, font=font, fill=(255, 255, 255, 255))
         text_x = int(cx - text_img.width / 2)
-        text_y = int(cy + radius + max(10, thickness))
+        text_y = int(cy - radius - max(10, thickness) - text_img.height)
 
         self._text_image = text_img
         self._font = font
@@ -241,4 +241,3 @@ class LoadingOverlayRenderer:
         out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
         out_tensor = torch.from_numpy(out_np).unsqueeze(0)
         return out_tensor
-
