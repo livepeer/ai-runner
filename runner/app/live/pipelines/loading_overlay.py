@@ -10,11 +10,20 @@ class LoadingOverlayRenderer:
     def __init__(self) -> None:
         # Session tracking to invalidate caches when reload sessions change
         self._session_wallclock: float = 0.0
+        self._active: bool = False
+        self._show_overlay: bool = True
 
         # Cached size and base images
         self._cached_size: Tuple[int, int] = (0, 0)
         self._base_image_color: Optional[Image.Image] = None
         self._base_image_gray: Optional[Image.Image] = None
+
+        # Base tensor for current session and last-output cache
+        self._base_tensor: Optional[torch.Tensor] = None
+        self._base_tensor_wallclock: float = 0.0
+        self._last_output_tensor: Optional[torch.Tensor] = None
+        self._last_output_wallclock: float = 0.0
+        self._base_max_age_seconds: float = 5.0
 
         # Text caching
         self._font: Optional[ImageFont.FreeTypeFont] = None
@@ -50,14 +59,15 @@ class LoadingOverlayRenderer:
         self._spinner_thickness = 0
         self._blended_rgba_cache.clear()
         self._dim_overlay_cache.clear()
+        # Do not clear last-output cache here; that is cross-session state.
 
-    def _ensure_base_images(self, w: int, h: int, overlay_base_tensor: Optional[torch.Tensor]) -> None:
+    def _ensure_base_images(self, w: int, h: int) -> None:
         # If session size or base not initialized or size changed, (re)create base images
         if self._cached_size != (w, h) or self._base_image_color is None:
             base_np = None
-            if overlay_base_tensor is not None:
+            if self._base_tensor is not None:
                 try:
-                    base_np = (overlay_base_tensor.clamp(0, 1) * 255).byte().cpu().numpy()[0]
+                    base_np = (self._base_tensor.clamp(0, 1) * 255).byte().cpu().numpy()[0]
                 except Exception:
                     base_np = None
             if base_np is None or base_np.shape[0] != h or base_np.shape[1] != w:
@@ -192,7 +202,7 @@ class LoadingOverlayRenderer:
         self._font_size = desired_font_size
         self._text_pos = (text_x, text_y)
 
-    def render(self, frame, overlay_start_wallclock: float, overlay_base_tensor: Optional[torch.Tensor]) -> torch.Tensor:
+    def render(self, frame) -> torch.Tensor:
         # Import type locally to avoid circular import at module level
         from trickle import VideoFrame  # type: ignore
 
@@ -202,17 +212,16 @@ class LoadingOverlayRenderer:
         _, h, w, _ = frame.tensor.shape
 
         # Reset caches when session changes or size changes
-        if self._session_wallclock != overlay_start_wallclock:
-            self.reset_session(overlay_start_wallclock)
+        # No-op: session changes are controlled by begin_reload/end_reload
 
         # Ensure base images are ready
-        self._ensure_base_images(w, h, overlay_base_tensor)
+        self._ensure_base_images(w, h)
 
         # Time-based easing for grey-in and dimming
         fade_duration = 0.6
         t = 1.0
-        if overlay_start_wallclock:
-            t = max(0.0, min(1.0, (time.time() - overlay_start_wallclock) / fade_duration))
+        if self._session_wallclock:
+            t = max(0.0, min(1.0, (time.time() - self._session_wallclock) / fade_duration))
 
         # Get blended base RGBA and optional dim overlay
         img = self._get_blended_base_rgba(t)
@@ -241,3 +250,42 @@ class LoadingOverlayRenderer:
         out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
         out_tensor = torch.from_numpy(out_np).unsqueeze(0)
         return out_tensor
+
+    def update_last_frame(self, out_bhwc: torch.Tensor) -> None:
+        try:
+            with torch.no_grad():
+                self._last_output_tensor = out_bhwc.detach().cpu().contiguous()
+                self._last_output_wallclock = time.time()
+        except Exception:
+            # Best-effort cache
+            pass
+
+    def begin_reload(self, show_overlay: bool) -> None:
+        self._show_overlay = bool(show_overlay)
+        self._active = True
+        now = time.time()
+        # Choose base tensor if recent enough
+        base: Optional[torch.Tensor] = None
+        if self._last_output_tensor is not None and (now - self._last_output_wallclock) <= self._base_max_age_seconds:
+            try:
+                with torch.no_grad():
+                    base = self._last_output_tensor.detach().cpu().contiguous()
+            except Exception:
+                base = None
+        self._base_tensor = base
+        self._base_tensor_wallclock = now
+        # Reset per-session caches
+        self.reset_session(now)
+
+    def end_reload(self) -> None:
+        self._active = False
+        # Keep show preference for next time
+        self._base_tensor = None
+        self._base_tensor_wallclock = 0.0
+        self.reset_session(0.0)
+
+    def is_active(self) -> bool:
+        return self._active and self._show_overlay
+
+    def set_show_overlay(self, show_overlay: bool) -> None:
+        self._show_overlay = bool(show_overlay)
