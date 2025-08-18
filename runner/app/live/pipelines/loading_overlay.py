@@ -147,7 +147,7 @@ class LoadingOverlayRenderer:
         self._spinner_thickness = thickness
 
     def _ensure_text(self, w: int, h: int) -> None:
-        text = "Pipeline is reloading..."
+        text = "Pipeline is reloading…"
         cx, cy = w // 2, h // 2
         radius = max(8, int(min(w, h) * 0.035))
         thickness = max(3, int(min(w, h) * 0.008))
