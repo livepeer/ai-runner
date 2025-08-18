@@ -147,12 +147,20 @@ class PipelineStreamer(StreamerCallbacks):
                 logging.error(f"Failed to emit monitoring event: {e}")
 
     async def run_ingress_loop(self):
-        async for av_frame in self.protocol.ingress_loop(self.stop_event):
-            # TODO any necessary accounting here for audio
+        # dequeue frames directly from the input mp.Queue until we see a sentinel or get stopped
+        while not self.stop_event.is_set():
+            # this will block in a thread, preserving FIFO semantics
+            av_frame = await asyncio.to_thread(self.in_q.get)
+            # sentinel => upstream signaled EOF
+            if av_frame is None:
+                break
+
+            # pass-through audio immediately
             if isinstance(av_frame, AudioFrame):
                 self.process.send_input(av_frame)
                 continue
 
+            # drop anything we don't recognize
             if not isinstance(av_frame, VideoFrame):
                 logging.warning("Unknown frame type received, dropping")
                 continue
