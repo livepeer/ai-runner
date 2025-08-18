@@ -282,9 +282,10 @@ class StreamDiffusion(Pipeline):
                 old_scale = applied_controlnets[i].conditioning_scale
                 if patched.conditioning_scale != old_scale:
                     self.pipe.update_controlnet_scale(i, patched.conditioning_scale)
+            # Only update the applied_controlnets if we actually patched something
+            self.applied_controlnets = patched_controlnets
 
         self.params = new_params
-        self.applied_controlnets = patched_controlnets
         self.first_frame = True
         return True
 
