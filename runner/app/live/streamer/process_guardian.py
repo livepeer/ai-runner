@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from typing import Optional
+import torch.multiprocessing as mp
 import abc
 
 from trickle import InputFrame, OutputFrame
@@ -41,9 +42,13 @@ class ProcessGuardian:
         self,
         pipeline: str,
         params: dict,
+        input_queue: mp.Queue,
+        output_queue: mp.Queue,
     ):
         self.pipeline = pipeline
         self.initial_params = params
+        self.input_queue = input_queue
+        self.output_queue = output_queue
         self.streamer: StreamerCallbacks = _NoopStreamerCallbacks()
 
         self.process: Optional[PipelineProcess] = None
@@ -56,7 +61,7 @@ class ProcessGuardian:
         self.output_fps_counter = FPSCounter()
 
     async def start(self):
-        self.process = PipelineProcess.start(self.pipeline, self.initial_params)
+        self.process = PipelineProcess.start(self.pipeline, self.initial_params, self.input_queue, self.output_queue)
         self.status.update_state(PipelineState.LOADING)
         self.monitor_task = asyncio.create_task(self._monitor_loop())
 
@@ -161,6 +166,7 @@ class ProcessGuardian:
         time_since_last_input = current_time - (input.last_input_time or 0)
 
         if not self.streamer.is_stream_running():
+            logging.error("JOSH - strea is not running!")
             return (
                 PipelineState.OFFLINE
                 if time_since_last_input > 3  # 3s grace period after shutdown

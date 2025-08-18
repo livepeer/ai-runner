@@ -10,8 +10,8 @@ import threading
 from typing import List
 import torch.multiprocessing as mp
 
-from streamer import PipelineStreamer
-from streamer.process_guardian import ProcessGuardian
+from streamer import PipelineStreamer, ProcessGuardian
+from trickle import InputFrame
 
 # loads neighbouring modules with absolute paths
 infer_root = os.path.abspath(os.path.dirname(__file__))
@@ -42,6 +42,14 @@ def thread_exception_hook(original_hook):
         os._exit(1)
     return custom_hook
 
+def try_put_frame(_queue: mp.Queue, frame:InputFrame):
+    """Helper to put an item on a queue, only if there's room"""
+    try:
+        _queue.put_nowait(frame)
+    except queue.Full:
+        # TODO log dropped frames somewhere?
+        pass
+
 
 async def main(
     *,
@@ -59,26 +67,25 @@ async def main(
 ):
     loop = asyncio.get_event_loop()
     loop.set_exception_handler(asyncio_exception_handler)
+    in_q = mp.Queue(maxsize=1)
+    out_q = mp.Queue(maxsize=1)
 
+    process = ProcessGuardian(pipeline, params or {}, in_q, out_q)
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
         width = params.get('width', DEFAULT_WIDTH)
         height = params.get('height', DEFAULT_HEIGHT)
-        in_q = mp.Queue(maxsize=1)
-        out_q = mp.Queue(maxsize=1)
         if stream_protocol == "trickle":
             protocol = TrickleProtocol(
-                subscribe_url, publish_url, control_url, events_url, width, height, in_q, out_q
+                    subscribe_url, publish_url, control_url, events_url, width, height, lambda x: try_put_frame(in_q, x), out_q.get
             )
         elif stream_protocol == "zeromq":
             protocol = ZeroMQProtocol(subscribe_url, publish_url)
         else:
             raise ValueError(f"Unsupported protocol: {stream_protocol}")
-        process = ProcessGuardian(pipeline, params or {}, in_q, out_q)
+        logger.info("JOSH - in infee.py PipelineStreamer")
         streamer = PipelineStreamer(protocol, process, request_id, manifest_id, stream_id)
-    else:
-        process = ProcessGuardian(pipeline, params or {}, None, None)
 
     api = None
     try:

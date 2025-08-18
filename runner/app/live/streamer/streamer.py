@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import numpy as np
+import queue
 from typing import AsyncGenerator, Awaitable, Optional
 from asyncio import Lock
 from .process_guardian import ProcessGuardian, StreamerCallbacks
@@ -22,12 +23,11 @@ class PipelineStreamer(StreamerCallbacks):
         request_id: str,
         manifest_id: str,
         stream_id: str,
-        in_q: mp.Queue,
-        out_q: mp.Queue,
     ):
         self.protocol = protocol
         self.process = process
 
+        logging.info("JOSH - initializing streamer and created stop_event")
         self.stop_event = asyncio.Event()
         self.emit_event_lock = Lock()
 
@@ -36,8 +36,6 @@ class PipelineStreamer(StreamerCallbacks):
         self.request_id = request_id
         self.manifest_id = manifest_id
         self.stream_id = stream_id
-        self.in_q = in_q
-        self.out_q = out_q
 
     async def start(self, params: dict):
         if self.tasks_supervisor_task:
@@ -47,13 +45,13 @@ class PipelineStreamer(StreamerCallbacks):
             self.request_id, self.manifest_id, self.stream_id, params, self
         )
 
+        logging.info("JOSH - startin new streamer process, clearing event")
         self.stop_event.clear()
         await self.protocol.start()
 
         # We need a bunch of concurrent tasks to run the streamer. So we start them all in background and then also start
         # a supervisor task that will stop everything if any of the main tasks return or the stop event is set.
         self.main_tasks = [
-            run_in_background("ingress_loop", self.run_ingress_loop()),
             run_in_background("report_status_loop", self.report_status_loop()),
             run_in_background("control_loop", self.run_control_loop()),
         ]
@@ -69,8 +67,11 @@ class PipelineStreamer(StreamerCallbacks):
         try:
 
             async def wait_for_stop():
+                logging.info("JOSH - waiting for stop event")
                 await self.stop_event.wait()
+                logging.info("JOSH - got for stop event")
 
+            logging.info("JOSH - waiting taksks_supervisor")
             tasks = self.main_tasks + [asyncio.create_task(wait_for_stop())]
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
@@ -118,6 +119,7 @@ class PipelineStreamer(StreamerCallbacks):
 
     def trigger_stop_stream(self) -> bool:
         if not self.stop_event.is_set():
+            logging.Info("JOSH - trggerign stop stream event")
             self.stop_event.set()
             return True
         return False
@@ -145,28 +147,6 @@ class PipelineStreamer(StreamerCallbacks):
                 await self.protocol.emit_monitoring_event(event, queue_event_type)
             except Exception as e:
                 logging.error(f"Failed to emit monitoring event: {e}")
-
-    async def run_ingress_loop(self):
-        # dequeue frames directly from the input mp.Queue until we see a sentinel or get stopped
-        while not self.stop_event.is_set():
-            # this will block in a thread, preserving FIFO semantics
-            av_frame = await asyncio.to_thread(self.in_q.get)
-            # sentinel => upstream signaled EOF
-            if av_frame is None:
-                break
-
-            # pass-through audio immediately
-            if isinstance(av_frame, AudioFrame):
-                self.process.send_input(av_frame)
-                continue
-
-            # drop anything we don't recognize
-            if not isinstance(av_frame, VideoFrame):
-                logging.warning("Unknown frame type received, dropping")
-                continue
-
-            self.process.send_input(av_frame)
-        logging.info("Ingress loop ended")
 
     async def run_control_loop(self):
         """Consumes control messages from the protocol and updates parameters"""

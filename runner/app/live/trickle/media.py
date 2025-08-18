@@ -16,12 +16,12 @@ DECODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 MAX_ENCODER_RETRIES = 3
 ENCODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
 
-async def run_subscribe(subscribe_url: str, image_callback, put_metadata, monitoring_callback, target_width, target_height):
+async def run_subscribe(subscribe_url: str, put_image, put_metadata, monitoring_callback, target_width, target_height):
     # TODO add some pre-processing parameters, eg image size
     try:
         in_pipe, out_pipe = os.pipe()
         write_fd = await AsyncifyFdWriter(out_pipe)
-        parse_task = asyncio.create_task(decode_in(in_pipe, image_callback, put_metadata, write_fd, target_width, target_height))
+        parse_task = asyncio.create_task(decode_in(in_pipe, put_image, put_metadata, write_fd, target_width, target_height))
         subscribe_task = asyncio.create_task(subscribe(subscribe_url, write_fd, monitoring_callback))
         await asyncio.gather(subscribe_task, parse_task)
         logging.info("run_subscribe complete")

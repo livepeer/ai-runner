@@ -44,6 +44,7 @@ def encode_av(
         read_fd, write_fd = os.pipe()
         read_file  = os.fdopen(read_fd,  'rb', buffering=0)
         write_file = os.fdopen(write_fd, 'wb', buffering=0)
+        logging.info(f"JOSH -  Opening {url}")
         output_callback(read_file, write_file, url)
         return write_file
 
@@ -57,7 +58,7 @@ def encode_av(
     if video_meta and video_codec:
         # Add a new stream to the output using the desired video codec
         target_width = video_meta.get('target_width', DEFAULT_WIDTH)
-        target_height = video_meta.get('target_height', DEFAULT_HEIGHT)  
+        target_height = video_meta.get('target_height', DEFAULT_HEIGHT)
         video_opts = { 'video_size':f'{target_width}x{target_height}', 'bf':'0' }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
@@ -81,6 +82,7 @@ def encode_av(
     dropped_video = 0
     dropped_audio = 0
     audio_buffer = deque()
+    kount = 0
 
     while True:
         avframe = input_queue()
@@ -91,6 +93,11 @@ def encode_av(
             if not output_video_stream:
                 # received video but no video output, so drop
                 continue
+            kount += 1
+            if kount > 100:
+                pass
+                #raise ValueError("zzzzzzzzz")
+            #logging.info(f"VideoFrame {kount}")
             avframe.log_timestamps["frame_end"] = time.time()
             log_frame_timestamps("Video", avframe.frame)
 
@@ -118,6 +125,7 @@ def encode_av(
                     continue
 
             if not last_kf or float(current - last_kf) >= GOP_SECS:
+                logging.info(f"JOSH - Setting IFRAME {kount}")
                 frame.pict_type = av.video.frame.PictureType.I
                 last_kf = current
                 if first_video_ts is None:

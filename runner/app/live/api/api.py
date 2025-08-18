@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import time
+import queue
 from typing import Optional, cast
 import torch.multiprocessing as mp
 
@@ -14,7 +15,7 @@ from typing import Annotated, Dict
 from streamer import PipelineStreamer, ProcessGuardian
 from streamer.protocol.trickle import TrickleProtocol
 from streamer.process import config_logging
-from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
+from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT, InputFrame
 
 MAX_FILE_AGE = 86400  # 1 day
 
@@ -79,6 +80,7 @@ async def cleanup_last_stream():
         os.remove(last_params_file)
 
         logging.info(f"Cleaning up last stream trickle channels for request_id={params.request_id} subscribe_url={params.subscribe_url} publish_url={params.publish_url} control_url={params.control_url} events_url={params.events_url}")
+        # TODO fix with queue
         protocol = TrickleProtocol(
             params.subscribe_url,
             params.publish_url,
@@ -140,6 +142,14 @@ async def handle_start_stream(request: web.Request):
         else:
             logging.info(f"Using dimensions from params: {width}x{height}")
 
+        def try_put_frame(_queue: mp.Queue, frame:InputFrame):
+            """Helper to put an item on a queue, only if there's room"""
+            try:
+                _queue.put_nowait(frame)
+            except queue.Full:
+                # TODO log dropped frames somewhere?
+                pass
+
         in_q = mp.Queue(maxsize=1)
         out_q = mp.Queue(maxsize=1)
         protocol = TrickleProtocol(
@@ -149,10 +159,10 @@ async def handle_start_stream(request: web.Request):
             params.events_url,
             width,
             height,
-            in_q,
-            out_q,
+            lambda x: try_put_frame(in_q, x),
+            out_q.get,
         )
-        process = ProcessGuardian(process.pipeline, params.params or {}, in_q, out_q)
+        logger.info("JOSH - in api.py PipelineStreamer")
         streamer = PipelineStreamer(
             protocol,
             process,
