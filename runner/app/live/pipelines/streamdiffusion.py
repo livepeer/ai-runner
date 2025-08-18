@@ -14,6 +14,7 @@ from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 import time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+from .loading_overlay import LoadingOverlayRenderer
 
 AVAILABLE_PREPROCESSORS = list_preprocessors()
 
@@ -176,14 +177,8 @@ class StreamDiffusion(Pipeline):
         self.show_reloading_frame: bool = True
         self.overlay_start_wallclock: float = 0.0
         self.overlay_base_tensor: Optional[torch.Tensor] = None  # frozen base used during a reload session
-        # Cached overlay assets for performance
-        self._overlay_cached_size: tuple[int, int] = (0, 0)
-        self._overlay_base_image_color: Optional[Image.Image] = None
-        self._overlay_base_image_gray: Optional[Image.Image] = None
-        self._overlay_font: Optional[ImageFont.FreeTypeFont] = None
-        self._overlay_font_size: int = 0
-        self._overlay_text_image: Optional[Image.Image] = None  # RGBA
-        self._overlay_text_pos: tuple[int, int] = (0, 0)
+        # Loading overlay renderer (encapsulates caching and drawing)
+        self._overlay_renderer = LoadingOverlayRenderer()
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
@@ -191,9 +186,26 @@ class StreamDiffusion(Pipeline):
         logging.info("Pipeline initialization complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        # Determine whether to render overlay without holding the lock during rendering
+        want_overlay = False
+        overlay_start = 0.0
+        overlay_base = None
         async with self._pipeline_lock:
-            if await self._try_render_loading_overlay(frame, request_id):
-                return
+            if self.is_reloading or self.pipe is None:
+                if self.show_reloading_frame:
+                    want_overlay = True
+                    overlay_start = self.overlay_start_wallclock
+                    overlay_base = self.overlay_base_tensor
+        if want_overlay:
+            out_tensor = await asyncio.to_thread(
+                self._overlay_renderer.render, frame, overlay_start, overlay_base
+            )
+            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+            await self.frame_queue.put(output)
+            return
+
+        # Normal processing path remains serialized under the lock
+        async with self._pipeline_lock:
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
             await self.frame_queue.put(output)
@@ -245,112 +257,11 @@ class StreamDiffusion(Pipeline):
 
     def _render_loading_overlay(self, frame: VideoFrame) -> torch.Tensor:
         """Render a loading overlay on top of the last output frame without exposing the incoming pixels."""
-        # Base image frozen at reload start; if not available, fall back to neutral gray
-        base = self.overlay_base_tensor
-        base_np = None
-        if base is not None:
-            try:
-                base_np = (base.clamp(0, 1) * 255).byte().cpu().numpy()[0]
-            except Exception:
-                base_np = None
-
-        _, h, w, c = frame.tensor.shape
-        if base_np is None or base_np.shape[0] != h or base_np.shape[1] != w:
-            # Fall back to neutral gray base if unavailable or mismatched
-            if self._overlay_cached_size != (w, h) or self._overlay_base_image_color is None:
-                self._overlay_base_image_color = Image.fromarray(np.full((h, w, 3), 128, dtype=np.uint8), mode="RGB")
-                self._overlay_base_image_gray = self._overlay_base_image_color
-                self._overlay_cached_size = (w, h)
-        else:
-            if self._overlay_cached_size != (w, h) or self._overlay_base_image_color is None:
-                self._overlay_base_image_color = Image.fromarray(base_np[..., :3], mode="RGB")
-                self._overlay_base_image_gray = self._overlay_base_image_color.convert("L").convert("RGB")
-                self._overlay_cached_size = (w, h)
-
-        img_color = self._overlay_base_image_color
-        img_gray = self._overlay_base_image_gray
-
-        # Grey-in effect: blend color -> grayscale over fade_duration seconds
-        fade_duration = 0.6
-        t = 1.0
-        if self.overlay_start_wallclock:
-            t = max(0.0, min(1.0, (time.time() - self.overlay_start_wallclock) / fade_duration))
-        img = Image.blend(img_color, img_gray, t)
-        # Dim with increasing opacity
-        img = img.convert("RGBA")
-        dim_alpha = int(90 * t)
-        if dim_alpha > 0:
-            overlay = Image.new("RGBA", (w, h), (0, 0, 0, dim_alpha))
-            img = Image.alpha_composite(img, overlay)
-
-        # Draw spinner and text
-        draw = ImageDraw.Draw(img)
-        cx, cy = w // 2, h // 2
-        radius = max(12, int(min(w, h) * 0.085))
-        thickness = max(6, int(min(w, h) * 0.015))  # slightly thicker
-        bbox = (cx - radius, cy - radius, cx + radius, cy + radius)
-        # Spinner angle derives deterministically from current time (no stored timer)
-        start_angle = (time.time() * 180.0) % 360.0
-        spinner_color = (255, 255, 255, 230)
-        try:
-            draw.arc(bbox, start=start_angle, end=start_angle + 270, fill=spinner_color, width=thickness)
-        except Exception:
-            draw.ellipse(bbox, outline=spinner_color, width=thickness)
-
-        # Text below spinner
-        text = "Reloading pipeline..."
-        # Prepare cached font and text image if size changed or missing
-        desired_font_size = max(16, int(min(w, h) * 0.05))  # slightly smaller than before
-        if self._overlay_text_image is None or self._overlay_cached_size != (w, h) or self._overlay_font_size != desired_font_size:
-            font = None
-            for candidate in [
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-                "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            ]:
-                try:
-                    font = ImageFont.truetype(candidate, desired_font_size)
-                    break
-                except Exception:
-                    continue
-            if font is None:
-                try:
-                    font = ImageFont.load_default()
-                except Exception:
-                    font = None
-            # Render text to its own RGBA image with stroke/shadow
-            tmp = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            td = ImageDraw.Draw(tmp)
-            try:
-                tb = td.textbbox((0, 0), text, font=font, stroke_width=2)
-                tw, th = tb[2] - tb[0], tb[3] - tb[1]
-            except Exception:
-                tw, th = (len(text) * 10, 20)
-            text_img = Image.new("RGBA", (tw + 8, th + 8), (0, 0, 0, 0))
-            tdraw = ImageDraw.Draw(text_img)
-            # Center draw within text_img
-            try:
-                tdraw.text((4, 4), text, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 160))
-            except Exception:
-                tdraw.text((4, 4), text, font=font, fill=(255, 255, 255, 255))
-            self._overlay_text_image = text_img
-            self._overlay_font = font
-            self._overlay_font_size = desired_font_size
-            # Compute position
-            text_x = int(cx - text_img.width / 2)
-            text_y = int(cy + radius + max(10, thickness))
-            self._overlay_text_pos = (text_x, text_y)
-            # Ensure cached size matches
-            self._overlay_cached_size = (w, h)
-        # Paste cached text
-        if self._overlay_text_image is not None:
-            img.paste(self._overlay_text_image, self._overlay_text_pos, self._overlay_text_image)
-
-        # Convert back to torch tensor in (1, H, W, C), float32 in [0,1]
-        img_rgb = img.convert("RGB")
-        out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
-        out_tensor = torch.from_numpy(out_np).unsqueeze(0)
-        return out_tensor
+        return self._overlay_renderer.render(
+            frame=frame,
+            overlay_start_wallclock=self.overlay_start_wallclock,
+            overlay_base_tensor=self.overlay_base_tensor,
+        )
 
     async def get_processed_video_frame(self) -> VideoOutput:
         return await self.frame_queue.get()
@@ -385,14 +296,8 @@ class StreamDiffusion(Pipeline):
                     self.overlay_base_tensor = None
             else:
                 self.overlay_base_tensor = None
-            # Reset caches for overlay assets
-            self._overlay_cached_size = (0, 0)
-            self._overlay_base_image_color = None
-            self._overlay_base_image_gray = None
-            self._overlay_font = None
-            self._overlay_font_size = 0
-            self._overlay_text_image = None
-            self._overlay_text_pos = (0, 0)
+            # Reset caches for overlay assets within the renderer
+            self._overlay_renderer.reset_session(self.overlay_start_wallclock)
             prev_params = self.params
             # Set pipe to None to avoid accidental usage under lock
             self.pipe = None
@@ -423,13 +328,7 @@ class StreamDiffusion(Pipeline):
             # Clear overlay session state
             self.overlay_start_wallclock = 0.0
             self.overlay_base_tensor = None
-            self._overlay_cached_size = (0, 0)
-            self._overlay_base_image_color = None
-            self._overlay_base_image_gray = None
-            self._overlay_font = None
-            self._overlay_font_size = 0
-            self._overlay_text_image = None
-            self._overlay_text_pos = (0, 0)
+            self._overlay_renderer.reset_session(0.0)
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:
@@ -515,13 +414,7 @@ class StreamDiffusion(Pipeline):
             self.show_reloading_frame = True
             self.overlay_start_wallclock = 0.0
             self.overlay_base_tensor = None
-            self._overlay_cached_size = (0, 0)
-            self._overlay_base_image_color = None
-            self._overlay_base_image_gray = None
-            self._overlay_font = None
-            self._overlay_font_size = 0
-            self._overlay_text_image = None
-            self._overlay_text_pos = (0, 0)
+            self._overlay_renderer.reset_session(0.0)
 
 
 def _compute_controlnet_patch(
