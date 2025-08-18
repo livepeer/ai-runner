@@ -27,6 +27,7 @@ class LoadingOverlayRenderer:
         self._spinner_num_frames: int = 32
         self._spinner_radius: int = 0
         self._spinner_thickness: int = 0
+        self._spinner_supersample_scale: int = 3
 
         # Blended base frames cache: key is t_index in [0, _blend_steps]
         self._blend_steps: int = 24
@@ -106,23 +107,41 @@ class LoadingOverlayRenderer:
         radius = max(12, int(min(w, h) * 0.085))
         thickness = max(6, int(min(w, h) * 0.015))
         canvas_size = 2 * radius + thickness
-        bbox = (
-            thickness // 2,
-            thickness // 2,
-            thickness // 2 + 2 * radius,
-            thickness // 2 + 2 * radius,
+
+        # Supersampled canvas for smoother edges, later downsampled with Lanczos
+        s = max(2, int(self._spinner_supersample_scale))
+        hr_radius = radius * s
+        hr_thickness = max(1, thickness * s)
+        hr_canvas = 2 * hr_radius + hr_thickness
+
+        # PIL resampling enums compatibility
+        Resampling = getattr(Image, "Resampling", None)
+        lanczos = Resampling.LANCZOS if Resampling else getattr(Image, "LANCZOS", Image.BICUBIC)
+        bicubic = Resampling.BICUBIC if Resampling else getattr(Image, "BICUBIC", Image.BILINEAR)
+
+        # Draw a single high-res base spinner (270-degree arc) once
+        hr_base = Image.new("RGBA", (hr_canvas, hr_canvas), (0, 0, 0, 0))
+        d = ImageDraw.Draw(hr_base)
+        hr_bbox = (
+            hr_thickness // 2,
+            hr_thickness // 2,
+            hr_thickness // 2 + 2 * hr_radius,
+            hr_thickness // 2 + 2 * hr_radius,
         )
-        frames: List[Image.Image] = []
         spinner_color = (255, 255, 255, 230)
+        try:
+            d.arc(hr_bbox, start=0.0, end=270.0, fill=spinner_color, width=hr_thickness)
+        except Exception:
+            d.ellipse(hr_bbox, outline=spinner_color, width=hr_thickness)
+
+        # Generate rotated frames from the high-res base, then downsample once
+        frames: List[Image.Image] = []
         for k in range(self._spinner_num_frames):
-            img = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
-            d = ImageDraw.Draw(img)
-            start_angle = (k * (360.0 / self._spinner_num_frames)) % 360.0
-            try:
-                d.arc(bbox, start=start_angle, end=start_angle + 270, fill=spinner_color, width=thickness)
-            except Exception:
-                d.ellipse(bbox, outline=spinner_color, width=thickness)
-            frames.append(img)
+            angle = (k * (360.0 / self._spinner_num_frames)) % 360.0
+            rotated = hr_base.rotate(angle, resample=bicubic, expand=False)
+            down = rotated.resize((canvas_size, canvas_size), resample=lanczos)
+            frames.append(down)
+
         self._spinner_frames = frames
         self._spinner_radius = radius
         self._spinner_thickness = thickness
