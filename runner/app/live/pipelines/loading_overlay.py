@@ -147,17 +147,22 @@ class LoadingOverlayRenderer:
         self._spinner_thickness = thickness
 
     def _ensure_text(self, w: int, h: int) -> None:
-        text = "Pipeline is reloading"
+        text = "Pipeline is reloading..."
         cx, cy = w // 2, h // 2
         radius = max(8, int(min(w, h) * 0.035))
         thickness = max(3, int(min(w, h) * 0.008))
-        desired_font_size = max(16, int(min(w, h) * 0.05))
+        desired_font_size = max(14, int(min(w, h) * 0.04))
         if self._text_image is not None and self._font_size == desired_font_size:
             return
         font = None
+        # Try system fonts that resemble ui-sans-serif, system-ui, sans-serif stack
         for candidate in [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",  # macOS
+            "C:\\Windows\\Fonts\\arial.ttf",  # Windows
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # fallback regular
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         ]:
             try:
