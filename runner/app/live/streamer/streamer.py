@@ -9,6 +9,7 @@ from .process_guardian import ProcessGuardian, StreamerCallbacks
 from .protocol.protocol import StreamProtocol
 from .status import timestamp_to_ms
 from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
+import torch.multiprocessing as mp
 
 fps_log_interval = 10
 status_report_interval = 10
@@ -21,6 +22,8 @@ class PipelineStreamer(StreamerCallbacks):
         request_id: str,
         manifest_id: str,
         stream_id: str,
+        in_q: mp.Queue,
+        out_q: mp.Queue,
     ):
         self.protocol = protocol
         self.process = process
@@ -33,6 +36,8 @@ class PipelineStreamer(StreamerCallbacks):
         self.request_id = request_id
         self.manifest_id = manifest_id
         self.stream_id = stream_id
+        self.in_q = in_q
+        self.out_q = out_q
 
     async def start(self, params: dict):
         if self.tasks_supervisor_task:
@@ -49,7 +54,6 @@ class PipelineStreamer(StreamerCallbacks):
         # a supervisor task that will stop everything if any of the main tasks return or the stop event is set.
         self.main_tasks = [
             run_in_background("ingress_loop", self.run_ingress_loop()),
-            run_in_background("egress_loop", self.run_egress_loop()),
             run_in_background("report_status_loop", self.report_status_loop()),
             run_in_background("control_loop", self.run_control_loop()),
         ]
@@ -155,17 +159,6 @@ class PipelineStreamer(StreamerCallbacks):
 
             self.process.send_input(av_frame)
         logging.info("Ingress loop ended")
-
-    async def run_egress_loop(self):
-        # The protocol now directly handles the output queue, so this is simplified
-        request_id = self.request_id
-        async def gen_output_frames() -> AsyncGenerator[OutputFrame, None]:
-            # This is now a no-op since protocol handles output queue directly
-            return
-            yield  # unreachable but keeps the generator signature
-
-        await self.protocol.egress_loop(gen_output_frames())
-        logging.info("Egress loop ended")
 
     async def run_control_loop(self):
         """Consumes control messages from the protocol and updates parameters"""
