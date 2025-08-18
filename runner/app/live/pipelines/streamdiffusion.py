@@ -176,6 +176,14 @@ class StreamDiffusion(Pipeline):
         self.show_reloading_frame: bool = True
         self.overlay_start_wallclock: float = 0.0
         self.overlay_base_tensor: Optional[torch.Tensor] = None  # frozen base used during a reload session
+        # Cached overlay assets for performance
+        self._overlay_cached_size: tuple[int, int] = (0, 0)
+        self._overlay_base_image_color: Optional[Image.Image] = None
+        self._overlay_base_image_gray: Optional[Image.Image] = None
+        self._overlay_font: Optional[ImageFont.FreeTypeFont] = None
+        self._overlay_font_size: int = 0
+        self._overlay_text_image: Optional[Image.Image] = None  # RGBA
+        self._overlay_text_pos: tuple[int, int] = (0, 0)
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
@@ -248,19 +256,26 @@ class StreamDiffusion(Pipeline):
 
         _, h, w, c = frame.tensor.shape
         if base_np is None or base_np.shape[0] != h or base_np.shape[1] != w:
-            base_np = np.full((h, w, 3), 128, dtype=np.uint8)
-        elif base_np.shape[-1] != 3:
-            base_np = base_np[..., :3]
+            # Fall back to neutral gray base if unavailable or mismatched
+            if self._overlay_cached_size != (w, h) or self._overlay_base_image_color is None:
+                self._overlay_base_image_color = Image.fromarray(np.full((h, w, 3), 128, dtype=np.uint8), mode="RGB")
+                self._overlay_base_image_gray = self._overlay_base_image_color
+                self._overlay_cached_size = (w, h)
+        else:
+            if self._overlay_cached_size != (w, h) or self._overlay_base_image_color is None:
+                self._overlay_base_image_color = Image.fromarray(base_np[..., :3], mode="RGB")
+                self._overlay_base_image_gray = self._overlay_base_image_color.convert("L").convert("RGB")
+                self._overlay_cached_size = (w, h)
 
-        img_color = Image.fromarray(base_np, mode="RGB")
+        img_color = self._overlay_base_image_color
+        img_gray = self._overlay_base_image_gray
 
         # Grey-in effect: blend color -> grayscale over fade_duration seconds
         fade_duration = 0.6
         t = 1.0
         if self.overlay_start_wallclock:
             t = max(0.0, min(1.0, (time.time() - self.overlay_start_wallclock) / fade_duration))
-        gray = img_color.convert("L").convert("RGB")
-        img = Image.blend(img_color, gray, t)
+        img = Image.blend(img_color, img_gray, t)
         # Dim with increasing opacity
         img = img.convert("RGBA")
         dim_alpha = int(90 * t)
@@ -272,62 +287,64 @@ class StreamDiffusion(Pipeline):
         draw = ImageDraw.Draw(img)
         cx, cy = w // 2, h // 2
         radius = max(12, int(min(w, h) * 0.085))
-        thickness = max(5, int(min(w, h) * 0.012))
-        # Anti-aliased spinner via supersampling
-        AA = 4
-        big_size = (w * AA, h * AA)
-        spinner_layer_big = Image.new("RGBA", big_size, (0, 0, 0, 0))
-        draw_big = ImageDraw.Draw(spinner_layer_big)
-        bbox_big = (
-            (cx - radius) * AA,
-            (cy - radius) * AA,
-            (cx + radius) * AA,
-            (cy + radius) * AA,
-        )
+        thickness = max(6, int(min(w, h) * 0.015))  # slightly thicker
+        bbox = (cx - radius, cy - radius, cx + radius, cy + radius)
         # Spinner angle derives deterministically from current time (no stored timer)
         start_angle = (time.time() * 180.0) % 360.0
         spinner_color = (255, 255, 255, 230)
         try:
-            draw_big.arc(bbox_big, start=start_angle, end=start_angle + 270, fill=spinner_color, width=thickness * AA)
+            draw.arc(bbox, start=start_angle, end=start_angle + 270, fill=spinner_color, width=thickness)
         except Exception:
-            draw_big.ellipse(bbox_big, outline=spinner_color, width=thickness * AA)
-        spinner_layer = spinner_layer_big.resize((w, h), resample=Image.LANCZOS)
-        img.alpha_composite(spinner_layer)
+            draw.ellipse(bbox, outline=spinner_color, width=thickness)
 
         # Text below spinner
-        font = None
-        font_size = max(16, int(min(w, h) * 0.06))
-        for candidate in [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        ]:
-            try:
-                font = ImageFont.truetype(candidate, font_size)
-                break
-            except Exception:
-                continue
-        if font is None:
-            try:
-                font = ImageFont.load_default()
-            except Exception:
-                font = None
         text = "Reloading pipeline..."
-        try:
-            text_bbox = draw.textbbox((0, 0), text, font=font, stroke_width=2)
-            text_w = text_bbox[2] - text_bbox[0]
-            text_h = text_bbox[3] - text_bbox[1]
-        except Exception:
-            text_w, text_h = (len(text) * 10, 20)
-        text_x = int(cx - text_w / 2)
-        text_y = int(cy + radius + max(10, thickness))
-        shadow_offset = max(2, int(font_size * 0.08))
-        # Draw shadow and stroke to improve readability
-        draw.text((text_x + shadow_offset, text_y + shadow_offset), text, font=font, fill=(0, 0, 0, 200))
-        try:
-            draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 160))
-        except Exception:
-            draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255, 255))
+        # Prepare cached font and text image if size changed or missing
+        desired_font_size = max(16, int(min(w, h) * 0.05))  # slightly smaller than before
+        if self._overlay_text_image is None or self._overlay_cached_size != (w, h) or self._overlay_font_size != desired_font_size:
+            font = None
+            for candidate in [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            ]:
+                try:
+                    font = ImageFont.truetype(candidate, desired_font_size)
+                    break
+                except Exception:
+                    continue
+            if font is None:
+                try:
+                    font = ImageFont.load_default()
+                except Exception:
+                    font = None
+            # Render text to its own RGBA image with stroke/shadow
+            tmp = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            td = ImageDraw.Draw(tmp)
+            try:
+                tb = td.textbbox((0, 0), text, font=font, stroke_width=2)
+                tw, th = tb[2] - tb[0], tb[3] - tb[1]
+            except Exception:
+                tw, th = (len(text) * 10, 20)
+            text_img = Image.new("RGBA", (tw + 8, th + 8), (0, 0, 0, 0))
+            tdraw = ImageDraw.Draw(text_img)
+            # Center draw within text_img
+            try:
+                tdraw.text((4, 4), text, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 160))
+            except Exception:
+                tdraw.text((4, 4), text, font=font, fill=(255, 255, 255, 255))
+            self._overlay_text_image = text_img
+            self._overlay_font = font
+            self._overlay_font_size = desired_font_size
+            # Compute position
+            text_x = int(cx - text_img.width / 2)
+            text_y = int(cy + radius + max(10, thickness))
+            self._overlay_text_pos = (text_x, text_y)
+            # Ensure cached size matches
+            self._overlay_cached_size = (w, h)
+        # Paste cached text
+        if self._overlay_text_image is not None:
+            img.paste(self._overlay_text_image, self._overlay_text_pos, self._overlay_text_image)
 
         # Convert back to torch tensor in (1, H, W, C), float32 in [0,1]
         img_rgb = img.convert("RGB")
@@ -368,6 +385,14 @@ class StreamDiffusion(Pipeline):
                     self.overlay_base_tensor = None
             else:
                 self.overlay_base_tensor = None
+            # Reset caches for overlay assets
+            self._overlay_cached_size = (0, 0)
+            self._overlay_base_image_color = None
+            self._overlay_base_image_gray = None
+            self._overlay_font = None
+            self._overlay_font_size = 0
+            self._overlay_text_image = None
+            self._overlay_text_pos = (0, 0)
             prev_params = self.params
             # Set pipe to None to avoid accidental usage under lock
             self.pipe = None
@@ -398,6 +423,13 @@ class StreamDiffusion(Pipeline):
             # Clear overlay session state
             self.overlay_start_wallclock = 0.0
             self.overlay_base_tensor = None
+            self._overlay_cached_size = (0, 0)
+            self._overlay_base_image_color = None
+            self._overlay_base_image_gray = None
+            self._overlay_font = None
+            self._overlay_font_size = 0
+            self._overlay_text_image = None
+            self._overlay_text_pos = (0, 0)
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:
@@ -483,6 +515,13 @@ class StreamDiffusion(Pipeline):
             self.show_reloading_frame = True
             self.overlay_start_wallclock = 0.0
             self.overlay_base_tensor = None
+            self._overlay_cached_size = (0, 0)
+            self._overlay_base_image_color = None
+            self._overlay_base_image_gray = None
+            self._overlay_font = None
+            self._overlay_font_size = 0
+            self._overlay_text_image = None
+            self._overlay_text_pos = (0, 0)
 
 
 def _compute_controlnet_patch(
