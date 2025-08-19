@@ -4,7 +4,7 @@ import asyncio
 from typing import Dict, List, Optional, Any, cast
 
 import torch
-from streamdiffusion import StreamDiffusionWrapper, list_preprocessors
+from streamdiffusion import StreamDiffusionWrapper
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
@@ -42,8 +42,10 @@ class StreamDiffusion(Pipeline):
         img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
-        # Noop if ControlNets are not enabled
-        self.pipe.update_control_image_efficient(img_tensor)
+        if self.applied_controlnets:
+            for i, cn in enumerate(self.applied_controlnets):
+                if cn.enabled and cn.conditioning_scale > 0:
+                    self.pipe.update_control_image(i, img_tensor)
 
         if self.first_frame:
             self.first_frame = False

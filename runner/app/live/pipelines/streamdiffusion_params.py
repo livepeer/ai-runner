@@ -1,7 +1,7 @@
 from typing import Dict, List, Literal, Optional, Any, Tuple
 
 from pydantic import BaseModel, Field, model_validator
-from streamdiffusion.controlnet.preprocessors import list_preprocessors
+from streamdiffusion import list_preprocessors
 
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 

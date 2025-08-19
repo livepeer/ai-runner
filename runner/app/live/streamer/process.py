@@ -223,6 +223,7 @@ class PipelineProcess:
                 continue
             except Exception as e:
                 self._report_error(f"Error processing input frame: {e}")
+                logging.exception(e)
 
     async def _output_loop(self, pipeline: Pipeline):
         while not self.is_done():
