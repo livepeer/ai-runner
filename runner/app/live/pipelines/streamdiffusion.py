@@ -15,7 +15,7 @@ from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 AVAILABLE_PREPROCESSORS = list_preprocessors()
 
 class ControlNetConfig(BaseModel):
-    """ControlNet configuration model"""
+    """ControlNet configuration model for guided image generation"""
     model_id: Literal[
         "thibaud/controlnet-sd21-openpose-diffusers",
         "thibaud/controlnet-sd21-hed-diffusers",
@@ -23,12 +23,30 @@ class ControlNetConfig(BaseModel):
         "thibaud/controlnet-sd21-depth-diffusers",
         "thibaud/controlnet-sd21-color-diffusers"
     ]
+    """ControlNet model identifier. Each model provides different types of conditioning:
+    - openpose: Human pose estimation for figure control
+    - hed: Holistically-nested edge detection for line art control
+    - canny: Canny edge detection for detailed edge control
+    - depth: Depth estimation for 3D spatial control
+    - color: Color palette control for hue/saturation guidance"""
+
     conditioning_scale: float = 1.0
+    """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
+
     preprocessor: Optional[str] = None
+    """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
+
     preprocessor_params: Optional[Dict[str, Any]] = None
+    """Additional parameters for the preprocessor. For example, canny edge detection uses 'low_threshold' and 'high_threshold' values."""
+
     enabled: bool = True
+    """Whether this ControlNet is active. Disabled ControlNets are not loaded."""
+
     control_guidance_start: float = 0.0
+    """Fraction of the denoising process (0.0-1.0) when ControlNet guidance begins. 0.0 means guidance starts from the beginning."""
+
     control_guidance_end: float = 1.0
+    """Fraction of the denoising process (0.0-1.0) when ControlNet guidance ends. 1.0 means guidance continues until the end."""
 
 
 class StreamDiffusionParams(BaseModel):
