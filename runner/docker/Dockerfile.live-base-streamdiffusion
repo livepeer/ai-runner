@@ -44,10 +44,10 @@ RUN conda run -n comfystream pip install --no-cache-dir --upgrade --root-user-ac
     cuda-python==12.9.0 \
     cuda-bindings==12.9.1 \
     cuda-pathfinder==1.1.0 \
-    tensorrt==10.9.0.34 \
-    tensorrt-cu12-bindings==10.9.0.34 \
-    tensorrt-cu12-libs==10.9.0.34 \
-    polygraphy==0.49.20 \
+    tensorrt==10.12.0.36 \
+    tensorrt-cu12-bindings==10.12.0.36 \
+    tensorrt-cu12-libs==10.12.0.36 \
+    polygraphy==0.49.24 \
     onnx-graphsurgeon==0.5.8 \
     controlnet-aux==0.0.10 \
     mediapipe==0.10.21
@@ -58,7 +58,7 @@ RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamD
 
 # Force reinstall correct versions in case StreamDiffusion upgraded them
 RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
-    tensorrt==10.9.0.34 \
+    tensorrt==10.12.0.36 \
     diffusers==0.32.2 \
     accelerate==1.7.0 \
     transformers==4.52.0 \
