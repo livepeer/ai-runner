@@ -8,7 +8,12 @@ from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 AVAILABLE_PREPROCESSORS = list_preprocessors()
 
 class ControlNetConfig(BaseModel):
-    """ControlNet configuration model for guided image generation"""
+    """
+    ControlNet configuration model for guided image generation.
+
+    **Dynamic updates limited to conditioning_scale changes only; cannot add
+    new ControlNets or change model_id/preprocessor/params without reload.**
+    """
     model_id: Literal[
         "thibaud/controlnet-sd21-openpose-diffusers",
         "thibaud/controlnet-sd21-hed-diffusers",
@@ -43,6 +48,15 @@ class ControlNetConfig(BaseModel):
 
 
 class StreamDiffusionParams(BaseModel):
+    """
+    StreamDiffusion pipeline parameters.
+
+    **Dynamically updatable parameters** (no reload required):
+    - prompt, guidance_scale, delta, num_inference_steps, t_index_list, seed,
+      controlnets.conditioning_scale
+
+    All other parameters require a full pipeline reload when changed.
+    """
     class Config:
         extra = "forbid"
 
