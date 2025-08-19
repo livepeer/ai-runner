@@ -210,6 +210,9 @@ class StreamDiffusionParams(BaseModel):
                     raise ValueError(f"Duplicate controlnet model_id: {cn.model_id}")
                 seen_model_ids.add(cn.model_id)
 
+                if cn.preprocessor not in AVAILABLE_PREPROCESSORS:
+                    raise ValueError(f"Unrecognized preprocessor: '{cn.preprocessor}'. Must be one of {AVAILABLE_PREPROCESSORS}")
+
         return model
 
 
@@ -432,8 +435,6 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             preprocessor_params.update({
                 "engine_path": engine_path,
             })
-        elif cn_config.preprocessor not in AVAILABLE_PREPROCESSORS:
-            raise ValueError(f"Unrecognized preprocessor: '{cn_config.preprocessor}'. Must be one of {AVAILABLE_PREPROCESSORS}")
 
         controlnet_config = {
             'model_id': cn_config.model_id,
