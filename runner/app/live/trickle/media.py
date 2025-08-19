@@ -8,7 +8,7 @@ import threading
 from .trickle_subscriber import TrickleSubscriber
 from .trickle_publisher import TricklePublisher
 from .decoder import decode_av
-from .encoder import encode_av
+from .encoder import encode_av, reset_encoder
 
 MAX_DECODER_RETRIES = 3
 DECODER_RETRY_RESET_SECONDS = 120 # reset retry counter after 2 minutes
@@ -116,9 +116,10 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
     # encode_av has a tendency to crash, so restart as necessary
     retryCount = 0
     last_retry_time = time.time()
+    recovery_bag = {} # opaque bag of stuff to help recover from encoder crashes
     while retryCount < MAX_ENCODER_RETRIES:
         try:
-            encode_av(image_generator, sync_callback, get_metadata, **kwargs)
+            encode_av(image_generator, sync_callback, get_metadata, recovery_bag, **kwargs)
             break  # clean exit
         except Exception as exc:
             current_time = time.time()
@@ -132,6 +133,10 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
                 logging.exception(f"Error in encode_av, retrying {retryCount}/{MAX_ENCODER_RETRIES}", stack_info=True)
             else:
                 logging.exception("Error in encode_av, maximum retries reached", stack_info=True)
+
+            # first reset the encoder before closing pipes
+            reset_encoder(recovery_bag)
+
             # close leftover writer ends of any pipes to prevent hanging
             pipe_count = 0
             total_pipes = 0

@@ -25,6 +25,7 @@ def encode_av(
     input_queue,
     output_callback,
     get_metadata,
+    recovery_bag: dict, # opaque bag of stuff to better manage crash recovery
     video_codec: Optional[str] ='libx264',
     audio_codec: Optional[str] ='libfdk_aac'
 ):
@@ -47,8 +48,14 @@ def encode_av(
         output_callback(read_file, write_file, url)
         return write_file
 
+    # Check for proper crash recovery
+    prev_container = recovery_bag.get('container')
+    if prev_container is not None:
+        raise ValueError("encoder was not properly reset")
+
     # Open the output container in write mode
     output_container = av.open("%d.ts", format='segment', mode='w', io_open=custom_io_open)
+    recovery_bag['container'] = output_container
 
     # Create corresponding output streams if input streams exist
     output_video_stream = None
@@ -57,7 +64,7 @@ def encode_av(
     if video_meta and video_codec:
         # Add a new stream to the output using the desired video codec
         target_width = video_meta.get('target_width', DEFAULT_WIDTH)
-        target_height = video_meta.get('target_height', DEFAULT_HEIGHT)  
+        target_height = video_meta.get('target_height', DEFAULT_HEIGHT)
         video_opts = { 'video_size':f'{target_width}x{target_height}', 'bf':'0' }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
@@ -211,6 +218,7 @@ def encode_av(
 
     # Close the output container to finish writing
     output_container.close()
+    recovery_bag['container'] = None
 
 def rescale_ts(pts: int, orig_tb: Fraction, dest_tb: Fraction):
     if orig_tb == dest_tb:
@@ -230,3 +238,15 @@ def log_frame_timestamps(frame_type: str, frame: InputFrame):
     log_duration('pre_process_frame', 'post_process_frame')
     log_duration('post_process_frame', 'frame_end')
     log_duration('frame_init', 'frame_end')
+
+def reset_encoder(recovery_bag: dict):
+    prev_container = recovery_bag.get('container')
+    if prev_container is None:
+        logging.info("Tried to reset a non-crashed encoder; ignoring")
+        return
+    try:
+        prev_container.close()
+    except Exception:
+        logging.exception(f"Problem closing previous container", stack_info=True)
+    finally:
+        recovery_bag['container'] = None
