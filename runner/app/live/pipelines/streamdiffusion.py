@@ -11,9 +11,6 @@ from streamdiffusion.controlnet.preprocessors import list_preprocessors
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
-import time
-import numpy as np
-from PIL import Image, ImageDraw, ImageFont
 from .loading_overlay import LoadingOverlayRenderer
 
 AVAILABLE_PREPROCESSORS = list_preprocessors()
@@ -172,11 +169,6 @@ class StreamDiffusion(Pipeline):
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
         self.is_reloading: bool = False
-        self.last_output_tensor: Optional[torch.Tensor] = None  # (1, H, W, C) float32 [0,1] CPU
-        self.last_output_wallclock: float = 0.0
-        self.show_reloading_frame: bool = True
-        self.overlay_start_wallclock: float = 0.0
-        self.overlay_base_tensor: Optional[torch.Tensor] = None  # frozen base used during a reload session
         # Loading overlay renderer (encapsulates caching and drawing)
         self._overlay_renderer = LoadingOverlayRenderer()
 
@@ -188,38 +180,32 @@ class StreamDiffusion(Pipeline):
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
         # Determine whether to render overlay without holding the lock during rendering
         want_overlay = False
-        overlay_start = 0.0
-        overlay_base = None
+        unavailable = False
         async with self._pipeline_lock:
-            if self.is_reloading or self.pipe is None:
-                if self.show_reloading_frame:
-                    want_overlay = True
-                    overlay_start = self.overlay_start_wallclock
-                    overlay_base = self.overlay_base_tensor
+            unavailable = self.is_reloading or self.pipe is None
+            if unavailable and self._overlay_renderer.is_active():
+                want_overlay = True
         if want_overlay:
-            out_tensor = await asyncio.to_thread(
-                self._overlay_renderer.render, frame, overlay_start, overlay_base
-            )
+            out_tensor = await asyncio.to_thread(self._overlay_renderer.render, frame)
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
             await self.frame_queue.put(output)
+            return
+        if unavailable:
+            # Freeze by dropping this frame if overlay is disabled
             return
 
         # Normal processing path remains serialized under the lock
         async with self._pipeline_lock:
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
+            # Update last-frame cache for potential future overlays
+            try:
+                self._overlay_renderer.update_last_frame(out_tensor)
+            except Exception:
+                pass
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
             await self.frame_queue.put(output)
 
-    async def _try_render_loading_overlay(self, frame: VideoFrame, request_id: str) -> bool:
-        """If reloading/unavailable, either enqueue overlay (if enabled) or freeze (drop) this frame. Returns True if handled."""
-        if self.is_reloading or self.pipe is None:
-            if self.show_reloading_frame:
-                out_tensor = await asyncio.to_thread(self._render_loading_overlay, frame)
-                output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
-                await self.frame_queue.put(output)
-            # else: freeze by not enqueuing any output for this input frame
-            return True
-        return False
+    # Deprecated helper removed; overlay handling is encapsulated by renderer
 
     def process_tensor_sync(self, img_tensor: torch.Tensor):
         if self.pipe is None:
@@ -245,23 +231,10 @@ class StreamDiffusion(Pipeline):
 
         # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
         out_bhwc = out_tensor.permute(0, 2, 3, 1)
-        # Cache last output on CPU for use during reload overlays
-        try:
-            with torch.no_grad():
-                self.last_output_tensor = out_bhwc.detach().cpu().contiguous()
-                self.last_output_wallclock = time.time()
-        except Exception:
-            # Best-effort cache; ignore failures
-            pass
+        # Overlay renderer maintains its own last-frame cache
         return out_bhwc
 
-    def _render_loading_overlay(self, frame: VideoFrame) -> torch.Tensor:
-        """Render a loading overlay on top of the last output frame without exposing the incoming pixels."""
-        return self._overlay_renderer.render(
-            frame=frame,
-            overlay_start_wallclock=self.overlay_start_wallclock,
-            overlay_base_tensor=self.overlay_base_tensor,
-        )
+    # No direct overlay rendering here; delegated to renderer
 
     async def get_processed_video_frame(self) -> VideoOutput:
         return await self.frame_queue.get()
@@ -283,21 +256,8 @@ class StreamDiffusion(Pipeline):
             # Signal reload and release the lock for heavy work
             logging.info(f"Resetting pipeline for params change")
             self.is_reloading = True
-            # reflect user preference immediately for overlay during reload
-            self.show_reloading_frame = new_params.show_reloading_frame
-            # Snapshot overlay base at reload start; only use last frame if it is recent (<=5s)
-            now = time.time()
-            self.overlay_start_wallclock = now
-            if self.last_output_tensor is not None and (now - self.last_output_wallclock) <= 5.0:
-                try:
-                    with torch.no_grad():
-                        self.overlay_base_tensor = self.last_output_tensor.detach().cpu().contiguous()
-                except Exception:
-                    self.overlay_base_tensor = None
-            else:
-                self.overlay_base_tensor = None
-            # Reset caches for overlay assets within the renderer
-            self._overlay_renderer.reset_session(self.overlay_start_wallclock)
+            # Begin overlay session according to user preference
+            self._overlay_renderer.begin_reload(show_overlay=new_params.show_reloading_frame)
             prev_params = self.params
             # Set pipe to None to avoid accidental usage under lock
             self.pipe = None
@@ -324,11 +284,8 @@ class StreamDiffusion(Pipeline):
             self.applied_controlnets = chosen_params.controlnets
             self.first_frame = True
             self.is_reloading = False
-            self.show_reloading_frame = chosen_params.show_reloading_frame
-            # Clear overlay session state
-            self.overlay_start_wallclock = 0.0
-            self.overlay_base_tensor = None
-            self._overlay_renderer.reset_session(0.0)
+            # End overlay session
+            self._overlay_renderer.end_reload()
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:
@@ -377,7 +334,7 @@ class StreamDiffusion(Pipeline):
 
         # Special-case: only UI flag changed -> do not reset first_frame
         if changed_keys == {'show_reloading_frame'}:
-            self.show_reloading_frame = new_params.show_reloading_frame
+            self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
             self.params = new_params
             return True
 
@@ -397,7 +354,7 @@ class StreamDiffusion(Pipeline):
             self.applied_controlnets = patched_controlnets
 
         # Apply UI flag change along with other dynamic changes
-        self.show_reloading_frame = new_params.show_reloading_frame
+        self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
         self.params = new_params
         self.first_frame = True
         return True
@@ -409,11 +366,7 @@ class StreamDiffusion(Pipeline):
             self.applied_controlnets = None
             self.frame_queue = asyncio.Queue()
             self.is_reloading = False
-            self.last_output_tensor = None
-            self.last_output_wallclock = 0.0
-            self.show_reloading_frame = True
-            self.overlay_start_wallclock = 0.0
-            self.overlay_base_tensor = None
+            self._overlay_renderer.end_reload()
             self._overlay_renderer.reset_session(0.0)
 
 
