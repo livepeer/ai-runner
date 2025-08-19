@@ -217,15 +217,7 @@ function build_streamdiffusion_tensorrt() {
   docker run --rm -v ./models:/models --gpus all \
     -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
-    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
-              --models 'stabilityai/sd-turbo varb15/PerfectPhotonV2.1' \
-              --opt-timesteps '3' \
-              --min-timesteps '1' \
-              --max-timesteps '4' \
-              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile' \
-              --build-depth-anything \
-              --build-pose \
-              && \
+    bash -c "/workspace/miniconda3/envs/comfystream/bin/python ./app/tools/streamdiffusion/build_sd15_tensorrt.py \
             chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed streamdiffusion tensorrt"
