@@ -6,11 +6,8 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(__file__, "..", "..", "..", "live")))
 
-from pipelines.streamdiffusion import (
-    load_streamdiffusion_sync,
-    StreamDiffusionParams,
-    ControlNetConfig,
-)
+from pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig
+from pipelines.streamdiffusion import load_streamdiffusion_sync
 
 def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNetConfig]:
     """
