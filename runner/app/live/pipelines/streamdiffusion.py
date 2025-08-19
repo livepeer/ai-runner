@@ -40,40 +40,79 @@ class StreamDiffusionParams(BaseModel):
         "stabilityai/sd-turbo",
         "KBlueLeaf/kohaku-v2.1",
     ] = "stabilityai/sd-turbo"
+    """Base U-Net model to use for generation."""
 
     # Generation parameters
     prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
+    """Text prompt describing the desired image. Can be a single string or weighted list of (prompt, weight) tuples."""
+
     prompt_interpolation_method: Literal["linear", "slerp"] = "slerp"
+    """Method for interpolating between multiple prompts. Slerp provides smoother transitions than linear."""
+
     normalize_prompt_weights: bool = True
+    """Whether to normalize prompt weights to sum to 1.0 for consistent generation."""
+
     negative_prompt: str = "blurry, low quality, flat, 2d"
+    """Text describing what to avoid in the generated image."""
+
     guidance_scale: float = 1.0
+    """Strength of prompt adherence. Higher values make the model follow the prompt more strictly."""
+
     delta: float = 0.7
+    """Delta sets per-frame denoising progress: lower delta means steadier, less flicker but slower/softer; higher delta means faster, sharper but more flicker/artifacts (often reduce CFG)."""
+
     num_inference_steps: int = 50
+    """Builds the full denoising schedule (the "grid" of possible refinement steps). Changing it changes what each step number (t_index_list value) means. Keep it fixed for a session and only adjust if you're deliberately redefining the schedule; if you do, proportionally remap your t_index_list. Typical range 10–200 with default being 50."""
+
     t_index_list: List[int] = [12, 20, 32]
+    """The ordered list of step indices from the num_inference_steps schedule to execute per frame. Each index is one model pass, so latency scales with the list length. Higher indices (e.g., 40–49 on a 50-step grid) mainly polish and preserve structure (lower flicker), while lower indices (<20) rewrite structure (more flicker, creative). Values must be non-decreasing, and each between 0 and num_inference_steps."""
 
     # Image dimensions
     width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024, multiple_of=64)
+    """Output image width in pixels. Must be divisible by 64 and between 384-1024."""
+
     height: int = Field(default=DEFAULT_HEIGHT, ge=384, le=1024, multiple_of=64)
+    """Output image height in pixels. Must be divisible by 64 and between 384-1024."""
 
     # LoRA settings
     lora_dict: Optional[Dict[str, float]] = None
+    """Dictionary mapping LoRA model paths to their weights for fine-tuning the base model."""
+
     use_lcm_lora: bool = True
+    """Whether to use Latent Consistency Model LoRA for faster inference."""
+
     lcm_lora_id: str = "latent-consistency/lcm-lora-sdv1-5"
+    """Identifier for the LCM LoRA model to use."""
 
     # Acceleration settings
     acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt"
+    """Acceleration method for inference. TensorRT provides the best performance but requires engine compilation."""
 
     # Processing settings
     use_denoising_batch: bool = True
+    """Whether to process multiple denoising steps in a single batch for efficiency."""
+
     do_add_noise: bool = True
+    """Whether to add noise to input frames before processing. Enabling this slightly re-noises each frame to improve temporal stability, reduce ghosting/texture sticking, and prevent drift; disabling can yield sharper, lower-latency results but may increase flicker and artifact accumulation over time."""
+
     seed: int | List[Tuple[int, float]] = 789
+    """Random seed for generation. Can be a single integer or weighted list of (seed, weight) tuples."""
+
     seed_interpolation_method: Literal["linear", "slerp"] = "linear"
+    """Method for interpolating between multiple seeds. Slerp provides smoother transitions than linear."""
+
     normalize_seed_weights: bool = True
+    """Whether to normalize seed weights to sum to 1.0 for consistent generation."""
 
     # Similar image filter settings
     enable_similar_image_filter: bool = False
+    """Whether to skip frames that are too similar to the previous output to reduce flicker."""
+
     similar_image_filter_threshold: float = 0.98
+    """Similarity threshold for the image filter. Higher values allow more variation between frames."""
+
     similar_image_filter_max_skip_frame: int = 10
+    """Maximum number of consecutive frames that can be skipped by the similarity filter."""
 
     # ControlNet settings
     controlnets: Optional[List[ControlNetConfig]] = [
@@ -126,6 +165,7 @@ class StreamDiffusionParams(BaseModel):
             control_guidance_end=1.0,
         )
     ]
+    """List of ControlNet configurations for guided generation. Each ControlNet provides different types of conditioning (pose, edges, depth, etc.)."""
 
     @model_validator(mode="after")
     @staticmethod
