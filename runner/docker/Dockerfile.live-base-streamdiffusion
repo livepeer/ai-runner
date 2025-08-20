@@ -52,7 +52,7 @@ WORKDIR /app
 
 # Disable HF hub connectivity to avoid internet access during runtime.
 # This is manually disabled on the script to download models (dl_checkpoints.sh)
-ENV HF_HUB_OFFLINE=1
+ENV HF_HUB_OFFLINE=0
 
 # Create symlink for where StreamDiffusion builds TensorRT engines at runtime
 RUN ln -s /models/StreamDiffusion--engines ./engines
