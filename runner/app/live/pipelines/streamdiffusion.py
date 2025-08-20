@@ -135,12 +135,12 @@ class StreamDiffusion(Pipeline):
             self.frame_queue = asyncio.Queue()
 
 
-def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
+def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[ControlNetConfig]]:
     """Prepare ControlNet configurations for wrapper"""
     if not params.controlnets:
         return None
 
-    controlnet_configs = []
+    controlnet_configs: List[ControlNetConfig] = []
     for cn_config in params.controlnets:
         if not cn_config.enabled:
             continue
@@ -163,15 +163,9 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
                 "engine_path": engine_path,
             })
 
-        controlnet_config = {
-            'model_id': cn_config.model_id,
-            'preprocessor': cn_config.preprocessor,
-            'conditioning_scale': cn_config.conditioning_scale,
-            'enabled': cn_config.enabled,
-            'preprocessor_params': preprocessor_params,
-            'control_guidance_start': cn_config.control_guidance_start,
-            'control_guidance_end': cn_config.control_guidance_end,
-        }
+        controlnet_config = cn_config.model_copy(
+            update={"preprocessor_params": preprocessor_params},
+        )
         controlnet_configs.append(controlnet_config)
 
     return controlnet_configs
