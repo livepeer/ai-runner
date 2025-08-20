@@ -14,6 +14,9 @@ class ControlNetConfig(BaseModel):
     **Dynamic updates limited to conditioning_scale changes only; cannot add
     new ControlNets or change model_id/preprocessor/params without reload.**
     """
+    class Config:
+        extra = "forbid"
+
     model_id: Literal[
         "thibaud/controlnet-sd21-openpose-diffusers",
         "thibaud/controlnet-sd21-hed-diffusers",
@@ -47,6 +50,93 @@ class ControlNetConfig(BaseModel):
 
     control_guidance_end: float = 1.0
     """Fraction of the denoising process (0.0-1.0) when ControlNet guidance ends. 1.0 means guidance continues until the end."""
+
+_DEFAULT_CONTROLNETS = [
+    ControlNetConfig(
+        model_id="thibaud/controlnet-sd21-openpose-diffusers",
+        conditioning_scale=0.711,
+        preprocessor="pose_tensorrt",
+        preprocessor_params={},
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="thibaud/controlnet-sd21-hed-diffusers",
+        conditioning_scale=0.2,
+        preprocessor="soft_edge",
+        preprocessor_params={},
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="thibaud/controlnet-sd21-canny-diffusers",
+        conditioning_scale=0.2,
+        preprocessor="canny",
+        preprocessor_params={
+            "low_threshold": 100,
+            "high_threshold": 200
+        },
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="thibaud/controlnet-sd21-depth-diffusers",
+        conditioning_scale=0.5,
+        preprocessor="depth_tensorrt",
+        preprocessor_params={},
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="thibaud/controlnet-sd21-color-diffusers",
+        conditioning_scale=0.2,
+        preprocessor="passthrough",
+        preprocessor_params={},
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+]
+class IPAdapterConfig(BaseModel):
+    """
+    IPAdapter configuration for style transfer.
+    """
+    class Config:
+        extra = "forbid"
+
+    style_image_key: str = "ipadapter_main"
+    """Key for style image in embedding cache"""
+
+    num_image_tokens: int = 4
+    """Number of image tokens (4 for standard, 16 for plus)"""
+
+    ipadapter_model_path: Literal[
+        "h94/IP-Adapter/models/ip-adapter_sd15.bin",
+        "h94/IP-Adapter-FaceID/ip-adapter-faceid_sd15.bin"
+    ] = "h94/IP-Adapter/models/ip-adapter_sd15.bin"
+    """Path to IPAdapter model file"""
+
+    image_encoder_path: Literal["h94/IP-Adapter/models/image_encoder"] = "h94/IP-Adapter/models/image_encoder"
+    """Path to image encoder model"""
+
+    is_faceid: bool = False
+    """Whether this is a FaceID-style IPAdapter"""
+
+    insightface_model_name: Optional[str] = None
+    """InsightFace model name for FaceID"""
+
+    scale: float = 1.0
+    """IPAdapter strength (0.0 = disabled, 1.0 = normal, 2.0 = strong)"""
+
+    weight_type: Optional[str] = None
+    """Weight distribution type for per-layer scaling"""
+
+    enabled: bool = True
+    """Whether this IPAdapter is active"""
 
 
 class StreamDiffusionParams(BaseModel):
@@ -142,57 +232,15 @@ class StreamDiffusionParams(BaseModel):
     """Maximum number of consecutive frames that can be skipped by the similarity filter."""
 
     # ControlNet settings
-    controlnets: Optional[List[ControlNetConfig]] = [
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-openpose-diffusers",
-            conditioning_scale=0.711,
-            preprocessor="pose_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-hed-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="soft_edge",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-canny-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="canny",
-            preprocessor_params={
-                "low_threshold": 100,
-                "high_threshold": 200
-            },
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-depth-diffusers",
-            conditioning_scale=0.5,
-            preprocessor="depth_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-color-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="passthrough",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        )
-    ]
+    controlnets: Optional[List[ControlNetConfig]] = _DEFAULT_CONTROLNETS
     """List of ControlNet configurations for guided generation. Each ControlNet provides different types of conditioning (pose, edges, depth, etc.)."""
+
+    # IPAdapter settings
+    ip_adapter: Optional[IPAdapterConfig] = IPAdapterConfig(enabled=False)
+    """IPAdapter configuration for style transfer."""
+
+    ip_adapter_style_image_url: str = "https://ipfs.livepeer.com/ipfs/bafkreibnlg3nfizj6ixc2flljo3pewo2ycnxitczawu4d5vmxkejnjwxca"
+    """URL to fetch the style image for IPAdapter."""
 
     @model_validator(mode="after")
     @staticmethod
