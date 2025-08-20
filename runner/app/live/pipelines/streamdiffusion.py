@@ -72,6 +72,11 @@ class StreamDiffusion(Pipeline):
             logging.info("No parameters changed")
             return
 
+        # Pre-fetch the style image before locking. This raises any errors early (e.g. invalid URL or image) and also
+        # allows us to fetch the style image without blocking inference with the lock.
+        if new_params.ip_adapter_style_image_url and new_params.ip_adapter_style_image_url != self._cached_style_image_url:
+            await self._fetch_style_image(new_params.ip_adapter_style_image_url)
+
         async with self._pipeline_lock:
             try:
                 if await self._update_params_dynamic(new_params):
@@ -151,12 +156,17 @@ class StreamDiffusion(Pipeline):
             return
 
         if style_image_url and style_image_url != self._cached_style_image_url:
-            image = await _load_image_from_url(style_image_url)
-            tensor = self.pipe.preprocess_image(image)
-            self._cached_style_image_tensor = tensor
-            self._cached_style_image_url = style_image_url
+            await self._fetch_style_image(style_image_url)
 
         self.pipe.update_style_image(self._cached_style_image_tensor)
+
+    async def _fetch_style_image(self, style_image_url: str):
+        assert self.pipe is not None
+
+        image = await _load_image_from_url(style_image_url)
+        tensor = self.pipe.preprocess_image(image)
+        self._cached_style_image_tensor = tensor
+        self._cached_style_image_url = style_image_url
 
     async def stop(self):
         async with self._pipeline_lock:
