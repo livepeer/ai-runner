@@ -94,10 +94,10 @@ class StreamDiffusion(Pipeline):
                 new_params = self.params or StreamDiffusionParams()
                 self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
 
+            await self._update_style_image(new_params)
+
             self.params = new_params
             self.first_frame = True
-
-            await self._update_style_image(new_params.ip_adapter_style_image_url)
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:
@@ -130,9 +130,10 @@ class StreamDiffusion(Pipeline):
             elif key == 'controlnets':
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
             elif key == 'ip_adapter':
-                update_kwargs['ipadapter_config'] = new_value.model_dump() if new_value else None
+                update_kwargs['ipadapter_config'] = new_value
                 changed_ipadapter_cfg = True
             elif key == 'ip_adapter_style_image_url':
+                # Do not set on update_kwargs, we'll update it separately.
                 changed_style_image = True
             else:
                 update_kwargs[key] = new_value
@@ -142,27 +143,34 @@ class StreamDiffusion(Pipeline):
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
         if changed_style_image or changed_ipadapter_cfg:
-            await self._update_style_image(new_params.ip_adapter_style_image_url)
+            await self._update_style_image(new_params)
 
         self.params = new_params
         self.first_frame = True
         return True
 
-    async def _update_style_image(self, style_image_url: Optional[str] = None) -> None:
+    async def _update_style_image(self, params: StreamDiffusionParams) -> None:
         assert self.pipe is not None
 
-        ipadapter_enabled = self.params is not None and self.params.ip_adapter is not None and self.params.ip_adapter.enabled
+        style_image_url = params.ip_adapter_style_image_url
+        ipadapter_enabled = params.ip_adapter is not None and params.ip_adapter.enabled
         if not ipadapter_enabled:
             return
 
         if style_image_url and style_image_url != self._cached_style_image_url:
             await self._fetch_style_image(style_image_url)
 
-        self.pipe.update_style_image(self._cached_style_image_tensor)
+        if self._cached_style_image_tensor is not None:
+            self.pipe.update_style_image(self._cached_style_image_tensor)
+        else:
+            logging.warning("[IPAdapter] No cached style image tensor; skipping style image update")
 
     async def _fetch_style_image(self, style_image_url: str):
-        assert self.pipe is not None
+        """
+        Pre-fetches the style image and caches it in self._cached_style_image_tensor.
 
+        If the pipe is not initialized, this just validates that the image in the URL is valid and return.
+        """
         image = await _load_image_from_url(style_image_url)
         tensor = self.pipe.preprocess_image(image)
         self._cached_style_image_tensor = tensor
@@ -247,7 +255,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         normalize_prompt_weights=params.normalize_prompt_weights,
         use_controlnet=True,
         controlnet_config=controlnet_config,
-        use_ipadapter=True,
+        use_ipadapter=(params.model_id not in ['stabilityai/sd-turbo']),
         ipadapter_config=ipadapter_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
