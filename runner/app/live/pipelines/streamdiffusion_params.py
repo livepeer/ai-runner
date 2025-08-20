@@ -1,15 +1,13 @@
 from typing import Dict, List, Literal, Optional, Any, Tuple
 
 from pydantic import BaseModel, Field, model_validator
-
-from streamdiffusion.config_types import ControlNetConfig as BaseControlNetConfig
 from streamdiffusion import list_preprocessors
 
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 AVAILABLE_PREPROCESSORS = list_preprocessors()
 
-class ControlNetConfig(BaseControlNetConfig):
+class ControlNetConfig(BaseModel):
     """
     ControlNet configuration model for guided image generation.
 
@@ -32,11 +30,23 @@ class ControlNetConfig(BaseControlNetConfig):
     - depth: Depth estimation for 3D spatial control
     - color: Color palette control for hue/saturation guidance"""
 
+    conditioning_scale: float = 1.0
+    """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
+
+    preprocessor: Optional[str] = None
+    """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
+
+    preprocessor_params: Optional[Dict[str, Any]] = None
+    """Additional parameters for the preprocessor. For example, canny edge detection uses 'low_threshold' and 'high_threshold' values."""
+
+    enabled: bool = True
+    """Whether this ControlNet is active. Disabled ControlNets are not loaded."""
+
     control_guidance_start: float = 0.0
-    """DEPRECATED: Maintained for backward compatibility; not used by the current pipeline."""
+    """Fraction of the denoising process (0.0-1.0) when ControlNet guidance begins. 0.0 means guidance starts from the beginning."""
 
     control_guidance_end: float = 1.0
-    """DEPRECATED: Maintained for backward compatibility; not used by the current pipeline."""
+    """Fraction of the denoising process (0.0-1.0) when ControlNet guidance ends. 1.0 means guidance continues until the end."""
 
 
 class StreamDiffusionParams(BaseModel):
