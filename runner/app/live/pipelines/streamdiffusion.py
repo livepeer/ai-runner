@@ -96,7 +96,7 @@ class StreamDiffusion(Pipeline):
             'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
-            'controlnets', # handled separately below
+            'controlnets', 'ip_adapter',
         }
 
         update_kwargs = {}
@@ -116,6 +116,8 @@ class StreamDiffusion(Pipeline):
                 update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
             elif key == 'controlnets':
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
+            elif key == 'ip_adapter':
+                update_kwargs['ipadapter_config'] = new_value.model_dump() if new_value else None
             else:
                 update_kwargs[key] = new_value
 
