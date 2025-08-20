@@ -5,6 +5,9 @@ from typing import Dict, List, Optional, Any, cast
 
 import torch
 from streamdiffusion import StreamDiffusionWrapper
+from PIL import Image
+from io import BytesIO
+import aiohttp
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
@@ -19,6 +22,8 @@ class StreamDiffusion(Pipeline):
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
+        self._cached_style_image_tensor: Optional[torch.Tensor] = None
+        self._cached_style_image_url: Optional[str] = None
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
@@ -85,8 +90,9 @@ class StreamDiffusion(Pipeline):
                 self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
 
             self.params = new_params
-            self.applied_controlnets = new_params.controlnets
             self.first_frame = True
+
+            await self._update_style_image(new_params.ip_adapter_style_image_url)
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:
@@ -96,11 +102,13 @@ class StreamDiffusion(Pipeline):
             'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
-            'controlnets', 'ip_adapter',
+            'controlnets', 'ip_adapter', 'ip_adapter_style_image_url'
         }
 
         update_kwargs = {}
         curr_params = self.params.model_dump() if self.params else {}
+        changed_ipadapter_cfg = False
+        changed_style_image = False
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
             if new_value == curr_value:
@@ -118,6 +126,9 @@ class StreamDiffusion(Pipeline):
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
             elif key == 'ip_adapter':
                 update_kwargs['ipadapter_config'] = new_value.model_dump() if new_value else None
+                changed_ipadapter_cfg = True
+            elif key == 'ip_adapter_style_image_url':
+                changed_style_image = True
             else:
                 update_kwargs[key] = new_value
 
@@ -125,10 +136,27 @@ class StreamDiffusion(Pipeline):
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
+        if changed_style_image or changed_ipadapter_cfg:
+            await self._update_style_image(new_params.ip_adapter_style_image_url)
 
         self.params = new_params
         self.first_frame = True
         return True
+
+    async def _update_style_image(self, style_image_url: Optional[str] = None) -> None:
+        assert self.pipe is not None
+
+        ipadapter_enabled = self.params is not None and self.params.ip_adapter is not None and self.params.ip_adapter.enabled
+        if not ipadapter_enabled:
+            return
+
+        if style_image_url and style_image_url != self._cached_style_image_url:
+            image = await _load_image_from_url(style_image_url)
+            tensor = self.pipe.preprocess_image(image)
+            self._cached_style_image_tensor = tensor
+            self._cached_style_image_url = style_image_url
+
+        self.pipe.update_style_image(self._cached_style_image_tensor)
 
     async def stop(self):
         async with self._pipeline_lock:
@@ -226,3 +254,15 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         seed_interpolation_method=params.seed_interpolation_method,
     )
     return pipe
+
+
+async def _load_image_from_url(url: str) -> Image.Image:
+    if not (url.startswith('http://') or url.startswith('https://')):
+        raise ValueError(f"Invalid image URL: {url}")
+
+    timeout = aiohttp.ClientTimeout(total=5)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            data = await resp.read()
+    return Image.open(BytesIO(data)).convert('RGB')
