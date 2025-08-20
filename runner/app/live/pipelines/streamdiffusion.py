@@ -182,6 +182,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
 def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1, max_batch_size = 4, engine_dir = "engines", build_engines_if_missing = False):
     # Prepare ControlNet configuration
     controlnet_config = _prepare_controlnet_configs(params)
+    ipadapter_config = params.ip_adapter.model_dump() if params.ip_adapter else None
 
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
@@ -206,8 +207,10 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
         normalize_seed_weights=params.normalize_seed_weights,
         normalize_prompt_weights=params.normalize_prompt_weights,
-        use_controlnet=bool(controlnet_config),
+        use_controlnet=True,
         controlnet_config=controlnet_config,
+        use_ipadapter=True,
+        ipadapter_config=ipadapter_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
     )
