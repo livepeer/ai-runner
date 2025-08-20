@@ -78,12 +78,6 @@ class IPAdapterConfig(BaseModel):
     class Config:
         extra = "forbid"
 
-    style_image_key: str = "ipadapter_main"
-    """Key for style image in embedding cache"""
-
-    num_image_tokens: int = 4
-    """Number of image tokens (4 for standard, 16 for plus)"""
-
     ipadapter_model_path: Literal[
         "h94/IP-Adapter/models/ip-adapter_sd15.bin",
         "h94/IP-Adapter-FaceID/ip-adapter-faceid_sd15.bin"
