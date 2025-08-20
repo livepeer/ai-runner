@@ -170,6 +170,7 @@ class PipelineProcess:
                 return pipeline
         except Exception as e:
             self._report_error(f"Error loading pipeline: {e}")
+            logging.exception(e)
             if not params:
                 # Already tried loading with default params
                 raise

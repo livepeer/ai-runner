@@ -30,7 +30,7 @@ RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
     xformers==0.0.30 --no-deps
 
 # Install StreamDiffusion lib into the comfystream environment
-ARG STREAMDIFFUSION_VERSION=9d92b9fad5eb0182a9146c294c6fdbf88df3e27a
+ARG STREAMDIFFUSION_VERSION=8bafafddaef0254298d171ca083333d0c6f20364
 RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt]
 
 # Pin versions of ONNX runtime which are too loose on streamdiffusion setup.py
@@ -52,7 +52,7 @@ WORKDIR /app
 
 # Disable HF hub connectivity to avoid internet access during runtime.
 # This is manually disabled on the script to download models (dl_checkpoints.sh)
-ENV HF_HUB_OFFLINE=0
+ENV HF_HUB_OFFLINE=1
 
 # Create symlink for where StreamDiffusion builds TensorRT engines at runtime
 RUN ln -s /models/StreamDiffusion--engines ./engines
