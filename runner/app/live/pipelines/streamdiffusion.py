@@ -172,6 +172,9 @@ class StreamDiffusion(Pipeline):
         If the pipe is not initialized, this just validates that the image in the URL is valid and return.
         """
         image = await _load_image_from_url(style_image_url)
+        if self.pipe is None:
+            return
+
         tensor = self.pipe.preprocess_image(image)
         self._cached_style_image_tensor = tensor
         self._cached_style_image_url = style_image_url
