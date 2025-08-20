@@ -16,7 +16,6 @@ class StreamDiffusion(Pipeline):
         super().__init__()
         self.pipe: Optional[StreamDiffusionWrapper] = None
         self.params: Optional[StreamDiffusionParams] = None
-        self.applied_controlnets: Optional[List[ControlNetConfig]] = None
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
@@ -42,8 +41,8 @@ class StreamDiffusion(Pipeline):
         img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
-        if self.applied_controlnets:
-            for i, cn in enumerate(self.applied_controlnets):
+        if self.params and self.params.controlnets:
+            for i, cn in enumerate(self.params.controlnets):
                 if cn.enabled and cn.conditioning_scale > 0:
                     self.pipe.update_control_image(i, img_tensor)
 
@@ -101,7 +100,6 @@ class StreamDiffusion(Pipeline):
         }
 
         update_kwargs = {}
-        patched_controlnets = None
         curr_params = self.params.model_dump() if self.params else {}
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
@@ -110,38 +108,21 @@ class StreamDiffusion(Pipeline):
             elif key not in updatable_params:
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
-            elif key == 'controlnets':
-                patched_controlnets = _compute_controlnet_patch(
-                    self.applied_controlnets, new_params.controlnets
-                )
-                if patched_controlnets is None:
-                    logging.info("Non-updatable parameter changed: controlnets")
-                    return False
-                # do not add controlnets to update_kwargs
-                continue
 
             # at this point, we know it's an updatable parameter that changed
             if key == 'prompt':
                 update_kwargs['prompt_list'] = [(new_value, 1.0)] if isinstance(new_value, str) else new_value
             elif key == 'seed':
                 update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
+            elif key == 'controlnets':
+                update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
             else:
                 update_kwargs[key] = new_value
 
-        logging.info(
-            f"Updating parameters dynamically update_kwargs={update_kwargs} patched_controlnets={patched_controlnets}"
-        )
+        logging.info(f"Updating parameters dynamically update_kwargs={update_kwargs}")
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
-        if patched_controlnets:
-            applied_controlnets = self.applied_controlnets or []
-            for i, patched in enumerate(patched_controlnets):
-                old_scale = applied_controlnets[i].conditioning_scale
-                if patched.conditioning_scale != old_scale:
-                    self.pipe.update_controlnet_scale(i, patched.conditioning_scale)
-            # Only update the applied_controlnets if we actually patched something
-            self.applied_controlnets = patched_controlnets
 
         self.params = new_params
         self.first_frame = True
@@ -151,59 +132,8 @@ class StreamDiffusion(Pipeline):
         async with self._pipeline_lock:
             self.pipe = None
             self.params = None
-            self.applied_controlnets = None
             self.frame_queue = asyncio.Queue()
 
-
-def _compute_controlnet_patch(
-    curr: Optional[List[ControlNetConfig]],
-    new: Optional[List[ControlNetConfig]],
-) -> Optional[List[ControlNetConfig]]:
-    """
-    Reconcile a controlnet update as a patch to the currently applied list. Returns None if the new controlnets cannot be
-    patched without a full reload. This is only possible if there are no new controlnets or config changes compared to
-    the currently applied list. Returns a list of patched controlnets if the update can be applied dynamically.
-    """
-    curr = curr or []
-    new = new or []
-
-    index_by_model: Dict[str, int] = {cn.model_id: i for i, cn in enumerate(curr)}
-
-    # Start with 0 scales for every current controlnet and apply scales of the new params below
-    patched_list = [
-        cn.model_copy(deep=True, update={"conditioning_scale": 0.0}) for cn in curr
-    ]
-    for new_cn in new:
-        if not new_cn.enabled or new_cn.conditioning_scale == 0:
-            # We can ignore disabled controlnets here and keep them out of the patched list (or with scale 0)
-            continue
-
-        idx = index_by_model.get(new_cn.model_id)
-        if idx is None:
-            logging.info(
-                f"Controlnet config changed, adding new controlnet. model_id={new_cn.model_id}"
-            )
-            return None
-
-        curr_cn = curr[idx]
-        if not curr_cn.enabled:
-            logging.info(
-                f"Controlnet config changed, enabling controlnet. model_id={new_cn.model_id}"
-            )
-            return None
-
-        patched_cn = curr_cn.model_copy(
-            update={"conditioning_scale": new_cn.conditioning_scale}
-        )
-        if patched_cn != new_cn:
-            logging.info(
-                f"Controlnet config changed, params updated. model_id={new_cn.model_id} previous={curr_cn} new={new_cn}"
-            )
-            return None
-
-        patched_list[idx] = patched_cn
-
-    return patched_list
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
