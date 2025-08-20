@@ -214,15 +214,34 @@ function build_streamdiffusion_tensorrt() {
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
 
+  # SD2.1 (turbo) models
   docker run --rm -v ./models:/models --gpus all \
     -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
-              --models 'stabilityai/sd-turbo varb15/PerfectPhotonV2.1' \
+              --models 'stabilityai/sd-turbo' \
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile' \
+              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
+              --build-depth-anything \
+              --build-pose \
+              && \
+            chown -R $(id -u):$(id -g) /models" ||
+    (
+      echo "failed streamdiffusion tensorrt"
+      exit 1
+    )
+  # SD1.5 models
+  docker run --rm -v ./models:/models --gpus all \
+    -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
+    --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
+    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
+              --models 'varb15/PerfectPhotonV2.1' \
+              --opt-timesteps '3' \
+              --min-timesteps '1' \
+              --max-timesteps '4' \
+              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile' \
               --build-depth-anything \
               --build-pose \
               && \
