@@ -144,6 +144,7 @@ function download_streamdiffusion_live_models() {
 
   # IP-Adapter (only required files)
   huggingface-cli download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" "models/image_encoder/*" --cache-dir models
+  huggingface-cli download h94/IP-Adapter-FaceID --include "ip-adapter-faceid_sd15.bin" --cache-dir models
 
   # Preprocessor models
   huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
