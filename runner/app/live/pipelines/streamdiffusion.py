@@ -138,7 +138,7 @@ class StreamDiffusion(Pipeline):
             else:
                 update_kwargs[key] = new_value
 
-        logging.info(f"Updating parameters dynamically update_kwargs={update_kwargs}")
+        logging.info(f"[StreamDiffusion] update_stream_params() params: {update_kwargs}")
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
@@ -161,6 +161,23 @@ class StreamDiffusion(Pipeline):
             await self._fetch_style_image(style_image_url)
 
         if self._cached_style_image_tensor is not None:
+            # Summarize tensor being sent to wrapper to avoid verbose logs
+            tensor = self._cached_style_image_tensor
+            try:
+                stats_tensor = tensor.detach()
+                tensor_summary = {
+                    "shape": tuple(stats_tensor.shape),
+                    "dtype": str(stats_tensor.dtype),
+                    "device": str(stats_tensor.device),
+                    "numel": int(stats_tensor.numel()),
+                    "mean": float(stats_tensor.float().mean().item()),
+                    "min": float(stats_tensor.min().item()),
+                    "max": float(stats_tensor.max().item()),
+                }
+            except Exception:
+                tensor_summary = {"error": "failed to compute tensor summary"}
+
+            logging.info(f"[IPAdapter] update_style_image() sending tensor: {tensor_summary}, url={self._cached_style_image_url}")
             self.pipe.update_style_image(self._cached_style_image_tensor)
         else:
             logging.warning("[IPAdapter] No cached style image tensor; skipping style image update")
@@ -233,47 +250,55 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
     controlnet_config = _prepare_controlnet_configs(params)
     ipadapter_config = params.ip_adapter.model_dump() if params.ip_adapter else None
 
-    pipe = StreamDiffusionWrapper(
-        model_id_or_path=params.model_id,
-        t_index_list=params.t_index_list,
-        # min_batch_size=min_batch_size,
-        # max_batch_size=max_batch_size,
-        lora_dict=params.lora_dict,
-        mode="img2img",
-        output_type="pt",
-        lcm_lora_id=params.lcm_lora_id,
-        frame_buffer_size=1,
-        width=params.width,
-        height=params.height,
-        warmup=10,
-        acceleration=params.acceleration,
-        do_add_noise=params.do_add_noise,
-        use_lcm_lora=params.use_lcm_lora,
-        enable_similar_image_filter=params.enable_similar_image_filter,
-        similar_image_filter_threshold=params.similar_image_filter_threshold,
-        similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
-        use_denoising_batch=params.use_denoising_batch,
-        seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
-        normalize_seed_weights=params.normalize_seed_weights,
-        normalize_prompt_weights=params.normalize_prompt_weights,
-        use_controlnet=True,
-        controlnet_config=controlnet_config,
-        use_ipadapter=(params.model_id not in ['stabilityai/sd-turbo']),
-        ipadapter_config=ipadapter_config,
-        engine_dir=engine_dir,
-        build_engines_if_missing=build_engines_if_missing,
-    )
+    wrapper_init_params = {
+        "model_id_or_path": params.model_id,
+        "t_index_list": params.t_index_list,
+        # "min_batch_size": min_batch_size,
+        # "max_batch_size": max_batch_size,
+        "lora_dict": params.lora_dict,
+        "mode": "img2img",
+        "output_type": "pt",
+        "lcm_lora_id": params.lcm_lora_id,
+        "frame_buffer_size": 1,
+        "width": params.width,
+        "height": params.height,
+        "warmup": 10,
+        "acceleration": params.acceleration,
+        "do_add_noise": params.do_add_noise,
+        "use_lcm_lora": params.use_lcm_lora,
+        "enable_similar_image_filter": params.enable_similar_image_filter,
+        "similar_image_filter_threshold": params.similar_image_filter_threshold,
+        "similar_image_filter_max_skip_frame": params.similar_image_filter_max_skip_frame,
+        "use_denoising_batch": params.use_denoising_batch,
+        "seed": params.seed if isinstance(params.seed, int) else params.seed[0][0],
+        "normalize_seed_weights": params.normalize_seed_weights,
+        "normalize_prompt_weights": params.normalize_prompt_weights,
+        "use_controlnet": True,
+        "controlnet_config": controlnet_config,
+        "use_ipadapter": (params.model_id not in ['stabilityai/sd-turbo']),
+        "ipadapter_config": ipadapter_config,
+        "engine_dir": engine_dir,
+        "build_engines_if_missing": build_engines_if_missing,
+    }
 
-    pipe.prepare(
-        prompt=params.prompt,
-        prompt_interpolation_method=params.prompt_interpolation_method,
-        negative_prompt=params.negative_prompt,
-        num_inference_steps=params.num_inference_steps,
-        guidance_scale=params.guidance_scale,
-        delta=params.delta,
-        seed_list=[(params.seed, 1.0)] if isinstance(params.seed, int) else params.seed,
-        seed_interpolation_method=params.seed_interpolation_method,
-    )
+    logging.info(f"[StreamDiffusion] Wrapper init params: {wrapper_init_params}")
+
+    pipe = StreamDiffusionWrapper(**wrapper_init_params)
+
+    prepare_params = {
+        "prompt": params.prompt,
+        "prompt_interpolation_method": params.prompt_interpolation_method,
+        "negative_prompt": params.negative_prompt,
+        "num_inference_steps": params.num_inference_steps,
+        "guidance_scale": params.guidance_scale,
+        "delta": params.delta,
+        "seed_list": [(params.seed, 1.0)] if isinstance(params.seed, int) else params.seed,
+        "seed_interpolation_method": params.seed_interpolation_method,
+    }
+
+    logging.info(f"[StreamDiffusion] prepare() params: {prepare_params}")
+
+    pipe.prepare(**prepare_params)
     return pipe
 
 
