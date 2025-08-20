@@ -1061,6 +1061,11 @@ components:
           title: Events Url
           description: URL for subscribing to events for pipeline status and logs
           default: ''
+        data_url:
+          type: string
+          title: Data Url
+          description: URL for publishing data for pipeline
+          default: ''
         request_id:
           type: string
           title: Request Id
