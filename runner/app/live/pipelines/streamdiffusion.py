@@ -112,8 +112,7 @@ class StreamDiffusion(Pipeline):
 
         update_kwargs = {}
         curr_params = self.params.model_dump() if self.params else {}
-        changed_ipadapter_cfg = False
-        changed_style_image = False
+        changed_ipadapter = False
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
             if new_value == curr_value:
@@ -130,11 +129,17 @@ class StreamDiffusion(Pipeline):
             elif key == 'controlnets':
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
             elif key == 'ip_adapter':
+                curr_enabled = self.params and self.params.ip_adapter and self.params.ip_adapter.enabled
+                new_enabled = new_params.ip_adapter and new_params.ip_adapter.enabled
+                if curr_enabled and not new_enabled:
+                    logging.info("Non-updatable parameter changed: IPAdapter config cannot be disabled")
+                    return False
+
                 update_kwargs['ipadapter_config'] = new_value
-                changed_ipadapter_cfg = True
+                changed_ipadapter = True
             elif key == 'ip_adapter_style_image_url':
                 # Do not set on update_kwargs, we'll update it separately.
-                changed_style_image = True
+                changed_ipadapter = True
             else:
                 update_kwargs[key] = new_value
 
@@ -142,7 +147,7 @@ class StreamDiffusion(Pipeline):
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
-        if changed_style_image or changed_ipadapter_cfg:
+        if changed_ipadapter:
             await self._update_style_image(new_params)
             # no-op update prompt to cause an IPAdapter reload
             self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
