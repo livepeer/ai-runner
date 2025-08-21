@@ -133,7 +133,7 @@ class StreamDiffusion(Pipeline):
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
             elif key == 'ip_adapter':
                 enabled = new_params.ip_adapter and new_params.ip_adapter.enabled
-                if not enabled:
+                if not enabled and new_value:
                     # Enabled flag is ignored, so we set scale to 0.0 to disable it.
                     new_value['scale'] = 0.0
 
