@@ -1,176 +1,31 @@
 import os
 import logging
 import asyncio
-from typing import Dict, List, Literal, Optional, Any, Tuple, cast
+from typing import Dict, List, Optional, Any, cast
 
 import torch
-from pydantic import BaseModel, Field, model_validator
 from streamdiffusion import StreamDiffusionWrapper
-from streamdiffusion.controlnet.preprocessors import list_preprocessors
+from PIL import Image
+from io import BytesIO
+import aiohttp
 
 from .interface import Pipeline
 from trickle import VideoFrame, VideoOutput
-from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
-from .loading_overlay import LoadingOverlayRenderer
 
-AVAILABLE_PREPROCESSORS = list_preprocessors()
-
-class ControlNetConfig(BaseModel):
-    """ControlNet configuration model"""
-    model_id: Literal[
-        "thibaud/controlnet-sd21-openpose-diffusers",
-        "thibaud/controlnet-sd21-hed-diffusers",
-        "thibaud/controlnet-sd21-canny-diffusers",
-        "thibaud/controlnet-sd21-depth-diffusers",
-        "thibaud/controlnet-sd21-color-diffusers"
-    ]
-    conditioning_scale: float = 1.0
-    preprocessor: Optional[str] = None
-    preprocessor_params: Optional[Dict[str, Any]] = None
-    enabled: bool = True
-    control_guidance_start: float = 0.0
-    control_guidance_end: float = 1.0
-
-
-class StreamDiffusionParams(BaseModel):
-    class Config:
-        extra = "forbid"
-
-    # Model configuration
-    model_id: Literal[
-        "stabilityai/sd-turbo",
-        "KBlueLeaf/kohaku-v2.1",
-    ] = "stabilityai/sd-turbo"
-
-    # Generation parameters
-    prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
-    prompt_interpolation_method: Literal["linear", "slerp"] = "slerp"
-    normalize_prompt_weights: bool = True
-    negative_prompt: str = "blurry, low quality, flat, 2d"
-    guidance_scale: float = 1.0
-    delta: float = 0.7
-    num_inference_steps: int = 50
-    t_index_list: List[int] = [12, 20, 32]
-
-    # Image dimensions
-    width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024, multiple_of=64)
-    height: int = Field(default=DEFAULT_HEIGHT, ge=384, le=1024, multiple_of=64)
-
-    # LoRA settings
-    lora_dict: Optional[Dict[str, float]] = None
-    use_lcm_lora: bool = True
-    lcm_lora_id: str = "latent-consistency/lcm-lora-sdv1-5"
-
-    # Acceleration settings
-    acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt"
-
-    # Processing settings
-    use_denoising_batch: bool = True
-    do_add_noise: bool = True
-    seed: int | List[Tuple[int, float]] = 789
-    seed_interpolation_method: Literal["linear", "slerp"] = "linear"
-    normalize_seed_weights: bool = True
-
-    # Similar image filter settings
-    enable_similar_image_filter: bool = False
-    similar_image_filter_threshold: float = 0.98
-    similar_image_filter_max_skip_frame: int = 10
-
-    # UI behavior
-    show_reloading_frame: bool = True
-
-    # ControlNet settings
-    controlnets: Optional[List[ControlNetConfig]] = [
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-openpose-diffusers",
-            conditioning_scale=0.711,
-            preprocessor="pose_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-hed-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="soft_edge",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-canny-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="canny",
-            preprocessor_params={
-                "low_threshold": 100,
-                "high_threshold": 200
-            },
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-depth-diffusers",
-            conditioning_scale=0.5,
-            preprocessor="depth_tensorrt",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        ),
-        ControlNetConfig(
-            model_id="thibaud/controlnet-sd21-color-diffusers",
-            conditioning_scale=0.2,
-            preprocessor="passthrough",
-            preprocessor_params={},
-            enabled=True,
-            control_guidance_start=0.0,
-            control_guidance_end=1.0,
-        )
-    ]
-
-    @model_validator(mode="after")
-    @staticmethod
-    def check_t_index_list(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
-        if not (1 <= len(model.t_index_list) <= 4):
-            raise ValueError("t_index_list must have between 1 and 4 elements")
-
-        for i, value in enumerate(model.t_index_list):
-            if not (0 <= value <= model.num_inference_steps):
-                raise ValueError(
-                    f"Each t_index_list value must be between 0 and num_inference_steps ({model.num_inference_steps}). Found {value} at index {i}."
-                )
-
-        for i in range(1, len(model.t_index_list)):
-            curr, prev = model.t_index_list[i], model.t_index_list[i - 1]
-            if curr < prev:
-                raise ValueError(f"t_index_list must be in non-decreasing order. {curr} < {prev}")
-
-        # Check for duplicate controlnet model_ids
-        if model.controlnets:
-            seen_model_ids = set()
-            for cn in model.controlnets:
-                if cn.model_id in seen_model_ids:
-                    raise ValueError(f"Duplicate controlnet model_id: {cn.model_id}")
-                seen_model_ids.add(cn.model_id)
-
-        return model
-
+from .streamdiffusion_params import StreamDiffusionParams, ControlNetConfig
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
         super().__init__()
         self.pipe: Optional[StreamDiffusionWrapper] = None
         self.params: Optional[StreamDiffusionParams] = None
-        self.applied_controlnets: Optional[List[ControlNetConfig]] = None
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
         self.is_reloading: bool = False
-        # Loading overlay renderer (encapsulates caching and drawing)
         self._overlay_renderer = LoadingOverlayRenderer()
+        self._cached_style_image_tensor: Optional[torch.Tensor] = None
+        self._cached_style_image_url: Optional[str] = None
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
@@ -217,8 +72,10 @@ class StreamDiffusion(Pipeline):
         img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
-        # Noop if ControlNets are not enabled
-        self.pipe.update_control_image_efficient(img_tensor)
+        if self.params and self.params.controlnets:
+            for i, cn in enumerate(self.params.controlnets):
+                if cn.enabled and cn.conditioning_scale > 0:
+                    self.pipe.update_control_image(i, img_tensor)
 
         if self.first_frame:
             self.first_frame = False
@@ -245,6 +102,11 @@ class StreamDiffusion(Pipeline):
             logging.info("No parameters changed")
             return
 
+        # Pre-fetch the style image before locking. This raises any errors early (e.g. invalid URL or image) and also
+        # allows us to fetch the style image without blocking inference with the lock.
+        if new_params.ip_adapter_style_image_url and new_params.ip_adapter_style_image_url != self._cached_style_image_url:
+            await self._fetch_style_image(new_params.ip_adapter_style_image_url)
+
         # First try a dynamic update while holding the lock
         async with self._pipeline_lock:
             try:
@@ -263,7 +125,6 @@ class StreamDiffusion(Pipeline):
             self.pipe = None
 
         # Perform heavy reload outside the lock so frames can continue with overlay
-        chosen_params = new_params
         new_pipe: Optional[StreamDiffusionWrapper] = None
         try:
             new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
@@ -272,16 +133,23 @@ class StreamDiffusion(Pipeline):
             try:
                 fallback_params = prev_params or StreamDiffusionParams()
                 new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, fallback_params)
-                chosen_params = fallback_params
+                new_params = fallback_params
             except Exception:
                 logging.exception("Failed to reload pipeline with fallback params", stack_info=True)
                 raise
 
+        if new_params.ip_adapter and new_params.ip_adapter.enabled:
+            await self._update_style_image(new_params)
+            # no-op update prompt to cause an IPAdapter reload
+            self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
+
+        self.params = new_params
+
         # Swap in the new pipe and clear reload flag
         async with self._pipeline_lock:
             self.pipe = new_pipe
-            self.params = chosen_params
-            self.applied_controlnets = chosen_params.controlnets
+            self.params = new_params
+            self.applied_controlnets = new_params.controlnets
             self.first_frame = True
             self.is_reloading = False
             # End overlay session
@@ -295,130 +163,98 @@ class StreamDiffusion(Pipeline):
             'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
-            'controlnets', # handled separately below
-            'show_reloading_frame',
+            'controlnets', 'ip_adapter', 'ip_adapter_style_image_url', 'show_reloading_frame'
         }
 
         update_kwargs = {}
-        patched_controlnets = None
         curr_params = self.params.model_dump() if self.params else {}
-        changed_keys = set()
+        changed_ipadapter = False
+        changed_reloading_frame = False
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
             if new_value == curr_value:
                 continue
-            changed_keys.add(key)
             if key not in updatable_params:
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
-            if key == 'controlnets':
-                patched_controlnets = _compute_controlnet_patch(
-                    self.applied_controlnets, new_params.controlnets
-                )
-                if patched_controlnets is None:
-                    logging.info("Non-updatable parameter changed: controlnets")
-                    return False
-                # do not add controlnets to update_kwargs
-                continue
-            if key == 'show_reloading_frame':
-                # Will apply below; do not add to update_kwargs
-                continue
 
             # at this point, we know it's an updatable parameter that changed
             if key == 'prompt':
                 update_kwargs['prompt_list'] = [(new_value, 1.0)] if isinstance(new_value, str) else new_value
             elif key == 'seed':
                 update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
+            elif key == 'controlnets':
+                update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
+            elif key == 'ip_adapter':
+                enabled = new_params.ip_adapter and new_params.ip_adapter.enabled
+                if not enabled and new_value:
+                    # Enabled flag is ignored, so we set scale to 0.0 to disable it.
+                    new_value['scale'] = 0.0
+
+                update_kwargs['ipadapter_config'] = new_value
+                changed_ipadapter = True
+            elif key == 'ip_adapter_style_image_url':
+                # Do not set on update_kwargs, we'll update it separately.
+                changed_ipadapter = True
+            elif key == 'show_reloading_frame':
+                changed_reloading_frame = True
             else:
                 update_kwargs[key] = new_value
 
-        # Special-case: only UI flag changed -> do not reset first_frame
-        if changed_keys == {'show_reloading_frame'}:
-            self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
-            self.params = new_params
-            return True
-
-        logging.info(
-            f"Updating parameters dynamically update_kwargs={update_kwargs} patched_controlnets={patched_controlnets}"
-        )
+        logging.info(f"Updating parameters dynamically update_kwargs={update_kwargs}")
 
         if update_kwargs:
             self.pipe.update_stream_params(**update_kwargs)
-        if patched_controlnets:
-            applied_controlnets = self.applied_controlnets or []
-            for i, patched in enumerate(patched_controlnets):
-                old_scale = applied_controlnets[i].conditioning_scale
-                if patched.conditioning_scale != old_scale:
-                    self.pipe.update_controlnet_scale(i, patched.conditioning_scale)
-            # Only update the applied_controlnets if we actually patched something
-            self.applied_controlnets = patched_controlnets
+        if changed_ipadapter:
+            await self._update_style_image(new_params)
+            # no-op update prompt to cause an IPAdapter reload
+            self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
+        if changed_reloading_frame:
+            self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
 
-        # Apply UI flag change along with other dynamic changes
-        self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
         self.params = new_params
         self.first_frame = True
         return True
+
+    async def _update_style_image(self, params: StreamDiffusionParams) -> None:
+        assert self.pipe is not None
+
+        style_image_url = params.ip_adapter_style_image_url
+        ipadapter_enabled = params.ip_adapter is not None and params.ip_adapter.enabled
+        if not ipadapter_enabled:
+            return
+
+        if style_image_url and style_image_url != self._cached_style_image_url:
+            await self._fetch_style_image(style_image_url)
+
+        if self._cached_style_image_tensor is not None:
+            self.pipe.update_style_image(self._cached_style_image_tensor)
+        else:
+            logging.warning("[IPAdapter] No cached style image tensor; skipping style image update")
+
+    async def _fetch_style_image(self, style_image_url: str):
+        """
+        Pre-fetches the style image and caches it in self._cached_style_image_tensor.
+
+        If the pipe is not initialized, this just validates that the image in the URL is valid and return.
+        """
+        image = await _load_image_from_url(style_image_url)
+        if self.pipe is None:
+            return
+
+        tensor = self.pipe.preprocess_image(image)
+        self._cached_style_image_tensor = tensor
+        self._cached_style_image_url = style_image_url
 
     async def stop(self):
         async with self._pipeline_lock:
             self.pipe = None
             self.params = None
-            self.applied_controlnets = None
             self.frame_queue = asyncio.Queue()
             self.is_reloading = False
             self._overlay_renderer.end_reload()
             self._overlay_renderer.reset_session(0.0)
 
-
-def _compute_controlnet_patch(
-    curr: Optional[List[ControlNetConfig]],
-    new: Optional[List[ControlNetConfig]],
-) -> Optional[List[ControlNetConfig]]:
-    """
-    Reconcile a controlnet update as a patch to the currently applied list. Returns None if the new controlnets cannot be
-    patched without a full reload. This is only possible if there are no new controlnets or config changes compared to
-    the currently applied list. Returns a list of patched controlnets if the update can be applied dynamically.
-    """
-    curr = curr or []
-    new = new or []
-
-    index_by_model: Dict[str, int] = {cn.model_id: i for i, cn in enumerate(curr)}
-
-    # Start with 0 scales for every current controlnet and apply scales of the new params below
-    patched_list = [
-        cn.model_copy(deep=True, update={"conditioning_scale": 0.0}) for cn in curr
-    ]
-    for new_cn in new:
-        if not new_cn.enabled or new_cn.conditioning_scale == 0:
-            # We can ignore disabled controlnets here and keep them out of the patched list (or with scale 0)
-            continue
-
-        idx = index_by_model.get(new_cn.model_id)
-        if idx is None:
-            logging.info(
-                f"Controlnet config changed, adding new controlnet. model_id={new_cn.model_id}"
-            )
-            return None
-
-        curr_cn = curr[idx]
-        if not curr_cn.enabled:
-            logging.info(
-                f"Controlnet config changed, enabling controlnet. model_id={new_cn.model_id}"
-            )
-            return None
-
-        patched_cn = curr_cn.model_copy(
-            update={"conditioning_scale": new_cn.conditioning_scale}
-        )
-        if patched_cn != new_cn:
-            logging.info(
-                f"Controlnet config changed, params updated. model_id={new_cn.model_id} previous={curr_cn} new={new_cn}"
-            )
-            return None
-
-        patched_list[idx] = patched_cn
-
-    return patched_list
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
@@ -447,8 +283,6 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             preprocessor_params.update({
                 "engine_path": engine_path,
             })
-        elif cn_config.preprocessor not in AVAILABLE_PREPROCESSORS:
-            raise ValueError(f"Unrecognized preprocessor: '{cn_config.preprocessor}'. Must be one of {AVAILABLE_PREPROCESSORS}")
 
         controlnet_config = {
             'model_id': cn_config.model_id,
@@ -467,12 +301,13 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
 def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1, max_batch_size = 4, engine_dir = "engines", build_engines_if_missing = False):
     # Prepare ControlNet configuration
     controlnet_config = _prepare_controlnet_configs(params)
+    ipadapter_config = params.ip_adapter.model_dump() if params.ip_adapter else None
 
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
         t_index_list=params.t_index_list,
-        min_batch_size=min_batch_size,
-        max_batch_size=max_batch_size,
+        # min_batch_size=min_batch_size,
+        # max_batch_size=max_batch_size,
         lora_dict=params.lora_dict,
         mode="img2img",
         output_type="pt",
@@ -491,8 +326,10 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
         normalize_seed_weights=params.normalize_seed_weights,
         normalize_prompt_weights=params.normalize_prompt_weights,
-        use_controlnet=bool(controlnet_config),
+        use_controlnet=True,
         controlnet_config=controlnet_config,
+        use_ipadapter=(params.model_id not in ['stabilityai/sd-turbo']),
+        ipadapter_config=ipadapter_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
     )
@@ -508,3 +345,15 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         seed_interpolation_method=params.seed_interpolation_method,
     )
     return pipe
+
+
+async def _load_image_from_url(url: str) -> Image.Image:
+    if not (url.startswith('http://') or url.startswith('https://')):
+        raise ValueError(f"Invalid image URL: {url}")
+
+    timeout = aiohttp.ClientTimeout(total=5)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.get(url) as resp:
+            resp.raise_for_status()
+            data = await resp.read()
+    return Image.open(BytesIO(data)).convert('RGB')

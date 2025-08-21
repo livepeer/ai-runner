@@ -12,5 +12,5 @@ nvidia-ml-py==12.560.30
 pynvml==12.0.0
 opencv-python==4.10.0.84
 av==14.4.0
-peft==0.15.2
+peft==0.17.0
 pydantic==2.11.7

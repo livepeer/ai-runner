@@ -129,15 +129,22 @@ function download_streamdiffusion_live_models() {
   printf "\nDownloading StreamDiffusion live models...\n"
 
   # StreamDiffusion
-  huggingface-cli download KBlueLeaf/kohaku-v2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download varb15/PerfectPhotonV2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
-  # ControlNet models
+  # SD2.1 (turbo) ControlNet models
   huggingface-cli download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download thibaud/controlnet-sd21-hed-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download thibaud/controlnet-sd21-canny-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download thibaud/controlnet-sd21-depth-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download thibaud/controlnet-sd21-color-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  # SD1.5 controlnet models
+  huggingface-cli download lllyasviel/control_v11f1p_sd15_depth --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download lllyasviel/control_v11f1e_sd15_tile --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+
+  # IP-Adapter (only required files)
+  huggingface-cli download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" "models/image_encoder/*" --cache-dir models
+  huggingface-cli download h94/IP-Adapter-FaceID --include "ip-adapter-faceid_sd15.bin" --cache-dir models
 
   # Preprocessor models
   huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
@@ -211,15 +218,34 @@ function build_streamdiffusion_tensorrt() {
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
 
+  # SD2.1 (turbo) models
   docker run --rm -v ./models:/models --gpus all \
     -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
-              --models 'stabilityai/sd-turbo KBlueLeaf/kohaku-v2.1' \
+              --models 'stabilityai/sd-turbo' \
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
               --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
+              --build-depth-anything \
+              --build-pose \
+              && \
+            chown -R $(id -u):$(id -g) /models" ||
+    (
+      echo "failed streamdiffusion tensorrt"
+      exit 1
+    )
+  # SD1.5 models
+  docker run --rm -v ./models:/models --gpus all \
+    -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
+    --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
+    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
+              --models 'varb15/PerfectPhotonV2.1' \
+              --opt-timesteps '3' \
+              --min-timesteps '1' \
+              --max-timesteps '4' \
+              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile' \
               --build-depth-anything \
               --build-pose \
               && \

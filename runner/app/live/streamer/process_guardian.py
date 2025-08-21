@@ -172,10 +172,11 @@ class ProcessGuardian:
         start_time = max(self.process.start_time, self.status.start_time)
         time_since_last_output = current_time - (inference.last_output_time or 0)
         pipeline_load_time = max(inference.last_params_update_time or 0, start_time)
-        # -1s to be conservative and avoid race conditions on the timestamp comparisons below
-        time_since_pipeline_load = max(0, current_time - pipeline_load_time - 1)
+        # -2s to be conservative and avoid race conditions on the timestamp comparisons below
+        time_since_pipeline_load = max(0, current_time - pipeline_load_time - 2)
 
         active_after_load = time_since_last_output < time_since_pipeline_load
+        logging.debug(f"[_compute_current_state] active_after_load={active_after_load} time_since_last_output={time_since_last_output:.1f}s time_since_pipeline_load={time_since_pipeline_load:.1f}s")
         if not active_after_load:
             is_params_update = (inference.last_params_update_time or 0) > start_time
             load_grace_period = 2 if is_params_update else 10
