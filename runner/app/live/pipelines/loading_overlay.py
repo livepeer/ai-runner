@@ -262,8 +262,7 @@ class LoadingOverlayRenderer:
             # Best-effort cache, just log
             logging.error("Failed to update last frame", exc_info=True)
 
-    def begin_reload(self, show_overlay: bool) -> None:
-        self._show_overlay = bool(show_overlay)
+    def begin_reload(self) -> None:
         self._active = True
         now = time.time()
         # Choose base tensor if recent enough

@@ -87,6 +87,9 @@ class StreamDiffusion(Pipeline):
             logging.info("No parameters changed")
             return
 
+        # Set overlay visibility preference once for this params update
+        self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
+
         # Pre-fetch the style image before locking. This raises any errors early (e.g. invalid URL or image) and also
         # allows us to fetch the style image without blocking inference with the lock.
         if new_params.ip_adapter_style_image_url and new_params.ip_adapter_style_image_url != self._cached_style_image_url:
@@ -101,7 +104,7 @@ class StreamDiffusion(Pipeline):
                 logging.error(f"Error updating parameters dynamically: {e}")
 
             logging.info(f"Resetting pipeline for params change")
-            self._overlay_renderer.begin_reload(show_overlay=new_params.show_reloading_frame)
+            self._overlay_renderer.begin_reload()
             prev_params = self.params
             self.pipe = None
 
@@ -142,14 +145,16 @@ class StreamDiffusion(Pipeline):
         update_kwargs = {}
         curr_params = self.params.model_dump() if self.params else {}
         changed_ipadapter = False
-        changed_reloading_frame = False
         for key, new_value in new_params.model_dump().items():
             curr_value = curr_params.get(key, None)
             if new_value == curr_value:
                 continue
-            if key not in updatable_params:
+            elif key not in updatable_params:
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
+            elif key == 'show_reloading_frame':
+                # Handled in update_params
+                continue
 
             # at this point, we know it's an updatable parameter that changed
             if key == 'prompt':
@@ -169,8 +174,6 @@ class StreamDiffusion(Pipeline):
             elif key == 'ip_adapter_style_image_url':
                 # Do not set on update_kwargs, we'll update it separately.
                 changed_ipadapter = True
-            elif key == 'show_reloading_frame':
-                changed_reloading_frame = True
             else:
                 update_kwargs[key] = new_value
 
@@ -182,8 +185,6 @@ class StreamDiffusion(Pipeline):
             await self._update_style_image(new_params)
             # no-op update prompt to cause an IPAdapter reload
             self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
-        if changed_reloading_frame:
-            self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
 
         self.params = new_params
         self.first_frame = True
