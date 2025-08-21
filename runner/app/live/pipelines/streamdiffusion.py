@@ -45,10 +45,8 @@ class StreamDiffusion(Pipeline):
 
         async with self._pipeline_lock:
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
-        try:
-            self._overlay_renderer.update_last_frame(out_tensor)
-        except Exception:
-            pass
+        self._overlay_renderer.update_last_frame(out_tensor)
+
         output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
         await self.frame_queue.put(output)
 
@@ -102,43 +100,33 @@ class StreamDiffusion(Pipeline):
             except Exception as e:
                 logging.error(f"Error updating parameters dynamically: {e}")
 
-            # Signal reload and release the lock for heavy work
             logging.info(f"Resetting pipeline for params change")
-            # Begin overlay session according to user preference
             self._overlay_renderer.begin_reload(show_overlay=new_params.show_reloading_frame)
             prev_params = self.params
-            # Set pipe to None to avoid accidental usage under lock
             self.pipe = None
 
-        # Perform heavy reload outside the lock so frames can continue with overlay
         new_pipe: Optional[StreamDiffusionWrapper] = None
         try:
             new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
         except Exception:
             logging.error(f"Error resetting pipeline, reloading with previous params", exc_info=True)
             try:
-                fallback_params = prev_params or StreamDiffusionParams()
-                new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, fallback_params)
-                new_params = fallback_params
+                new_params = prev_params or StreamDiffusionParams()
+                new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
             except Exception:
                 logging.exception("Failed to reload pipeline with fallback params", stack_info=True)
                 raise
 
-        if new_params.ip_adapter and new_params.ip_adapter.enabled:
-            await self._update_style_image(new_params)
-            # no-op update prompt to cause an IPAdapter reload
-            self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
-
-        self.params = new_params
-
-        # Swap in the new pipe and clear reload flag
         async with self._pipeline_lock:
             self.pipe = new_pipe
             self.params = new_params
-            self.applied_controlnets = new_params.controlnets
             self.first_frame = True
-            # End overlay session
             self._overlay_renderer.end_reload()
+
+            if new_params.ip_adapter and new_params.ip_adapter.enabled:
+                await self._update_style_image(new_params)
+                # no-op update prompt to cause an IPAdapter reload
+                self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
 
     async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
         if self.pipe is None:

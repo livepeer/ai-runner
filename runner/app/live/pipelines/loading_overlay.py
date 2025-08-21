@@ -1,5 +1,6 @@
 import asyncio
 import asyncio
+import logging
 import time
 from typing import Optional, Tuple, Dict, List, Any
 
@@ -258,8 +259,8 @@ class LoadingOverlayRenderer:
                 self._last_output_tensor = out_bhwc.detach().cpu().contiguous()
                 self._last_output_wallclock = time.time()
         except Exception:
-            # Best-effort cache
-            pass
+            # Best-effort cache, just log
+            logging.error("Failed to update last frame", exc_info=True)
 
     def begin_reload(self, show_overlay: bool) -> None:
         self._show_overlay = bool(show_overlay)
