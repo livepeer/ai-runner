@@ -108,6 +108,9 @@ class IPAdapterConfig(BaseModel):
     class Config:
         extra = "forbid"
 
+    type: Literal["regular", "faceid"] = "regular"
+    """Type of IPAdapter to use. FaceID is used for face-specific style transfer."""
+
     ipadapter_model_path: Literal[
         "h94/IP-Adapter/models/ip-adapter_sd15.bin",
         "h94/IP-Adapter-FaceID/ip-adapter-faceid_sd15.bin"
@@ -117,11 +120,8 @@ class IPAdapterConfig(BaseModel):
     image_encoder_path: Literal["h94/IP-Adapter/models/image_encoder"] = "h94/IP-Adapter/models/image_encoder"
     """Path to image encoder model"""
 
-    is_faceid: bool = False
-    """Whether this is a FaceID-style IPAdapter"""
-
     insightface_model_name: Optional[str] = None
-    """InsightFace model name for FaceID"""
+    """InsightFace model name for FaceID. Used only if type is 'faceid'."""
 
     scale: float = 1.0
     """IPAdapter strength (0.0 = disabled, 1.0 = normal, 2.0 = strong)"""
