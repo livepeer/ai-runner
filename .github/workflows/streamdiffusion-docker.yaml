@@ -146,14 +146,13 @@ jobs:
             type=ref,event=branch,prefix=live-app-streamdiffusion-sd15-
             type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-streamdiffusion-sd15-
 
-      - name: Load sd15 params from file (no compaction)
+      - name: Load sd15 params from file (compact via tr)
         id: sd15_json
         shell: bash
         run: |
           JSON_FILE="runner/app/live/pipelines/streamdiffusion_sd15_default_params.json"
-          echo "json<<EOF" >> "$GITHUB_OUTPUT"
-          cat "$JSON_FILE" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          SD15_JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
+          echo "json_compact=$SD15_JSON_COMPACT" >> "$GITHUB_OUTPUT"
 
       - name: Build and push sd15 variant image (build-arg only)
         uses: docker/build-push-action@v6
@@ -168,7 +167,7 @@ jobs:
             GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
             VERSION=${{ steps.version.outputs.version }}
             ${{ needs.base.outputs.image-digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.base.outputs.image-digest) }}
-            INFERPY_INITIAL_PARAMS=${{ steps.sd15_json.outputs.json }}
+            INFERPY_INITIAL_PARAMS=${{ steps.sd15_json.outputs.json_compact }}
           platforms: linux/amd64
           tags: ${{ steps.meta_sd15.outputs.tags }}
           annotations: ${{ steps.meta_sd15.outputs.annotations }}
