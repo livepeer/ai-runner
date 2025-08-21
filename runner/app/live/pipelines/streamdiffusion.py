@@ -94,7 +94,10 @@ class StreamDiffusion(Pipeline):
                 new_params = self.params or StreamDiffusionParams()
                 self.pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
 
-            await self._update_style_image(new_params)
+            if new_params.ip_adapter and new_params.ip_adapter.enabled:
+                await self._update_style_image(new_params)
+                # no-op update prompt to cause an IPAdapter reload
+                self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
 
             self.params = new_params
             self.first_frame = True
@@ -129,11 +132,10 @@ class StreamDiffusion(Pipeline):
             elif key == 'controlnets':
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
             elif key == 'ip_adapter':
-                curr_enabled = self.params and self.params.ip_adapter and self.params.ip_adapter.enabled
-                new_enabled = new_params.ip_adapter and new_params.ip_adapter.enabled
-                if curr_enabled and not new_enabled:
-                    logging.info("Non-updatable parameter changed: IPAdapter config cannot be disabled")
-                    return False
+                enabled = new_params.ip_adapter and new_params.ip_adapter.enabled
+                if not enabled:
+                    # Enabled flag is ignored, so we set scale to 0.0 to disable it.
+                    new_value['scale'] = 0.0
 
                 update_kwargs['ipadapter_config'] = new_value
                 changed_ipadapter = True
