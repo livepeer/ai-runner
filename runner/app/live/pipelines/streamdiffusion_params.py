@@ -96,7 +96,12 @@ class IPAdapterConfig(BaseModel):
     scale: float = 1.0
     """IPAdapter strength (0.0 = disabled, 1.0 = normal, 2.0 = strong)"""
 
-    weight_type: Optional[str] = None
+    weight_type: Optional[Literal[
+        "linear", "ease in", "ease out", "ease in-out", "reverse in-out",
+        "weak input", "weak output", "weak middle", "strong middle",
+        "style transfer", "composition", "strong style transfer",
+        "style and composition", "style transfer precise", "composition precise"
+    ]] = "linear"
     """Weight distribution type for per-layer scaling"""
 
     enabled: bool = True
