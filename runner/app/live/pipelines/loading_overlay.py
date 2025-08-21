@@ -1,6 +1,7 @@
 import asyncio
+import asyncio
 import time
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Tuple, Dict, List, Any
 
 import numpy as np
 import torch
@@ -27,7 +28,7 @@ class LoadingOverlayRenderer:
         self._base_max_age_seconds: float = 5.0
 
         # Text caching
-        self._font: Optional[ImageFont.FreeTypeFont] = None
+        self._font: Optional[ImageFont.ImageFont] = None
         self._font_size: int = 0
         self._text_image: Optional[Image.Image] = None  # RGBA
         self._text_pos: Tuple[int, int] = (0, 0)
@@ -108,7 +109,7 @@ class LoadingOverlayRenderer:
         key = dim_alpha
         overlay = self._dim_overlay_cache.get(key)
         if overlay is None:
-            overlay = Image.new("RGBA", (w, h), (0, 0, 0, dim_alpha))
+            overlay = Image.new("RGBA", (w, h), (0, 0, 0, dim_alpha))  # type: ignore[arg-type]
             self._dim_overlay_cache[key] = overlay
         return overlay
 
@@ -127,11 +128,15 @@ class LoadingOverlayRenderer:
 
         # PIL resampling enums compatibility
         Resampling = getattr(Image, "Resampling", None)
-        lanczos = Resampling.LANCZOS if Resampling else getattr(Image, "LANCZOS", Image.BICUBIC)
-        bicubic = Resampling.BICUBIC if Resampling else getattr(Image, "BICUBIC", Image.BILINEAR)
+        if Resampling is not None:
+            lanczos = getattr(Resampling, "LANCZOS", 1)
+            bicubic = getattr(Resampling, "BICUBIC", 3)
+        else:
+            lanczos = 1
+            bicubic = 3
 
         # Draw a single high-res base spinner (270-degree arc) once
-        hr_base = Image.new("RGBA", (hr_canvas, hr_canvas), (0, 0, 0, 0))
+        hr_base = Image.new("RGBA", (hr_canvas, hr_canvas), (0, 0, 0, 0))  # type: ignore[arg-type]
         d = ImageDraw.Draw(hr_base)
         hr_bbox = (
             hr_thickness // 2,
@@ -149,8 +154,8 @@ class LoadingOverlayRenderer:
         frames: List[Image.Image] = []
         for k in range(self._spinner_num_frames):
             angle = (k * (360.0 / self._spinner_num_frames)) % 360.0
-            rotated = hr_base.rotate(angle, resample=bicubic, expand=False)
-            down = rotated.resize((canvas_size, canvas_size), resample=lanczos)
+            rotated = hr_base.rotate(angle, resample=bicubic, expand=False)  # type: ignore[arg-type]
+            down = rotated.resize((canvas_size, canvas_size), resample=lanczos)  # type: ignore[arg-type]
             frames.append(down)
 
         self._spinner_frames = frames
@@ -182,14 +187,14 @@ class LoadingOverlayRenderer:
             except Exception:
                 font = None
 
-        tmp = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        tmp = Image.new("RGBA", (w, h), (0, 0, 0, 0))  # type: ignore[arg-type]
         td = ImageDraw.Draw(tmp)
         try:
             tb = td.textbbox((0, 0), text, font=font, stroke_width=2)
             tw, th = tb[2] - tb[0], tb[3] - tb[1]
         except Exception:
             tw, th = (len(text) * 10, 20)
-        text_img = Image.new("RGBA", (tw + 8, th + 8), (0, 0, 0, 0))
+        text_img = Image.new("RGBA", (tw + 8, th + 8), (0, 0, 0, 0))  # type: ignore[arg-type]
         tdraw = ImageDraw.Draw(text_img)
         try:
             tdraw.text((4, 4), text, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 160))
@@ -203,14 +208,9 @@ class LoadingOverlayRenderer:
         self._font_size = desired_font_size
         self._text_pos = (text_x, text_y)
 
-    def render(self, frame) -> torch.Tensor:
-        # Import type locally to avoid circular import at module level
-        from trickle import VideoFrame  # type: ignore
-
-        if not isinstance(frame, VideoFrame):
-            raise TypeError("render expects a VideoFrame")
-
-        _, h, w, _ = frame.tensor.shape
+    def render(self, width: int, height: int) -> torch.Tensor:
+        w = int(width)
+        h = int(height)
 
         # Reset caches when session changes or size changes
         # No-op: session changes are controlled by begin_reload/end_reload
@@ -291,12 +291,7 @@ class LoadingOverlayRenderer:
     def set_show_overlay(self, show_overlay: bool) -> None:
         self._show_overlay = bool(show_overlay)
 
-    async def render_if_active(self, frame):
-        # Import type locally to avoid circular import at module level
-        from trickle import VideoFrame  # type: ignore
-
-        if not isinstance(frame, VideoFrame):
-            raise TypeError("render_if_active expects a VideoFrame")
+    async def render_if_active(self, width: int, height: int):
         if not self.is_active():
             return None
-        return await asyncio.to_thread(self.render, frame)
+        return await asyncio.to_thread(self.render, width, height)

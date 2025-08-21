@@ -33,20 +33,18 @@ class StreamDiffusion(Pipeline):
         logging.info("Pipeline initialization complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        if self.params is None:
+            raise RuntimeError("Pipeline not initialized")
+
         # Try rendering loading overlay first (no lock held)
-        maybe_overlay = await self._overlay_renderer.render_if_active(frame)
-        if maybe_overlay is not None:
-            output = VideoOutput(frame, request_id).replace_tensor(maybe_overlay)
+        loading_frame = await self._overlay_renderer.render_if_active(self.params.width, self.params.height)
+        if loading_frame is not None:
+            output = VideoOutput(frame, request_id).replace_tensor(loading_frame)
             await self.frame_queue.put(output)
             return
 
-        # If no overlay, run normal inference if the pipeline is available
         async with self._pipeline_lock:
-            if self.pipe is None:
-                # Pipeline unavailable and overlay disabled → drop frame to freeze output
-                return
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
-        # Update last-frame cache for potential future overlays (best-effort)
         try:
             self._overlay_renderer.update_last_frame(out_tensor)
         except Exception:
@@ -80,10 +78,7 @@ class StreamDiffusion(Pipeline):
 
         # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
         out_bhwc = out_tensor.permute(0, 2, 3, 1)
-        # Overlay renderer maintains its own last-frame cache
         return out_bhwc
-
-    # No direct overlay rendering here; delegated to renderer
 
     async def get_processed_video_frame(self) -> VideoOutput:
         return await self.frame_queue.get()
