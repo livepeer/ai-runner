@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Optional, Tuple, Dict, List
 
@@ -289,3 +290,13 @@ class LoadingOverlayRenderer:
 
     def set_show_overlay(self, show_overlay: bool) -> None:
         self._show_overlay = bool(show_overlay)
+
+    async def render_if_active(self, frame):
+        # Import type locally to avoid circular import at module level
+        from trickle import VideoFrame  # type: ignore
+
+        if not isinstance(frame, VideoFrame):
+            raise TypeError("render_if_active expects a VideoFrame")
+        if not self.is_active():
+            return None
+        return await asyncio.to_thread(self.render, frame)

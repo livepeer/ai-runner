@@ -10,6 +10,7 @@ from io import BytesIO
 import aiohttp
 
 from .interface import Pipeline
+from .loading_overlay import LoadingOverlayRenderer
 from trickle import VideoFrame, VideoOutput
 
 from .streamdiffusion_params import StreamDiffusionParams, ControlNetConfig
@@ -22,7 +23,6 @@ class StreamDiffusion(Pipeline):
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
-        self.is_reloading: bool = False
         self._overlay_renderer = LoadingOverlayRenderer()
         self._cached_style_image_tensor: Optional[torch.Tensor] = None
         self._cached_style_image_url: Optional[str] = None
@@ -33,34 +33,26 @@ class StreamDiffusion(Pipeline):
         logging.info("Pipeline initialization complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        # Determine whether to render overlay without holding the lock during rendering
-        want_overlay = False
-        unavailable = False
-        async with self._pipeline_lock:
-            unavailable = self.is_reloading or self.pipe is None
-            if unavailable and self._overlay_renderer.is_active():
-                want_overlay = True
-        if want_overlay:
-            out_tensor = await asyncio.to_thread(self._overlay_renderer.render, frame)
-            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+        # Try rendering loading overlay first (no lock held)
+        maybe_overlay = await self._overlay_renderer.render_if_active(frame)
+        if maybe_overlay is not None:
+            output = VideoOutput(frame, request_id).replace_tensor(maybe_overlay)
             await self.frame_queue.put(output)
             return
-        if unavailable:
-            # Freeze by dropping this frame if overlay is disabled
-            return
 
-        # Normal processing path remains serialized under the lock
+        # If no overlay, run normal inference if the pipeline is available
         async with self._pipeline_lock:
+            if self.pipe is None:
+                # Pipeline unavailable and overlay disabled → drop frame to freeze output
+                return
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
-            # Update last-frame cache for potential future overlays
-            try:
-                self._overlay_renderer.update_last_frame(out_tensor)
-            except Exception:
-                pass
-            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
-            await self.frame_queue.put(output)
-
-    # Deprecated helper removed; overlay handling is encapsulated by renderer
+        # Update last-frame cache for potential future overlays (best-effort)
+        try:
+            self._overlay_renderer.update_last_frame(out_tensor)
+        except Exception:
+            pass
+        output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+        await self.frame_queue.put(output)
 
     def process_tensor_sync(self, img_tensor: torch.Tensor):
         if self.pipe is None:
@@ -117,7 +109,6 @@ class StreamDiffusion(Pipeline):
 
             # Signal reload and release the lock for heavy work
             logging.info(f"Resetting pipeline for params change")
-            self.is_reloading = True
             # Begin overlay session according to user preference
             self._overlay_renderer.begin_reload(show_overlay=new_params.show_reloading_frame)
             prev_params = self.params
@@ -151,7 +142,6 @@ class StreamDiffusion(Pipeline):
             self.params = new_params
             self.applied_controlnets = new_params.controlnets
             self.first_frame = True
-            self.is_reloading = False
             # End overlay session
             self._overlay_renderer.end_reload()
 
@@ -251,7 +241,6 @@ class StreamDiffusion(Pipeline):
             self.pipe = None
             self.params = None
             self.frame_queue = asyncio.Queue()
-            self.is_reloading = False
             self._overlay_renderer.end_reload()
             self._overlay_renderer.reset_session(0.0)
 
