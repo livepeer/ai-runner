@@ -134,6 +134,9 @@ class StreamDiffusion(Pipeline):
                 if curr_enabled and not new_enabled:
                     logging.info("Non-updatable parameter changed: IPAdapter config cannot be disabled")
                     return False
+                if not curr_enabled and not new_enabled:
+                    # Ignore updates that aren't enabling the IPAdapter as it currently ignores the enabled flag.
+                    continue
 
                 update_kwargs['ipadapter_config'] = new_value
                 changed_ipadapter = True
