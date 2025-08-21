@@ -3,6 +3,7 @@ ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
 
 ARG PIPELINE
+ARG INFERPY_INITIAL_PARAMS
 ENV PIPELINE=${PIPELINE}
 
 # Install latest stable Go version and system dependencies
@@ -36,7 +37,8 @@ RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
 ENV MAX_WORKERS=1 \
     HUGGINGFACE_HUB_CACHE=/models \
     DIFFUSERS_CACHE=/models \
-    MODEL_DIR=/models
+    MODEL_DIR=/models \
+    INFERPY_INITIAL_PARAMS="${INFERPY_INITIAL_PARAMS}"
 
 # Copy application files
 COPY app/ /app/app

@@ -146,17 +146,20 @@ jobs:
             type=ref,event=branch,prefix=live-app-streamdiffusion-sd15-
             type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-streamdiffusion-sd15-
 
-      - name: Build and push sd15 variant image
+      - name: Build and push sd15 variant image (build-arg only)
         uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
           provenance: mode=max
           sbom: true
           push: true
-          file: docker/Dockerfile.live-app-streamdiffusion-sd15
+          file: docker/Dockerfile.live-app__PIPELINE__
           build-args: |
-            # Use the just-built app image as the base for the variant
-            BASE_IMAGE=livepeer/ai-runner@${{ steps.build-app.outputs.digest }}
+            PIPELINE=streamdiffusion
+            GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
+            VERSION=${{ steps.version.outputs.version }}
+            ${{ needs.base.outputs.image-digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.base.outputs.image-digest) }}
+            INFERPY_INITIAL_PARAMS={"model_id":"varb15/PerfectPhotonV2.1","num_inference_steps":50,"t_index_list":[5,15,32],"controlnets":[{"model_id":"lllyasviel/control_v11f1p_sd15_depth","conditioning_scale":0.0,"preprocessor":"depth_tensorrt","preprocessor_params":{},"enabled":true,"control_guidance_start":0.0,"control_guidance_end":1.0},{"model_id":"lllyasviel/control_v11f1e_sd15_tile","conditioning_scale":0.1,"preprocessor":"feedback","preprocessor_params":{},"enabled":true,"control_guidance_start":0.0,"control_guidance_end":1.0}],"ip_adapter":{"scale":0.5,"enabled":false}}
           platforms: linux/amd64
           tags: ${{ steps.meta_sd15.outputs.tags }}
           annotations: ${{ steps.meta_sd15.outputs.annotations }}
