@@ -53,8 +53,38 @@ class ControlNetConfig(BaseModel):
 
 _DEFAULT_CONTROLNETS = [
     ControlNetConfig(
-        model_id="lllyasviel/control_v11f1p_sd15_depth",
-        conditioning_scale=0.0,
+        model_id="thibaud/controlnet-sd21-openpose-diffusers",
+        conditioning_scale=0.711,
+        preprocessor="pose_tensorrt",
+        preprocessor_params={},
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="thibaud/controlnet-sd21-hed-diffusers",
+        conditioning_scale=0.2,
+        preprocessor="soft_edge",
+        preprocessor_params={},
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="thibaud/controlnet-sd21-canny-diffusers",
+        conditioning_scale=0.2,
+        preprocessor="canny",
+        preprocessor_params={
+            "low_threshold": 100,
+            "high_threshold": 200
+        },
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="thibaud/controlnet-sd21-depth-diffusers",
+        conditioning_scale=0.5,
         preprocessor="depth_tensorrt",
         preprocessor_params={},
         enabled=True,
@@ -62,9 +92,9 @@ _DEFAULT_CONTROLNETS = [
         control_guidance_end=1.0,
     ),
     ControlNetConfig(
-        model_id="lllyasviel/control_v11f1e_sd15_tile",
-        conditioning_scale=0.1,
-        preprocessor="feedback",
+        model_id="thibaud/controlnet-sd21-color-diffusers",
+        conditioning_scale=0.2,
+        preprocessor="passthrough",
         preprocessor_params={},
         enabled=True,
         control_guidance_start=0.0,
@@ -125,7 +155,7 @@ class StreamDiffusionParams(BaseModel):
     model_id: Literal[
         "stabilityai/sd-turbo",
         "varb15/PerfectPhotonV2.1",
-    ] = "varb15/PerfectPhotonV2.1"
+    ] = "stabilityai/sd-turbo"
     """Base U-Net model to use for generation."""
 
     # Generation parameters
@@ -150,7 +180,7 @@ class StreamDiffusionParams(BaseModel):
     num_inference_steps: int = 50
     """Builds the full denoising schedule (the "grid" of possible refinement steps). Changing it changes what each step number (t_index_list value) means. Keep it fixed for a session and only adjust if you're deliberately redefining the schedule; if you do, proportionally remap your t_index_list. Typical range 10–200 with default being 50."""
 
-    t_index_list: List[int] = [5, 15, 32]
+    t_index_list: List[int] = [12, 20, 32]
     """The ordered list of step indices from the num_inference_steps schedule to execute per frame. Each index is one model pass, so latency scales with the list length. Higher indices (e.g., 40–49 on a 50-step grid) mainly polish and preserve structure (lower flicker), while lower indices (<20) rewrite structure (more flicker, creative). Values must be non-decreasing, and each between 0 and num_inference_steps."""
 
     # Image dimensions
@@ -205,7 +235,7 @@ class StreamDiffusionParams(BaseModel):
     """List of ControlNet configurations for guided generation. Each ControlNet provides different types of conditioning (pose, edges, depth, etc.)."""
 
     # IPAdapter settings
-    ip_adapter: Optional[IPAdapterConfig] = IPAdapterConfig(enabled=True)
+    ip_adapter: Optional[IPAdapterConfig] = IPAdapterConfig(enabled=False)
     """IPAdapter configuration for style transfer."""
 
     ip_adapter_style_image_url: str = "https://ipfs.livepeer.com/ipfs/bafkreibnlg3nfizj6ixc2flljo3pewo2ycnxitczawu4d5vmxkejnjwxca"
