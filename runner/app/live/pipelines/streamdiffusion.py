@@ -144,6 +144,8 @@ class StreamDiffusion(Pipeline):
             self.pipe.update_stream_params(**update_kwargs)
         if changed_style_image or changed_ipadapter_cfg:
             await self._update_style_image(new_params)
+            # no-op update prompt to cause an IPAdapter reload
+            self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
 
         self.params = new_params
         self.first_frame = True
