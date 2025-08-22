@@ -16,7 +16,6 @@ class LoadingOverlayRenderer:
         self._session_wallclock: float = 0.0
         self._active: bool = False
         self._show_overlay: bool = True
-        # No fade animation needed
 
         # Cached size and base images
         self._cached_size: Tuple[int, int] = (0, 0)
@@ -257,9 +256,6 @@ class LoadingOverlayRenderer:
         w = int(width)
         h = int(height)
 
-        # Reset caches when session changes or size changes
-        # No-op: session changes are controlled by begin_reload/end_reload
-
         # Ensure base images are ready
         self._ensure_base_images(w, h)
 
@@ -330,7 +326,6 @@ class LoadingOverlayRenderer:
 
     def end_reload(self) -> None:
         self._active = False
-        # Keep show preference for next time
         self._base_tensor = None
         self._base_tensor_wallclock = 0.0
         self.reset_session(0.0)
