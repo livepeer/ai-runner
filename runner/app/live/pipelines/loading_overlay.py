@@ -74,6 +74,20 @@ class LoadingOverlayRenderer:
                 max_workers=1, thread_name_prefix="overlay-renderer"
             )
         )
+        # Background executor for non-blocking precompute
+        self._bg_executor: concurrent.futures.ThreadPoolExecutor = (
+            concurrent.futures.ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="overlay-prewarm"
+            )
+        )
+        self._spinner_building: bool = False
+        # Background executor to offload precomputation without blocking render
+        self._bg_executor: concurrent.futures.ThreadPoolExecutor = (
+            concurrent.futures.ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="overlay-prewarm"
+            )
+        )
+        self._spinner_building: bool = False
 
     def reset_session(self, session_wallclock: float) -> None:
         self._session_wallclock = session_wallclock
@@ -91,6 +105,7 @@ class LoadingOverlayRenderer:
         self._scratch_tensor = None
         self._spinner_tensors_rgba = []
         self._spinner_roi = (0, 0, 0, 0)
+        self._spinner_building = False
         # Do not clear spinner/text or _cached_size to avoid heavy first-frame work.
         # Do not clear last-output cache here; that is cross-session state.
 
@@ -124,6 +139,7 @@ class LoadingOverlayRenderer:
             self._scratch_tensor = None
             self._spinner_tensors_rgba = []
             self._spinner_roi = (0, 0, 0, 0)
+            self._spinner_building = False
             # Only clear spinner/text if size actually changed
             if size_changed:
                 self._spinner_frames = []
@@ -210,14 +226,12 @@ class LoadingOverlayRenderer:
         return overlay
 
     def _ensure_spinner_frames(self, w: int, h: int) -> None:
-        if self._spinner_frames and self._spinner_radius > 0 and self._spinner_thickness > 0:
-            # Ensure we have torch tensors for frames as well
-            if (
-                self._spinner_tensors_rgba
-                and len(self._spinner_tensors_rgba) == self._spinner_num_frames
-            ):
-                return
-            # Fall through to build tensors
+        if (
+            self._spinner_frames
+            and self._spinner_radius > 0
+            and self._spinner_thickness > 0
+        ):
+            return
         radius = max(8, int(min(w, h) * 0.035))
         thickness = max(3, int(min(w, h) * 0.008))
         canvas_size = 2 * radius + thickness
@@ -263,12 +277,37 @@ class LoadingOverlayRenderer:
         self._spinner_frames = frames
         self._spinner_radius = radius
         self._spinner_thickness = thickness
-        # Build torch tensors once (RGBA, float32 [0,1])
-        tensors: List[Optional[torch.Tensor]] = []
-        for f in self._spinner_frames:
+        # Initialize lazy tensor cache; tensors are built per-index on demand
+        self._spinner_tensors_rgba = [None] * len(self._spinner_frames)
+
+    def _ensure_spinner_frames_async(self, w: int, h: int) -> None:
+        if self._spinner_building:
+            return
+        self._spinner_building = True
+
+        def _build() -> None:
+            try:
+                self._ensure_spinner_frames(w, h)
+            finally:
+                self._spinner_building = False
+
+        try:
+            self._bg_executor.submit(_build)
+        except Exception:
+            self._spinner_building = False
+
+    def _get_spinner_tensor_rgba(self, k: int) -> Optional[torch.Tensor]:
+        if not self._spinner_frames:
+            return None
+        if not self._spinner_tensors_rgba or k >= len(self._spinner_tensors_rgba):
+            self._spinner_tensors_rgba = [None] * len(self._spinner_frames)
+        t = self._spinner_tensors_rgba[k]
+        if t is None:
+            f = self._spinner_frames[k]
             arr = np.asarray(f.convert("RGBA")).astype(np.float32) / 255.0
-            tensors.append(torch.from_numpy(arr))
-        self._spinner_tensors_rgba = tensors
+            t = torch.from_numpy(arr)
+            self._spinner_tensors_rgba[k] = t
+        return t
 
     def _ensure_text(self, w: int, h: int) -> None:
         text = "Pipeline is reloading…"
@@ -323,6 +362,7 @@ class LoadingOverlayRenderer:
         self._scratch_tensor = None
         self._spinner_tensors_rgba = []
         self._spinner_roi = (0, 0, 0, 0)
+        self._spinner_building = False
 
     # Removed composite-per-index helpers; using fast torch ROI blend instead
 
@@ -334,8 +374,9 @@ class LoadingOverlayRenderer:
         self._ensure_base_images(w, h)
         self._ensure_text(w, h)
         bg = self._ensure_background_rgba(w, h)
-        # Determine spinner index for this frame
-        self._ensure_spinner_frames(w, h)
+        # Determine spinner index for this frame (build spinner frames in the background if missing)
+        if not self._spinner_frames:
+            self._ensure_spinner_frames_async(w, h)
         angle = (time.time() * 180.0) % 360.0
         k = int((angle / 360.0) * self._spinner_num_frames) % self._spinner_num_frames
         # Compute spinner ROI if unknown
@@ -357,11 +398,11 @@ class LoadingOverlayRenderer:
             return self._last_output_tensor_cached
         # Restore ROI from background
         sx, sy, sw, sh = self._spinner_roi
-        if sw > 0 and sh > 0 and self._spinner_tensors_rgba:
+        if sw > 0 and sh > 0:
             self._scratch_tensor[:, sy : sy + sh, sx : sx + sw, :] = (
                 self._background_tensor[:, sy : sy + sh, sx : sx + sw, :]
             )
-            sp = self._spinner_tensors_rgba[k]
+            sp = self._get_spinner_tensor_rgba(k)
             if sp is not None:
                 # Alpha blend into ROI
                 sp_rgb = sp[..., :3]
