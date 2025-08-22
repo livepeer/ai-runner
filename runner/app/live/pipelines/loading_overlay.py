@@ -48,6 +48,26 @@ class LoadingOverlayRenderer:
         # Dimming overlay cache keyed by alpha
         self._dim_overlay_cache: Dict[int, Image.Image] = {}
 
+        # Cached background (gray + dim + text) to avoid per-frame compositing
+        self._background_rgba: Optional[Image.Image] = None
+
+        # Scratch canvas reused every frame to avoid reallocations
+        self._scratch_rgba: Optional[Image.Image] = None
+
+        # Cache the last composed output tensor by spinner frame index
+        self._last_spinner_idx: int = -1
+        self._last_output_tensor_cached: Optional[torch.Tensor] = None
+
+        # Torch-based caches to minimize per-frame work
+        self._background_tensor: Optional[torch.Tensor] = (
+            None  # (1,H,W,3) float32 [0,1]
+        )
+        self._scratch_tensor: Optional[torch.Tensor] = None  # (1,H,W,3) float32 [0,1]
+        self._spinner_tensors_rgba: List[
+            Optional[torch.Tensor]
+        ] = []  # each (H,W,4) float32 [0,1]
+        self._spinner_roi: Tuple[int, int, int, int] = (0, 0, 0, 0)  # sx, sy, sw, sh
+
         # Dedicated executor so overlay rendering isn't starved by heavy default executor tasks
         self._executor: concurrent.futures.ThreadPoolExecutor = (
             concurrent.futures.ThreadPoolExecutor(
@@ -63,6 +83,14 @@ class LoadingOverlayRenderer:
         self._base_image_gray = None
         self._gray_rgba_cache = None
         self._dim_overlay_cache.clear()
+        self._background_rgba = None
+        self._scratch_rgba = None
+        self._last_spinner_idx = -1
+        self._last_output_tensor_cached = None
+        self._background_tensor = None
+        self._scratch_tensor = None
+        self._spinner_tensors_rgba = []
+        self._spinner_roi = (0, 0, 0, 0)
         # Do not clear spinner/text or _cached_size to avoid heavy first-frame work.
         # Do not clear last-output cache here; that is cross-session state.
 
@@ -88,6 +116,14 @@ class LoadingOverlayRenderer:
             # Invalidate dependent caches that depend on base or size
             self._gray_rgba_cache = None
             self._dim_overlay_cache.clear()
+            self._background_rgba = None
+            self._scratch_rgba = None
+            self._last_spinner_idx = -1
+            self._last_output_tensor_cached = None
+            self._background_tensor = None
+            self._scratch_tensor = None
+            self._spinner_tensors_rgba = []
+            self._spinner_roi = (0, 0, 0, 0)
             # Only clear spinner/text if size actually changed
             if size_changed:
                 self._spinner_frames = []
@@ -110,6 +146,22 @@ class LoadingOverlayRenderer:
             gray_rgba = gray.convert("RGBA")
             self._gray_rgba_cache = gray_rgba
             return gray_rgba
+
+    def _ensure_background_rgba(self, w: int, h: int) -> Image.Image:
+        if self._background_rgba is not None:
+            return self._background_rgba
+        base = self._get_gray_base_rgba()
+        dim_overlay = self._get_dim_overlay(w, h)
+        bg = Image.alpha_composite(base, dim_overlay)
+        if self._text_image is not None:
+            bg.paste(self._text_image, self._text_pos, self._text_image)
+        self._background_rgba = bg
+        # Also cache as torch tensor for fast per-frame updates
+        img_rgb = bg.convert("RGB")
+        out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
+        self._background_tensor = torch.from_numpy(out_np).unsqueeze(0)
+        self._scratch_tensor = self._background_tensor.clone()
+        return bg
 
     def _render_base_gpu_rgba(self, w: int, h: int) -> Image.Image:
         """
@@ -159,7 +211,13 @@ class LoadingOverlayRenderer:
 
     def _ensure_spinner_frames(self, w: int, h: int) -> None:
         if self._spinner_frames and self._spinner_radius > 0 and self._spinner_thickness > 0:
-            return
+            # Ensure we have torch tensors for frames as well
+            if (
+                self._spinner_tensors_rgba
+                and len(self._spinner_tensors_rgba) == self._spinner_num_frames
+            ):
+                return
+            # Fall through to build tensors
         radius = max(8, int(min(w, h) * 0.035))
         thickness = max(3, int(min(w, h) * 0.008))
         canvas_size = 2 * radius + thickness
@@ -205,6 +263,12 @@ class LoadingOverlayRenderer:
         self._spinner_frames = frames
         self._spinner_radius = radius
         self._spinner_thickness = thickness
+        # Build torch tensors once (RGBA, float32 [0,1])
+        tensors: List[Optional[torch.Tensor]] = []
+        for f in self._spinner_frames:
+            arr = np.asarray(f.convert("RGBA")).astype(np.float32) / 255.0
+            tensors.append(torch.from_numpy(arr))
+        self._spinner_tensors_rgba = tensors
 
     def _ensure_text(self, w: int, h: int) -> None:
         text = "Pipeline is reloading…"
@@ -251,53 +315,64 @@ class LoadingOverlayRenderer:
         self._font = font
         self._font_size = desired_font_size
         self._text_pos = (text_x, text_y)
+        # Invalidate background since text was (re)built
+        self._background_rgba = None
+        self._last_spinner_idx = -1
+        self._last_output_tensor_cached = None
+        self._background_tensor = None
+        self._scratch_tensor = None
+        self._spinner_tensors_rgba = []
+        self._spinner_roi = (0, 0, 0, 0)
+
+    # Removed composite-per-index helpers; using fast torch ROI blend instead
 
     def render(self, width: int, height: int) -> torch.Tensor:
         w = int(width)
         h = int(height)
 
-        # Ensure base images are ready
+        # Ensure base images and text are ready; then reuse cached background
         self._ensure_base_images(w, h)
-
-        # No fade animation - apply grayscale and dimming immediately
-
-        # Get grayscale base via GPU tensors when available, otherwise PIL path
-        img: Image.Image
-        use_gpu = torch.cuda.is_available()
-        if use_gpu:
-            try:
-                img = self._render_base_gpu_rgba(w, h)
-            except Exception:
-                # Fallback to CPU PIL path on error
-                img = self._get_gray_base_rgba()
-                dim_overlay = self._get_dim_overlay(w, h)
-                img = Image.alpha_composite(img, dim_overlay)
-        else:
-            img = self._get_gray_base_rgba()
-            dim_overlay = self._get_dim_overlay(w, h)
-            img = Image.alpha_composite(img, dim_overlay)
-
-        # Spinner
-        self._ensure_spinner_frames(w, h)
-        cx, cy = w // 2, h // 2
-        if self._spinner_frames:
-            angle = (time.time() * 180.0) % 360.0
-            k = int((angle / 360.0) * self._spinner_num_frames) % self._spinner_num_frames
-            spinner_img = self._spinner_frames[k]
-            sx = int(cx - spinner_img.width / 2)
-            sy = int(cy - spinner_img.height / 2)
-            img.paste(spinner_img, (sx, sy), spinner_img)
-
-        # Text
         self._ensure_text(w, h)
-        if self._text_image is not None:
-            img.paste(self._text_image, self._text_pos, self._text_image)
-
-        # Convert back to torch tensor in (1, H, W, C), float32 in [0,1]
-        img_rgb = img.convert("RGB")
-        out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
-        out_tensor = torch.from_numpy(out_np).unsqueeze(0)
-        return out_tensor
+        bg = self._ensure_background_rgba(w, h)
+        # Determine spinner index for this frame
+        self._ensure_spinner_frames(w, h)
+        angle = (time.time() * 180.0) % 360.0
+        k = int((angle / 360.0) * self._spinner_num_frames) % self._spinner_num_frames
+        # Compute spinner ROI if unknown
+        if self._spinner_frames:
+            sp0 = self._spinner_frames[0]
+            sw, sh = sp0.width, sp0.height
+            cx, cy = w // 2, h // 2
+            sx = int(cx - sw / 2)
+            sy = int(cy - sh / 2)
+            self._spinner_roi = (sx, sy, sw, sh)
+        # Ensure scratch/background tensors exist
+        if self._scratch_tensor is None or self._background_tensor is None:
+            img_rgb = self._background_rgba.convert("RGB")
+            out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
+            self._background_tensor = torch.from_numpy(out_np).unsqueeze(0)
+            self._scratch_tensor = self._background_tensor.clone()
+        # If spinner unchanged, reuse previous tensor
+        if self._last_output_tensor_cached is not None and k == self._last_spinner_idx:
+            return self._last_output_tensor_cached
+        # Restore ROI from background
+        sx, sy, sw, sh = self._spinner_roi
+        if sw > 0 and sh > 0 and self._spinner_tensors_rgba:
+            self._scratch_tensor[:, sy : sy + sh, sx : sx + sw, :] = (
+                self._background_tensor[:, sy : sy + sh, sx : sx + sw, :]
+            )
+            sp = self._spinner_tensors_rgba[k]
+            if sp is not None:
+                # Alpha blend into ROI
+                sp_rgb = sp[..., :3]
+                sp_a = sp[..., 3:4]
+                roi = self._scratch_tensor[:, sy : sy + sh, sx : sx + sw, :]
+                roi *= 1.0 - sp_a
+                roi += sp_rgb * sp_a
+        # Cache and return
+        self._last_spinner_idx = k
+        self._last_output_tensor_cached = self._scratch_tensor
+        return self._scratch_tensor
 
     def update_last_frame(self, out_bhwc: torch.Tensor) -> None:
         try:
@@ -353,6 +428,7 @@ class LoadingOverlayRenderer:
                 self._ensure_base_images(w, h)
                 self._ensure_spinner_frames(w, h)
                 self._ensure_text(w, h)
+                self._ensure_background_rgba(w, h)
             except Exception:
                 # Best-effort; ignore failures
                 pass
