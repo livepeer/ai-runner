@@ -1,5 +1,6 @@
 import asyncio
 import asyncio
+import concurrent.futures
 import logging
 import time
 from typing import Optional, Tuple, Dict, List, Any
@@ -7,6 +8,7 @@ from typing import Optional, Tuple, Dict, List, Any
 import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
+import torch.nn.functional as F
 
 
 class LoadingOverlayRenderer:
@@ -15,6 +17,8 @@ class LoadingOverlayRenderer:
         self._session_wallclock: float = 0.0
         self._active: bool = False
         self._show_overlay: bool = True
+        # Fade configuration (seconds)
+        self._fade_duration: float = 2.0
 
         # Cached size and base images
         self._cached_size: Tuple[int, int] = (0, 0)
@@ -29,7 +33,7 @@ class LoadingOverlayRenderer:
         self._base_max_age_seconds: float = 5.0
 
         # Text caching
-        self._font: Optional[ImageFont.ImageFont] = None
+        self._font: Optional[Any] = None
         self._font_size: int = 0
         self._text_image: Optional[Image.Image] = None  # RGBA
         self._text_pos: Tuple[int, int] = (0, 0)
@@ -48,25 +52,35 @@ class LoadingOverlayRenderer:
         # Dimming overlay cache keyed by alpha
         self._dim_overlay_cache: Dict[int, Image.Image] = {}
 
+        # Dedicated executor so overlay rendering isn't starved by heavy default executor tasks
+        self._executor: concurrent.futures.ThreadPoolExecutor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="overlay-renderer"
+        )
+
     def reset_session(self, session_wallclock: float) -> None:
         self._session_wallclock = session_wallclock
-        self._cached_size = (0, 0)
+        # Force base images to rebuild next render while preserving cached size
+        # and keeping spinner/text caches when the size is unchanged.
         self._base_image_color = None
         self._base_image_gray = None
-        self._font = None
-        self._font_size = 0
-        self._text_image = None
-        self._text_pos = (0, 0)
-        self._spinner_frames = []
-        self._spinner_radius = 0
-        self._spinner_thickness = 0
         self._blended_rgba_cache.clear()
         self._dim_overlay_cache.clear()
+        # Do not clear spinner/text or _cached_size to avoid heavy first-frame work.
         # Do not clear last-output cache here; that is cross-session state.
+
+    def set_fade_duration(self, seconds: float) -> None:
+        try:
+            value = float(seconds)
+        except Exception:
+            return
+        if value <= 0.0:
+            return
+        self._fade_duration = value
 
     def _ensure_base_images(self, w: int, h: int) -> None:
         # If session size or base not initialized or size changed, (re)create base images
-        if self._cached_size != (w, h) or self._base_image_color is None:
+        size_changed = (self._cached_size != (w, h))
+        if size_changed or self._base_image_color is None:
             base_np = None
             if self._base_tensor is not None:
                 try:
@@ -75,18 +89,22 @@ class LoadingOverlayRenderer:
                     base_np = None
             if base_np is None or base_np.shape[0] != h or base_np.shape[1] != w:
                 color = Image.fromarray(np.full((h, w, 3), 128, dtype=np.uint8), mode="RGB")
-                gray = color
+                gray = color.convert("L").convert("RGB")
             else:
                 color = Image.fromarray(base_np[..., :3], mode="RGB")
                 gray = color.convert("L").convert("RGB")
             self._base_image_color = color
             self._base_image_gray = gray
             self._cached_size = (w, h)
-            # Invalidate dependent caches
+            # Invalidate dependent caches that depend on base or size
             self._blended_rgba_cache.clear()
             self._dim_overlay_cache.clear()
-            self._spinner_frames = []
-            self._text_image = None
+            # Only clear spinner/text if size actually changed
+            if size_changed:
+                self._spinner_frames = []
+                self._spinner_radius = 0
+                self._spinner_thickness = 0
+                self._text_image = None
 
     def _get_blended_base_rgba(self, t: float) -> Image.Image:
         # Quantize t to limit blends needed
@@ -99,6 +117,46 @@ class LoadingOverlayRenderer:
         blended_rgba = blended.convert("RGBA")
         self._blended_rgba_cache[idx] = blended_rgba
         return blended_rgba
+
+    def _render_base_gpu_rgba(self, w: int, h: int, t: float) -> Image.Image:
+        """
+        Render the gray/dimmed base frame using GPU tensors if available, then return a PIL RGBA image.
+        Falls back to CPU torch if CUDA is not available, but still avoids PIL for the heavy ops.
+        """
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Prepare base tensor in [0,1], shape (1, H, W, 3)
+        if self._base_tensor is not None:
+            base = self._base_tensor
+            if base.shape[1] != h or base.shape[2] != w:
+                bchw = base.permute(0, 3, 1, 2)
+                bchw = F.interpolate(bchw, size=(h, w), mode="bilinear", align_corners=False)
+                base = bchw.permute(0, 2, 3, 1)
+        else:
+            base = torch.full((1, h, w, 3), 0.5, dtype=torch.float32)
+
+        base = base.to(device, non_blocking=True)
+
+        # Grayscale conversion and blend
+        r = base[..., 0:1]
+        g = base[..., 1:2]
+        b = base[..., 2:3]
+        gray = (0.299 * r + 0.587 * g + 0.114 * b)
+        gray3 = gray.expand_as(base)
+
+        tq = max(0.0, min(1.0, t))
+        blended = (1.0 - tq) * base + tq * gray3
+
+        # Dim overlay factor, equivalent to compositing black with alpha
+        dim_alpha = int(90 * t)
+        dim_alpha = max(0, min(96, int(round(dim_alpha / 8.0) * 8)))
+        dim = 1.0 - (dim_alpha / 255.0)
+        blended = blended * dim
+
+        # To CPU uint8
+        out_np = (blended.clamp(0.0, 1.0) * 255.0).to(torch.uint8).cpu().numpy()[0]
+        img = Image.fromarray(out_np, mode="RGB").convert("RGBA")
+        return img
 
     def _get_dim_overlay(self, w: int, h: int, t: float) -> Optional[Image.Image]:
         # Quantize alpha to reduce allocations
@@ -220,16 +278,28 @@ class LoadingOverlayRenderer:
         self._ensure_base_images(w, h)
 
         # Time-based easing for grey-in and dimming
-        fade_duration = 0.6
+        fade_duration = self._fade_duration
         t = 1.0
         if self._session_wallclock:
             t = max(0.0, min(1.0, (time.time() - self._session_wallclock) / fade_duration))
 
-        # Get blended base RGBA and optional dim overlay
-        img = self._get_blended_base_rgba(t)
-        dim_overlay = self._get_dim_overlay(w, h, t)
-        if dim_overlay is not None:
-            img = Image.alpha_composite(img, dim_overlay)
+        # Get blended base via GPU tensors when available, otherwise PIL path
+        img: Image.Image
+        use_gpu = torch.cuda.is_available()
+        if use_gpu:
+            try:
+                img = self._render_base_gpu_rgba(w, h, t)
+            except Exception:
+                # Fallback to CPU PIL path on error
+                img = self._get_blended_base_rgba(t)
+                dim_overlay = self._get_dim_overlay(w, h, t)
+                if dim_overlay is not None:
+                    img = Image.alpha_composite(img, dim_overlay)
+        else:
+            img = self._get_blended_base_rgba(t)
+            dim_overlay = self._get_dim_overlay(w, h, t)
+            if dim_overlay is not None:
+                img = Image.alpha_composite(img, dim_overlay)
 
         # Spinner
         self._ensure_spinner_frames(w, h)
@@ -294,4 +364,22 @@ class LoadingOverlayRenderer:
     async def render_if_active(self, width: int, height: int):
         if not self.is_active():
             return None
-        return await asyncio.to_thread(self.render, width, height)
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._executor, self.render, width, height)
+
+    async def prewarm(self, width: int, height: int) -> None:
+        """
+        Precompute spinner/text resources off the main thread to avoid first-frame stutters.
+        """
+        w = int(width)
+        h = int(height)
+        def _prewarm_sync() -> None:
+            try:
+                self._ensure_base_images(w, h)
+                self._ensure_spinner_frames(w, h)
+                self._ensure_text(w, h)
+            except Exception:
+                # Best-effort; ignore failures
+                pass
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(self._executor, _prewarm_sync)

@@ -243,6 +243,7 @@ class StreamDiffusionParams(BaseModel):
 
     # UI behavior
     show_reloading_frame: bool = True
+    """Whether to show the reloading overlay frame when the pipeline needs to reload."""
 
     @model_validator(mode="after")
     @staticmethod

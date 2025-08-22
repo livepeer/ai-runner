@@ -103,10 +103,17 @@ class StreamDiffusion(Pipeline):
             except Exception as e:
                 logging.error(f"Error updating parameters dynamically: {e}")
 
-            logging.info(f"Resetting pipeline for params change")
-            self._overlay_renderer.begin_reload()
+        logging.info(f"Resetting pipeline for params change")
+
+        try:
+            await self._overlay_renderer.prewarm(new_params.width, new_params.height)
+        except Exception:
+            logging.debug("Failed to prewarm loading overlay caches", exc_info=True)
+
+        async with self._pipeline_lock:
             prev_params = self.params
             self.pipe = None
+            self._overlay_renderer.begin_reload()
 
         new_pipe: Optional[StreamDiffusionWrapper] = None
         try:
