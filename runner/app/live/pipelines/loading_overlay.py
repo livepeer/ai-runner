@@ -176,7 +176,8 @@ class LoadingOverlayRenderer:
         img_rgb = bg.convert("RGB")
         out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
         self._background_tensor = torch.from_numpy(out_np).unsqueeze(0)
-        self._scratch_tensor = self._background_tensor.clone()
+        if self._background_tensor is not None:
+            self._scratch_tensor = self._background_tensor.clone()
         return bg
 
     def _render_base_gpu_rgba(self, w: int, h: int) -> Image.Image:
@@ -373,7 +374,7 @@ class LoadingOverlayRenderer:
         # Ensure base images and text are ready; then reuse cached background
         self._ensure_base_images(w, h)
         self._ensure_text(w, h)
-        bg = self._ensure_background_rgba(w, h)
+        self._ensure_background_rgba(w, h)
         # Determine spinner index for this frame (build spinner frames in the background if missing)
         if not self._spinner_frames:
             self._ensure_spinner_frames_async(w, h)
@@ -389,10 +390,14 @@ class LoadingOverlayRenderer:
             self._spinner_roi = (sx, sy, sw, sh)
         # Ensure scratch/background tensors exist
         if self._scratch_tensor is None or self._background_tensor is None:
+            # Guard for None
+            if self._background_rgba is None:
+                self._ensure_background_rgba(w, h)
             img_rgb = self._background_rgba.convert("RGB")
             out_np = np.asarray(img_rgb).astype(np.float32) / 255.0
             self._background_tensor = torch.from_numpy(out_np).unsqueeze(0)
-            self._scratch_tensor = self._background_tensor.clone()
+            if self._background_tensor is not None:
+                self._scratch_tensor = self._background_tensor.clone()
         # If spinner unchanged, reuse previous tensor
         if self._last_output_tensor_cached is not None and k == self._last_spinner_idx:
             return self._last_output_tensor_cached
@@ -474,4 +479,4 @@ class LoadingOverlayRenderer:
                 # Best-effort; ignore failures
                 pass
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(self._executor, _prewarm_sync)
+        await loop.run_in_executor(self._bg_executor, _prewarm_sync)
