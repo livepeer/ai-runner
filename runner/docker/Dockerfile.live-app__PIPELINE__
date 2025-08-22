@@ -3,6 +3,7 @@ ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
 
 ARG PIPELINE
+ARG INFERPY_INITIAL_PARAMS
 ENV PIPELINE=${PIPELINE}
 
 # Install latest stable Go version and system dependencies
@@ -49,5 +50,8 @@ ARG GIT_SHA
 ENV GIT_SHA="$GIT_SHA"
 ARG VERSION="undefined"
 ENV VERSION="${VERSION}"
+
+# Keep this last to maximize cache reuse when only initial params change
+ENV INFERPY_INITIAL_PARAMS="${INFERPY_INITIAL_PARAMS}"
 
 CMD [ "/workspace/miniconda3/envs/comfystream/bin/uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000" ]

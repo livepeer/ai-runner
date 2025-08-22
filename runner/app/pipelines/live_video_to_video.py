@@ -110,6 +110,9 @@ class LiveVideoToVideoPipeline(Pipeline):
         cmd = [sys.executable, str(self.infer_script_path)]
         cmd.extend(["--pipeline", self.model_id]) # we use the model_id as the pipeline name for now
         cmd.extend(["--http-port", "8888"])
+        initial_params = os.environ.get("INFERPY_INITIAL_PARAMS")
+        if initial_params:
+            cmd.extend(["--initial-params", initial_params])
         # TODO: set torch device from self.torch_device
 
         env = os.environ.copy()

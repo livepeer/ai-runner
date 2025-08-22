@@ -111,6 +111,7 @@ jobs:
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
       - name: Build and push pipeline app image
+        id: build-app
         uses: docker/build-push-action@v6
         with:
           context: "{{defaultContext}}:runner"
@@ -130,6 +131,49 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion-dockerbuildcache
           cache-to: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion-dockerbuildcache,mode=max
+
+      - name: Extract metadata for sd15 variant image
+        id: meta_sd15
+        uses: docker/metadata-action@v5
+        with:
+          images: livepeer/ai-runner
+          tags: |
+            type=raw,value=live-app-streamdiffusion-sd15,enable={{is_default_branch}}
+            type=sha,prefix=live-app-streamdiffusion-sd15-sha-
+            type=sha,format=long,prefix=live-app-streamdiffusion-sd15-sha-
+            type=ref,event=pr,prefix=live-app-streamdiffusion-sd15-pr-
+            type=ref,event=tag,prefix=live-app-streamdiffusion-sd15-
+            type=ref,event=branch,prefix=live-app-streamdiffusion-sd15-
+            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-streamdiffusion-sd15-
+
+      - name: Load sd15 params from file (compact via tr)
+        id: sd15_json
+        shell: bash
+        run: |
+          JSON_FILE="runner/app/live/pipelines/streamdiffusion_sd15_default_params.json"
+          SD15_JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
+          echo "json_compact=$SD15_JSON_COMPACT" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push sd15 variant image (build-arg only)
+        uses: docker/build-push-action@v6
+        with:
+          context: "{{defaultContext}}:runner"
+          provenance: mode=max
+          sbom: true
+          push: true
+          file: docker/Dockerfile.live-app__PIPELINE__
+          build-args: |
+            PIPELINE=streamdiffusion
+            GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
+            VERSION=${{ steps.version.outputs.version }}
+            ${{ needs.base.outputs.image-digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.base.outputs.image-digest) }}
+            INFERPY_INITIAL_PARAMS=${{ steps.sd15_json.outputs.json_compact }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta_sd15.outputs.tags }}
+          annotations: ${{ steps.meta_sd15.outputs.annotations }}
+          labels: ${{ steps.meta_sd15.outputs.labels }}
+          cache-from: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion-sd15-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion-sd15-dockerbuildcache,mode=max
 
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
