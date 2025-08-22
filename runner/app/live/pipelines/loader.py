@@ -1,7 +1,7 @@
 from .interface import Pipeline
 
 def load_pipeline(name: str) -> Pipeline:
-    if name == "streamdiffusion":
+    if name == "streamdiffusion" or name == "streamdiffusion-sd15":
         from .streamdiffusion import StreamDiffusion
         return StreamDiffusion()
     if name == "comfyui":
