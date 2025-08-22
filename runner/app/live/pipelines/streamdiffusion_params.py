@@ -241,6 +241,10 @@ class StreamDiffusionParams(BaseModel):
     ip_adapter_style_image_url: str = "https://ipfs.livepeer.com/ipfs/bafkreibnlg3nfizj6ixc2flljo3pewo2ycnxitczawu4d5vmxkejnjwxca"
     """URL to fetch the style image for IPAdapter."""
 
+    # UI behavior
+    show_reloading_frame: bool = True
+    """Whether to show the reloading overlay frame when the pipeline needs to reload."""
+
     @model_validator(mode="after")
     @staticmethod
     def check_t_index_list(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
