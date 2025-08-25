@@ -162,11 +162,9 @@ class ProcessGuardian:
         time_since_last_input = current_time - (input.last_input_time or start_time)
 
         if not self.streamer.is_stream_running():
-            return (
-                PipelineState.OFFLINE
-                if time_since_last_input > 3  # 3s grace period after shutdown
-                else PipelineState.DEGRADED_INPUT
-            )
+            # give it 3s `DEGRADED_INPUT` grace period after shutdown
+            is_offline = time_since_last_input > 3 or not input.last_input_time
+            return PipelineState.OFFLINE if is_offline else PipelineState.DEGRADED_INPUT
 
         # Special case: stream shutdown after inactivity
         if time_since_last_input > 60:
