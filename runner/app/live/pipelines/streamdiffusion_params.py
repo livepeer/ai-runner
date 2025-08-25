@@ -25,6 +25,7 @@ class ControlNetConfig(BaseModel):
         "thibaud/controlnet-sd21-color-diffusers",
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
+        "lllyasviel/control_v11p_sd15_canny",
     ]
     """ControlNet model identifier. Each model provides different types of conditioning:
     - openpose: Human pose estimation for figure control

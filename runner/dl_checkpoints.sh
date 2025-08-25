@@ -141,6 +141,7 @@ function download_streamdiffusion_live_models() {
   # SD1.5 controlnet models
   huggingface-cli download lllyasviel/control_v11f1p_sd15_depth --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download lllyasviel/control_v11f1e_sd15_tile --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download lllyasviel/control_v11p_sd15_canny --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
   # IP-Adapter (only required files)
   huggingface-cli download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" "models/image_encoder/*" --cache-dir models
@@ -245,7 +246,7 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile' \
+              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny' \
               --build-depth-anything \
               --build-pose \
               && \
