@@ -63,9 +63,9 @@ class LoadingOverlayRenderer:
             None  # (1,H,W,3) float32 [0,1]
         )
         self._scratch_tensor: Optional[torch.Tensor] = None  # (1,H,W,3) float32 [0,1]
-        self._spinner_tensors_rgba: List[
-            Optional[torch.Tensor]
-        ] = []  # each (H,W,4) float32 [0,1]
+        self._spinner_tensors_rgba: List[Optional[torch.Tensor]] = (
+            []
+        )  # each (H,W,4) float32 [0,1]
         self._spinner_roi: Tuple[int, int, int, int] = (0, 0, 0, 0)  # sx, sy, sw, sh
 
         # Dedicated executor so overlay rendering isn't starved by heavy default executor tasks
@@ -111,16 +111,20 @@ class LoadingOverlayRenderer:
 
     def _ensure_base_images(self, w: int, h: int) -> None:
         # If session size or base not initialized or size changed, (re)create base images
-        size_changed = (self._cached_size != (w, h))
+        size_changed = self._cached_size != (w, h)
         if size_changed or self._base_image_color is None:
             base_np = None
             if self._base_tensor is not None:
                 try:
-                    base_np = (self._base_tensor.clamp(0, 1) * 255).byte().cpu().numpy()[0]
+                    base_np = (
+                        (self._base_tensor.clamp(0, 1) * 255).byte().cpu().numpy()[0]
+                    )
                 except Exception:
                     base_np = None
             if base_np is None or base_np.shape[0] != h or base_np.shape[1] != w:
-                color = Image.fromarray(np.full((h, w, 3), 128, dtype=np.uint8), mode="RGB")
+                color = Image.fromarray(
+                    np.full((h, w, 3), 128, dtype=np.uint8), mode="RGB"
+                )
                 gray = color.convert("L").convert("RGB")
             else:
                 color = Image.fromarray(base_np[..., :3], mode="RGB")
@@ -192,7 +196,9 @@ class LoadingOverlayRenderer:
             base = self._base_tensor
             if base.shape[1] != h or base.shape[2] != w:
                 bchw = base.permute(0, 3, 1, 2)
-                bchw = F.interpolate(bchw, size=(h, w), mode="bilinear", align_corners=False)
+                bchw = F.interpolate(
+                    bchw, size=(h, w), mode="bilinear", align_corners=False
+                )
                 base = bchw.permute(0, 2, 3, 1)
         else:
             base = torch.full((1, h, w, 3), 0.5, dtype=torch.float32)
@@ -203,7 +209,7 @@ class LoadingOverlayRenderer:
         r = base[..., 0:1]
         g = base[..., 1:2]
         b = base[..., 2:3]
-        gray = (0.299 * r + 0.587 * g + 0.114 * b)
+        gray = 0.299 * r + 0.587 * g + 0.114 * b
         gray3 = gray.expand_as(base)
 
         # Apply full dimming (equivalent to t=1.0)
@@ -311,7 +317,11 @@ class LoadingOverlayRenderer:
         return t
 
     def _ensure_text(self, w: int, h: int) -> None:
-        text = "Pipeline is reloading…" if self._base_tensor is not None else "Pipeline is loading…"
+        text = (
+            "Pipeline is reloading…"
+            if self._base_tensor is not None
+            else "Pipeline is loading…"
+        )
         cx, cy = w // 2, h // 2
         radius = max(8, int(min(w, h) * 0.035))
         thickness = max(3, int(min(w, h) * 0.008))
@@ -345,7 +355,14 @@ class LoadingOverlayRenderer:
         text_img = Image.new("RGBA", (tw + 8, th + 8), (0, 0, 0, 0))  # type: ignore[arg-type]
         tdraw = ImageDraw.Draw(text_img)
         try:
-            tdraw.text((4, 4), text, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 160))
+            tdraw.text(
+                (4, 4),
+                text,
+                font=font,
+                fill=(255, 255, 255, 255),
+                stroke_width=2,
+                stroke_fill=(0, 0, 0, 160),
+            )
         except Exception:
             tdraw.text((4, 4), text, font=font, fill=(255, 255, 255, 255))
         text_x = int(cx - text_img.width / 2)
@@ -434,7 +451,10 @@ class LoadingOverlayRenderer:
         now = time.time()
         # Choose base tensor if recent enough
         base: Optional[torch.Tensor] = None
-        if self._last_output_tensor is not None and (now - self._last_output_wallclock) <= self._base_max_age_seconds:
+        if (
+            self._last_output_tensor is not None
+            and (now - self._last_output_wallclock) <= self._base_max_age_seconds
+        ):
             try:
                 with torch.no_grad():
                     base = self._last_output_tensor.detach().cpu().contiguous()
@@ -469,6 +489,7 @@ class LoadingOverlayRenderer:
         """
         w = int(width)
         h = int(height)
+
         def _prewarm_sync() -> None:
             try:
                 self._ensure_base_images(w, h)
@@ -478,5 +499,6 @@ class LoadingOverlayRenderer:
             except Exception:
                 # Best-effort; ignore failures
                 pass
+
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(self._bg_executor, _prewarm_sync)
