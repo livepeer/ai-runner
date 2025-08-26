@@ -158,18 +158,28 @@ class ProcessGuardian:
         # Special case: stream not running
         current_time = time.time()
         input = self.status.input_status
-        time_since_last_input = current_time - (input.last_input_time or 0)
+        start_time = max(self.process.start_time, self.status.start_time)
+        time_since_last_input = current_time - (input.last_input_time or start_time)
 
         if not self.streamer.is_stream_running():
-            return (
-                PipelineState.OFFLINE
-                if time_since_last_input > 3  # 3s grace period after shutdown
-                else PipelineState.DEGRADED_INPUT
-            )
+            # give it 3s `DEGRADED_INPUT` grace period after shutdown
+            is_offline = time_since_last_input > 3 or not input.last_input_time
+            return PipelineState.OFFLINE if is_offline else PipelineState.DEGRADED_INPUT
+
+        # Special case: stream shutdown after inactivity
+        if time_since_last_input > 60:
+            if self.streamer.trigger_stop_stream():
+                logging.info(
+                    f"Shutting down streamer. Flagging DEGRADED_INPUT state during shutdown: time_since_last_input={time_since_last_input:.1f}s"
+                )
+            if time_since_last_input < 90:
+                return PipelineState.DEGRADED_INPUT
+            # Stream hasn't shut down 30s after the trigger above (90s total idle time).
+            # Declare ERROR so the container gets restarted by the worker.
+            return PipelineState.ERROR
 
         # Special case: pipeline load
         inference = self.status.inference_status
-        start_time = max(self.process.start_time, self.status.start_time)
         time_since_last_output = current_time - (inference.last_output_time or 0)
         pipeline_load_time = max(inference.last_params_update_time or 0, start_time)
         # -2s to be conservative and avoid race conditions on the timestamp comparisons below
@@ -189,18 +199,6 @@ class ProcessGuardian:
                 else PipelineState.DEGRADED_INFERENCE
                 if time_since_pipeline_load < load_timeout
                 else PipelineState.ERROR  # Not starting after timeout, declare ERROR
-            )
-
-        # Special case: stream shutdown after inactivity
-        if time_since_last_input > 60:
-            if self.streamer.trigger_stop_stream():
-                logging.info(
-                    f"Shutting down streamer. Flagging DEGRADED_INPUT state during shutdown: time_since_last_input={time_since_last_input:.1f}s"
-                )
-            return (
-                PipelineState.DEGRADED_INPUT
-                if time_since_last_input < 90
-                else PipelineState.ERROR  # Not shutting down after 30s, declare ERROR
             )
 
         # Normal case: active stream
