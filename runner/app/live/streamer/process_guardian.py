@@ -172,11 +172,11 @@ class ProcessGuardian:
                 logging.info(
                     f"Shutting down streamer. Flagging DEGRADED_INPUT state during shutdown: time_since_last_input={time_since_last_input:.1f}s"
                 )
-            return (
-                PipelineState.DEGRADED_INPUT
-                if time_since_last_input < 90
-                else PipelineState.ERROR  # Not shutting down after 30s, declare ERROR
-            )
+            if time_since_last_input < 90:
+                return PipelineState.DEGRADED_INPUT
+            # Stream hasn't shut down 30s after the trigger above (90s total idle time).
+            # Declare ERROR so the container gets restarted by the worker.
+            return PipelineState.ERROR
 
         # Special case: pipeline load
         inference = self.status.inference_status
