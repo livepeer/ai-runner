@@ -36,15 +36,17 @@ class StreamDiffusion(Pipeline):
         if self.params is None:
             raise RuntimeError("Pipeline not initialized")
 
-        # Try rendering loading overlay first (no lock held)
-        loading_frame = await self._overlay_renderer.render_if_active(self.params.width, self.params.height)
-        if loading_frame is not None:
-            output = VideoOutput(frame, request_id).replace_tensor(loading_frame)
-            await self.frame_queue.put(output)
-            return
-
         async with self._pipeline_lock:
+            loading_frame = await self._overlay_renderer.render_if_active(
+                self.params.width, self.params.height
+            )
+            if loading_frame is not None:
+                output = VideoOutput(frame, request_id).replace_tensor(loading_frame)
+                await self.frame_queue.put(output)
+                return
+
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
+
         self._overlay_renderer.update_last_frame(out_tensor)
 
         output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
@@ -57,7 +59,9 @@ class StreamDiffusion(Pipeline):
         # The incoming frame.tensor is (B, H, W, C) in range [-1, 1] while the
         # VaeImageProcessor inside the wrapper expects (B, C, H, W) in [0, 1].
         img_tensor = img_tensor.permute(0, 3, 1, 2)
-        img_tensor = cast(torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor))
+        img_tensor = cast(
+            torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor)
+        )
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
         if self.params and self.params.controlnets:
@@ -87,15 +91,16 @@ class StreamDiffusion(Pipeline):
             logging.info("No parameters changed")
             return
 
-        # Set overlay visibility preference once for this params update
         self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
 
         # Pre-fetch the style image before locking. This raises any errors early (e.g. invalid URL or image) and also
         # allows us to fetch the style image without blocking inference with the lock.
-        if new_params.ip_adapter_style_image_url and new_params.ip_adapter_style_image_url != self._cached_style_image_url:
+        if (
+            new_params.ip_adapter_style_image_url
+            and new_params.ip_adapter_style_image_url != self._cached_style_image_url
+        ):
             await self._fetch_style_image(new_params.ip_adapter_style_image_url)
 
-        # First try a dynamic update while holding the lock
         async with self._pipeline_lock:
             try:
                 if await self._update_params_dynamic(new_params):
@@ -111,8 +116,9 @@ class StreamDiffusion(Pipeline):
             logging.debug("Failed to prewarm loading overlay caches", exc_info=True)
 
         async with self._pipeline_lock:
-            prev_params = self.params
+            # Clear the pipeline while loading the new one. The loading overlay will be shown while this is happening.
             self.pipe = None
+            prev_params = self.params
             self._overlay_renderer.begin_reload()
 
         new_pipe: Optional[StreamDiffusionWrapper] = None
