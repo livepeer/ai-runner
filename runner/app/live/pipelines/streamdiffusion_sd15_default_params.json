@@ -25,7 +25,7 @@
   "controlnets": [
     {
       "model_id": "lllyasviel/control_v11f1p_sd15_depth",
-      "conditioning_scale": 0.0,
+      "conditioning_scale": 1.0,
       "preprocessor": "depth_tensorrt",
       "preprocessor_params": {},
       "enabled": true,
@@ -34,7 +34,16 @@
     },
     {
       "model_id": "lllyasviel/control_v11f1e_sd15_tile",
-      "conditioning_scale": 0.1,
+      "conditioning_scale": 0.0,
+      "preprocessor": "feedback",
+      "preprocessor_params": {},
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "lllyasviel/control_v11f1e_sd15_canny",
+      "conditioning_scale": 0.0,
       "preprocessor": "feedback",
       "preprocessor_params": {},
       "enabled": true,
