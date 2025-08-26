@@ -106,8 +106,9 @@ class ProcessGuardian:
             raise RuntimeError("Process not running")
         output = await self.process.recv_output()
 
-        self.status.inference_status.last_output_time = time.time()
-        self.output_fps_counter.inc()
+        if output and not output.is_loading_frame:
+            self.status.inference_status.last_output_time = time.time()
+            self.output_fps_counter.inc()
 
         return output
 

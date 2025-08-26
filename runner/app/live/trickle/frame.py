@@ -72,7 +72,7 @@ class OutputFrame:
     """
         Base class for output media frames
     """
-    pass
+    is_loading_frame: bool = False
 
 class VideoOutput(OutputFrame):
     frame: VideoFrame

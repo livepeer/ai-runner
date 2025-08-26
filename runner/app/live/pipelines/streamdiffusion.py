@@ -37,19 +37,15 @@ class StreamDiffusion(Pipeline):
             raise RuntimeError("Pipeline not initialized")
 
         async with self._pipeline_lock:
-            loading_frame = await self._overlay_renderer.render_if_active(
-                self.params.width, self.params.height
-            )
+            loading_frame = await self._overlay_renderer.render_if_active(self.params.width, self.params.height)
             if loading_frame is not None:
                 output = VideoOutput(frame, request_id).replace_tensor(loading_frame)
-                await self.frame_queue.put(output)
-                return
+                output.is_loading_frame = True
+            else:
+                out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
+                output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+                self._overlay_renderer.update_last_frame(out_tensor)
 
-            out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
-
-        self._overlay_renderer.update_last_frame(out_tensor)
-
-        output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
         await self.frame_queue.put(output)
 
     def process_tensor_sync(self, img_tensor: torch.Tensor):
