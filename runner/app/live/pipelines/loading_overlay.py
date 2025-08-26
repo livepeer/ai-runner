@@ -1,3 +1,5 @@
+# NGL this was vibe coded and I can't attest for the quality, but it works.
+
 import asyncio
 import concurrent.futures
 import logging
