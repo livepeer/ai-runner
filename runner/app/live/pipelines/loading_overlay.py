@@ -311,7 +311,7 @@ class LoadingOverlayRenderer:
         return t
 
     def _ensure_text(self, w: int, h: int) -> None:
-        text = "Pipeline is reloading…"
+        text = "Pipeline is reloading…" if self._base_tensor is not None else "Pipeline is loading…"
         cx, cy = w // 2, h // 2
         radius = max(8, int(min(w, h) * 0.035))
         thickness = max(3, int(min(w, h) * 0.008))
