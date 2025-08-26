@@ -1,6 +1,6 @@
 {
   "model_id": "varb15/PerfectPhotonV2.1",
-  "prompt": "an anime render of a girl with purple hair, masterpiece",
+  "prompt": "an empty string with 1.0 depth",
   "prompt_interpolation_method": "slerp",
   "normalize_prompt_weights": true,
   "negative_prompt": "blurry, low quality, flat, 2d",
