@@ -19,7 +19,11 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
     :param frame_callback: A function that accepts an InputFrame object
     :param put_metadata: A function that accepts audio/video metadata
     """
-    container = cast(InputContainer, av.open(pipe_input, 'r'))
+
+    container = cast(InputContainer, av.open(pipe_input, mode='r', options={
+        # probe for up to 2.5 seconds of pts time
+        'analyzeduration': '2500000',
+    }))
 
     # Locate the first video and first audio stream (if they exist)
     video_stream = None
