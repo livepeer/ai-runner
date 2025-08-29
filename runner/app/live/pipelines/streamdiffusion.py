@@ -73,6 +73,8 @@ class StreamDiffusion(Pipeline):
         out_tensor = self.pipe(image=img_tensor)
         if isinstance(out_tensor, list):
             out_tensor = out_tensor[0]
+        if isinstance(out_tensor, Image.Image):
+            out_tensor = self.pipe.preprocess_image(out_tensor)
 
         # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
         out_bhwc = out_tensor.permute(0, 2, 3, 1)
@@ -314,6 +316,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         ipadapter_config=ipadapter_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
+        use_safety_checker=params.use_safety_checker,
     )
 
     pipe.prepare(
