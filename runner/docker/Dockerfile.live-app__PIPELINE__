@@ -2,6 +2,9 @@ ARG PIPELINE=comfyui
 ARG BASE_IMAGE=livepeer/ai-runner:live-base-${PIPELINE}
 FROM ${BASE_IMAGE}
 
+# Need to repeat it here since one above is in a different stage
+ARG PIPELINE=comfyui
+
 # Install latest stable Go version and system dependencies
 RUN apt update && apt install -yqq \
     wget \
