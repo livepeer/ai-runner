@@ -314,6 +314,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         ipadapter_config=ipadapter_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
+        use_safety_checker=params.use_safety_checker,
     )
 
     pipe.prepare(
