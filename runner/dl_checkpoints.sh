@@ -258,6 +258,25 @@ function build_streamdiffusion_tensorrt() {
       echo "failed streamdiffusion tensorrt"
       exit 1
     )
+  # SDXL models
+  docker run --rm -v ./models:/models --gpus all \
+    -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
+    --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
+    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
+              --models 'stabilityai/sdxl-turbo' \
+              --dimensions '1024x1024' \
+              --opt-timesteps '1' \
+              --min-timesteps '1' \
+              --max-timesteps '1' \
+              --controlnets '' \
+              --build-depth-anything \
+              --build-pose \
+              && \
+            chown -R $(id -u):$(id -g) /models" ||
+    (
+      echo "failed streamdiffusion tensorrt"
+      exit 1
+    )
 }
 
 function build_comfyui_tensorrt() {
