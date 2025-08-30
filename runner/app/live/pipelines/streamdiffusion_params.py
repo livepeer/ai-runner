@@ -156,6 +156,7 @@ class StreamDiffusionParams(BaseModel):
     model_id: Literal[
         "stabilityai/sd-turbo",
         "varb15/PerfectPhotonV2.1",
+        "stabilityai/sdxl-turbo",
     ] = "stabilityai/sd-turbo"
     """Base U-Net model to use for generation."""
 
