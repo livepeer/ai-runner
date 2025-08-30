@@ -261,9 +261,10 @@ function build_streamdiffusion_tensorrt() {
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
               --models 'stabilityai/sdxl-turbo' \
-              --opt-timesteps '3' \
+              --dimensions '1024x1024' \
+              --opt-timesteps '1' \
               --min-timesteps '1' \
-              --max-timesteps '4' \
+              --max-timesteps '1' \
               --controlnets '' \
               --build-depth-anything \
               --build-pose \
