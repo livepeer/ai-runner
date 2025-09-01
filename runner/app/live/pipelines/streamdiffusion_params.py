@@ -114,11 +114,16 @@ class IPAdapterConfig(BaseModel):
 
     ipadapter_model_path: Literal[
         "h94/IP-Adapter/models/ip-adapter_sd15.bin",
-        "h94/IP-Adapter-FaceID/ip-adapter-faceid_sd15.bin"
+        "h94/IP-Adapter/sdxl_models/ip-adapter_sdxl.bin",
+        "h94/IP-Adapter-FaceID/ip-adapter-faceid_sd15.bin",
+        "h94/IP-Adapter-FaceID/ip-adapter-faceid_sdxl.bin",
     ] = "h94/IP-Adapter/models/ip-adapter_sd15.bin"
     """Path to IPAdapter model file"""
 
-    image_encoder_path: Literal["h94/IP-Adapter/models/image_encoder"] = "h94/IP-Adapter/models/image_encoder"
+    image_encoder_path: Literal[
+        "h94/IP-Adapter/models/image_encoder",
+        "h94/IP-Adapter/sdxl_models/image_encoder",
+    ] = "h94/IP-Adapter/models/image_encoder"
     """Path to image encoder model"""
 
     insightface_model_name: Optional[str] = None

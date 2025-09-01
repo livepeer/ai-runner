@@ -145,8 +145,8 @@ function download_streamdiffusion_live_models() {
   huggingface-cli download lllyasviel/control_v11p_sd15_canny --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
   # IP-Adapter (only required files)
-  huggingface-cli download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" "models/image_encoder/*" --cache-dir models
-  huggingface-cli download h94/IP-Adapter-FaceID --include "ip-adapter-faceid_sd15.bin" --cache-dir models
+  huggingface-cli download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" "models/image_encoder/*" "sdxl_models/ip-adapter_sdxl.bin" "sdxl_models/image_encoder/*" --cache-dir models
+  huggingface-cli download h94/IP-Adapter-FaceID --include "ip-adapter-faceid_sd15.bin" "ip-adapter-faceid_sdxl.bin" --cache-dir models
 
   # Pre-processor models
   huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
