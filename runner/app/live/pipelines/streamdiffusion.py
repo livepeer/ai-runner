@@ -74,6 +74,11 @@ class StreamDiffusion(Pipeline):
         if isinstance(out_tensor, list):
             out_tensor = out_tensor[0]
 
+        if out_tensor.dim() == 3:
+            # Workaround as the NSFW fallback image is coming without the batch dimension
+            out_tensor = out_tensor.unsqueeze(0)
+            return out_tensor
+
         # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
         out_bhwc = out_tensor.permute(0, 2, 3, 1)
         return out_bhwc
