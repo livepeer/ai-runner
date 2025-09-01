@@ -128,9 +128,10 @@ function download_live_models() {
 function download_streamdiffusion_live_models() {
   printf "\nDownloading StreamDiffusion live models...\n"
 
-  # StreamDiffusion
+  # U-net models
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download varb15/PerfectPhotonV2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download stabilityai/sdxl-turbo --include "*.json" "*.txt" "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" --exclude ".onnx" ".onnx_data" --cache-dir models
 
   # SD2.1 (turbo) ControlNet models
   huggingface-cli download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
