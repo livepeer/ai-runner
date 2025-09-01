@@ -147,9 +147,12 @@ function download_streamdiffusion_live_models() {
   huggingface-cli download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" "models/image_encoder/*" --cache-dir models
   huggingface-cli download h94/IP-Adapter-FaceID --include "ip-adapter-faceid_sd15.bin" --cache-dir models
 
-  # Preprocessor models
+  # Pre-processor models
   huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
   huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
+
+  # Post-processor models
+  huggingface-cli download Falconsai/nsfw_image_detection --include "*.safetensors" "*.json" "*.txt" --cache-dir models
 }
 
 function download_comfyui_live_models() {
