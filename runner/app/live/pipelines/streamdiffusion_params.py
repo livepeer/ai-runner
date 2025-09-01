@@ -112,19 +112,19 @@ class IPAdapterConfig(BaseModel):
     type: Literal["regular", "faceid"] = "regular"
     """Type of IPAdapter to use. FaceID is used for face-specific style transfer."""
 
-    ipadapter_model_path: Literal[
+    ipadapter_model_path: Optional[Literal[
         "h94/IP-Adapter/models/ip-adapter_sd15.bin",
         "h94/IP-Adapter/sdxl_models/ip-adapter_sdxl.bin",
         "h94/IP-Adapter-FaceID/ip-adapter-faceid_sd15.bin",
         "h94/IP-Adapter-FaceID/ip-adapter-faceid_sdxl.bin",
-    ] = "h94/IP-Adapter/models/ip-adapter_sd15.bin"
-    """Path to IPAdapter model file"""
+    ]] = None
+    """[DEPRECATED] This field is no longer used. The IPAdapter model path is automatically determined based on the IP-Adapter type and base model architecture."""
 
-    image_encoder_path: Literal[
+    image_encoder_path: Optional[Literal[
         "h94/IP-Adapter/models/image_encoder",
         "h94/IP-Adapter/sdxl_models/image_encoder",
-    ] = "h94/IP-Adapter/models/image_encoder"
-    """Path to image encoder model"""
+    ]] = None
+    """[DEPRECATED] This field is no longer used. The image encoder path is automatically determined based on the IP-Adapter type and base model architecture."""
 
     insightface_model_name: Optional[str] = None
     """InsightFace model name for FaceID. Used only if type is 'faceid'."""

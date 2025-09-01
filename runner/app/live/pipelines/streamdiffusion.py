@@ -284,11 +284,38 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
 
     return controlnet_configs
 
+def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[str, Any]]:
+    """Prepare IPAdapter configurations for wrapper"""
+    if not params.ip_adapter:
+        return None
+
+
+    ip_cfg = params.ip_adapter.model_copy()
+    if ip_cfg.ipadapter_model_path:
+        logging.warning(f"[IPAdapter] ipadapter_model_path is deprecated and will be ignored. Use type instead.")
+    if ip_cfg.image_encoder_path:
+        logging.warning(f"[IPAdapter] image_encoder_path is deprecated and will be ignored. Use type instead.")
+
+    is_sdxl = 'sdxl' in params.model_id
+    arch = 'sdxl' if is_sdxl else 'sd15'
+    dir = 'sdxl_models' if is_sdxl else 'models'
+
+    if not ip_cfg.ipadapter_model_path:
+        match ip_cfg.type:
+            case 'regular':
+                ip_cfg.ipadapter_model_path = f"h94/IP-Adapter/{dir}/ip-adapter_{arch}.bin" # type: ignore
+            case 'faceid':
+                ip_cfg.ipadapter_model_path = f"h94/IP-Adapter-FaceID/ip-adapter-faceid_{arch}.bin" # type: ignore
+    if not ip_cfg.image_encoder_path:
+        ip_cfg.image_encoder_path = f"h94/IP-Adapter/{dir}/image_encoder" # type: ignore
+
+    return ip_cfg.model_dump()
+
 
 def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1, max_batch_size = 4, engine_dir = "engines", build_engines_if_missing = False):
     # Prepare ControlNet configuration
     controlnet_config = _prepare_controlnet_configs(params)
-    ipadapter_config = params.ip_adapter.model_dump() if params.ip_adapter else None
+    ipadapter_config = _prepare_ipadapter_configs(params)
 
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
@@ -315,7 +342,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         normalize_prompt_weights=params.normalize_prompt_weights,
         use_controlnet=True,
         controlnet_config=controlnet_config,
-        use_ipadapter=(params.model_id not in ['stabilityai/sd-turbo', 'stabilityai/sdxl-turbo']),
+        use_ipadapter=(params.model_id not in ['stabilityai/sd-turbo']),
         ipadapter_config=ipadapter_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
