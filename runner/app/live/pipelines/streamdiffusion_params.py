@@ -9,6 +9,21 @@ AVAILABLE_PREPROCESSORS = list_preprocessors()
 
 IPADAPTER_SUPPORTED_MODELS = ["varb15/PerfectPhotonV2.1"]
 
+CONTROLNETS_BY_ARCHITECTURE = {
+    "sd21": [
+        "thibaud/controlnet-sd21-openpose-diffusers",
+        "thibaud/controlnet-sd21-hed-diffusers",
+        "thibaud/controlnet-sd21-canny-diffusers",
+        "thibaud/controlnet-sd21-depth-diffusers",
+        "thibaud/controlnet-sd21-color-diffusers",
+    ],
+    "sd15": [
+        "lllyasviel/control_v11f1p_sd15_depth",
+        "lllyasviel/control_v11f1e_sd15_tile",
+        "lllyasviel/control_v11p_sd15_canny",
+    ],
+}
+
 class ControlNetConfig(BaseModel):
     """
     ControlNet configuration model for guided image generation.
@@ -274,17 +289,6 @@ class StreamDiffusionParams(BaseModel):
             if curr < prev:
                 raise ValueError(f"t_index_list must be in non-decreasing order. {curr} < {prev}")
 
-        # Check for duplicate controlnet model_ids
-        if model.controlnets:
-            seen_model_ids = set()
-            for cn in model.controlnets:
-                if cn.model_id in seen_model_ids:
-                    raise ValueError(f"Duplicate controlnet model_id: {cn.model_id}")
-                seen_model_ids.add(cn.model_id)
-
-                if cn.preprocessor not in AVAILABLE_PREPROCESSORS:
-                    raise ValueError(f"Unrecognized preprocessor: '{cn.preprocessor}'. Must be one of {AVAILABLE_PREPROCESSORS}")
-
         return model
 
     @model_validator(mode="after")
@@ -294,4 +298,31 @@ class StreamDiffusionParams(BaseModel):
         enabled = model.ip_adapter and model.ip_adapter.enabled
         if not supported and enabled:
             raise ValueError(f"IPAdapter is not supported for {model.model_id}")
+        return model
+
+    @model_validator(mode="after")
+    @staticmethod
+    def check_controlnets(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
+        if not model.controlnets:
+            return model
+
+        cn_ids = set()
+        for cn in model.controlnets:
+            if cn.model_id in cn_ids:
+                raise ValueError(f"Duplicate controlnet model_id: {cn.model_id}")
+            cn_ids.add(cn.model_id)
+
+        arch = ('sdxl' if model.model_id == "stabilityai/sdxl-turbo"
+                else 'sd21' if model.model_id == "stabilityai/sd-turbo"
+                else 'sd15')
+        supported_cns = CONTROLNETS_BY_ARCHITECTURE.get(arch, [])
+
+        invalid_cns = [cn for cn in cn_ids if cn not in supported_cns]
+        if invalid_cns:
+            raise ValueError(f"Invalid ControlNets for model {model.model_id}: {invalid_cns}")
+
+        invalid_preprocessors = [cn.preprocessor for cn in model.controlnets if cn.preprocessor not in AVAILABLE_PREPROCESSORS]
+        if invalid_preprocessors:
+            raise ValueError(f"Invalid preprocessors: {invalid_preprocessors}")
+
         return model
