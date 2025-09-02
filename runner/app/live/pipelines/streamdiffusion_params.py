@@ -22,6 +22,11 @@ CONTROLNETS_BY_ARCHITECTURE = {
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
     ],
+    "sdxl": [
+        "xinsir/controlnet-depth-sdxl-1.0",
+        "xinsir/controlnet-canny-sdxl-1.0",
+        "xinsir/controlnet-tile-sdxl-1.0",
+    ],
 }
 
 class ControlNetConfig(BaseModel):
@@ -43,6 +48,9 @@ class ControlNetConfig(BaseModel):
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
+        "xinsir/controlnet-depth-sdxl-1.0",
+        "xinsir/controlnet-canny-sdxl-1.0",
+        "xinsir/controlnet-tile-sdxl-1.0",
     ]
     """ControlNet model identifier. Each model provides different types of conditioning:
     - openpose: Human pose estimation for figure control

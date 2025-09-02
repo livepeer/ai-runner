@@ -269,7 +269,7 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '1' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny' \
+              --controlnets 'xinsir/controlnet-depth-sdxl-1.0 xinsir/controlnet-canny-sdxl-1.0 xinsir/controlnet-tile-sdxl-1.0' \
               --build-depth-anything \
               --build-pose \
               && \
