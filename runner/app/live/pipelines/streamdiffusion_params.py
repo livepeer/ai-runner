@@ -7,6 +7,8 @@ from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 AVAILABLE_PREPROCESSORS = list_preprocessors()
 
+IPADAPTER_SUPPORTED_MODELS = ["varb15/PerfectPhotonV2.1"]
+
 class ControlNetConfig(BaseModel):
     """
     ControlNet configuration model for guided image generation.
@@ -283,4 +285,13 @@ class StreamDiffusionParams(BaseModel):
                 if cn.preprocessor not in AVAILABLE_PREPROCESSORS:
                     raise ValueError(f"Unrecognized preprocessor: '{cn.preprocessor}'. Must be one of {AVAILABLE_PREPROCESSORS}")
 
+        return model
+
+    @model_validator(mode="after")
+    @staticmethod
+    def check_ip_adapter(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
+        supported = model.model_id in IPADAPTER_SUPPORTED_MODELS
+        enabled = model.ip_adapter and model.ip_adapter.enabled
+        if not supported and enabled:
+            raise ValueError(f"IPAdapter is not supported for {model.model_id}")
         return model

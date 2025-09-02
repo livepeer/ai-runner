@@ -13,7 +13,7 @@ from .interface import Pipeline
 from .loading_overlay import LoadingOverlayRenderer
 from trickle import VideoFrame, VideoOutput
 
-from .streamdiffusion_params import StreamDiffusionParams, ControlNetConfig
+from .streamdiffusion_params import StreamDiffusionParams, IPADAPTER_SUPPORTED_MODELS
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -178,12 +178,7 @@ class StreamDiffusion(Pipeline):
             elif key == 'controlnets':
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
             elif key == 'ip_adapter':
-                enabled = new_params.ip_adapter and new_params.ip_adapter.enabled
-                if not enabled and new_value:
-                    # Enabled flag is ignored, so we set scale to 0.0 to disable it.
-                    new_value['scale'] = 0.0
-
-                update_kwargs['ipadapter_config'] = new_value
+                update_kwargs['ipadapter_config'] = _prepare_ipadapter_configs(new_params)
                 changed_ipadapter = True
             elif key == 'ip_adapter_style_image_url':
                 # Do not set on update_kwargs, we'll update it separately.
@@ -284,17 +279,10 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
 
     return controlnet_configs
 
-def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Tuple[bool, Optional[Dict[str, Any]]]:
+def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[str, Any]]:
     """Prepare IPAdapter configurations for wrapper"""
-    ipadapter_supported = params.model_id not in ['stabilityai/sd-turbo', 'stabilityai/sdxl-turbo']
-    if not ipadapter_supported:
-        if params.ip_adapter and params.ip_adapter.enabled:
-            raise ValueError(f"IPAdapter is not supported for {params.model_id}")
-        return False, None
-
     if not params.ip_adapter:
-        # still return True if no IPAdapter is configured to be able to toggle it later
-        return True, None
+        return None
 
     ip_cfg = params.ip_adapter.model_copy()
     if ip_cfg.ipadapter_model_path:
@@ -315,14 +303,14 @@ def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Tuple[bool, Opt
     if not ip_cfg.image_encoder_path:
         ip_cfg.image_encoder_path = f"h94/IP-Adapter/{dir}/image_encoder" # type: ignore
 
-    return True, ip_cfg.model_dump()
+    if not ip_cfg.enabled:
+        # Enabled flag is ignored, so we set scale to 0.0 to disable it.
+        ip_cfg.scale = 0.0
+
+    return ip_cfg.model_dump()
 
 
 def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1, max_batch_size = 4, engine_dir = "engines", build_engines_if_missing = False):
-    # Prepare ControlNet configuration
-    controlnet_config = _prepare_controlnet_configs(params)
-    use_ipadapter, ipadapter_config = _prepare_ipadapter_configs(params)
-
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
         t_index_list=params.t_index_list,
@@ -347,9 +335,9 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         normalize_seed_weights=params.normalize_seed_weights,
         normalize_prompt_weights=params.normalize_prompt_weights,
         use_controlnet=True,
-        controlnet_config=controlnet_config,
-        use_ipadapter=use_ipadapter,
-        ipadapter_config=ipadapter_config,
+        controlnet_config=_prepare_controlnet_configs(params),
+        use_ipadapter=params.model_id in IPADAPTER_SUPPORTED_MODELS,
+        ipadapter_config=_prepare_ipadapter_configs(params),
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
         use_safety_checker=params.use_safety_checker,
