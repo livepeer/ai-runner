@@ -57,7 +57,8 @@ class ControlNetConfig(BaseModel):
     - hed: Holistically-nested edge detection for line art control
     - canny: Canny edge detection for detailed edge control
     - depth: Depth estimation for 3D spatial control
-    - color: Color palette control for hue/saturation guidance"""
+    - color: Color palette control for hue/saturation guidance
+    - tile: Super-resolution and detail enhancement through tiling"""
 
     conditioning_scale: float = 1.0
     """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
