@@ -29,6 +29,7 @@ function display_help() {
     echo "  --controlnets CONTROLNETS Space-separated list of controlnet models"
     echo "  --build-depth-anything  Build Depth-Anything TensorRT engine (requires ONNX model to be downloaded)"
     echo "  --build-pose            Build YoloNas Pose TensorRT engine (requires ONNX model to be downloaded)"
+    echo "  --build-safety-checker  Build Safety Checker TensorRT engine"
     echo "  --help                  Display this help message"
 }
 
@@ -37,6 +38,7 @@ MODELS_DIR=${HUGGINGFACE_HUB_CACHE:-./models}
 OUTPUT_DIR="./engines"
 BUILD_DEPTH_ANYTHING=false
 BUILD_POSE=false
+BUILD_SAFETY_CHECKER=false
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -75,6 +77,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build-pose)
             BUILD_POSE=true
+            shift
+            ;;
+        --build-safety-checker)
+            BUILD_SAFETY_CHECKER=true
             shift
             ;;
         --help)
@@ -141,6 +147,11 @@ if [ "$BUILD_POSE" = true ]; then
 else
     echo "YoloNas Pose: Disabled"
 fi
+if [ "$BUILD_SAFETY_CHECKER" = true ]; then
+    echo "Safety Checker: Enabled"
+else
+    echo "Safety Checker: Disabled"
+fi
 echo
 
 total_builds=0
@@ -181,7 +192,8 @@ for model in $MODELS; do
             --width "$width" \
             --height "$height" \
             --engine-dir "$OUTPUT_DIR" \
-            --controlnets "$CONTROLNETS"; then
+            --controlnets "$CONTROLNETS" \
+            --build-safety-checker "$BUILD_SAFETY_CHECKER"; then
             echo "  ✓ Success"
         else
             echo "  ✗ Failed"

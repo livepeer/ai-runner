@@ -206,7 +206,7 @@ class StreamDiffusionParams(BaseModel):
     """Acceleration method for inference. TensorRT provides the best performance but requires engine compilation."""
 
     # Processing settings
-    use_safety_checker: bool = True
+    use_safety_checker: bool = False
     """Whether to use the safety checker to prevent generating NSFW images."""
 
     use_denoising_batch: bool = True

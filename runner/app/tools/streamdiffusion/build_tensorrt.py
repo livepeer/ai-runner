@@ -79,6 +79,12 @@ def parse_args():
         default="",
         help="Space-separated list of ControlNet model IDs to compile (e.g. 'lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11f1p_sd15_depth')"
     )
+    parser.add_argument(
+        "--build-safety-checker",
+        type=bool,
+        default=False,
+        help="Build Safety Checker TensorRT engine"
+    )
     return parser.parse_args()
 
 def main():
@@ -106,6 +112,10 @@ def main():
         for i, cn_id in enumerate(controlnet_model_ids):
             print(f"  {i}: {cn_id}")
 
+    use_safety_checker = False
+    if args.build_safety_checker:
+        use_safety_checker = True
+
     params = StreamDiffusionParams(
         model_id=args.model_id,
         t_index_list=t_index_list,
@@ -113,6 +123,7 @@ def main():
         width=args.width,
         height=args.height,
         controlnets=controlnets,
+        use_safety_checker=use_safety_checker,
     )
     load_streamdiffusion_sync(params, min_batch_size=args.min_timesteps, max_batch_size=args.max_timesteps, engine_dir=args.engine_dir, build_engines_if_missing=True)
     print("TensorRT engine building completed successfully!")

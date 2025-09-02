@@ -234,6 +234,7 @@ function build_streamdiffusion_tensorrt() {
               --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
               --build-depth-anything \
               --build-pose \
+              --build-safety-checker \
               && \
             chown -R $(id -u):$(id -g) /models" ||
     (
@@ -250,8 +251,6 @@ function build_streamdiffusion_tensorrt() {
               --min-timesteps '1' \
               --max-timesteps '4' \
               --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny' \
-              --build-depth-anything \
-              --build-pose \
               && \
             chown -R $(id -u):$(id -g) /models" ||
     (
