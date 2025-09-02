@@ -74,11 +74,6 @@ class StreamDiffusion(Pipeline):
         if isinstance(out_tensor, list):
             out_tensor = out_tensor[0]
 
-        if out_tensor.dim() == 3:
-            # Workaround as the NSFW fallback image is coming without the batch dimension
-            out_tensor = out_tensor.unsqueeze(0)
-            return out_tensor
-
         # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
         out_bhwc = out_tensor.permute(0, 2, 3, 1)
         return out_bhwc
@@ -152,7 +147,7 @@ class StreamDiffusion(Pipeline):
         updatable_params = {
             'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
-            'seed', 'seed_interpolation_method', 'normalize_seed_weights', 'use_safety_checker',
+            'seed', 'seed_interpolation_method', 'normalize_seed_weights',
             'controlnets', 'ip_adapter', 'ip_adapter_style_image_url', 'show_reloading_frame'
         }
 
@@ -293,8 +288,8 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
         t_index_list=params.t_index_list,
-        min_batch_size=min_batch_size,
-        max_batch_size=max_batch_size,
+        # min_batch_size=min_batch_size,
+        # max_batch_size=max_batch_size,
         lora_dict=params.lora_dict,
         mode="img2img",
         output_type="pt",
@@ -319,7 +314,6 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         ipadapter_config=ipadapter_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
-        use_safety_checker=params.use_safety_checker,
     )
 
     pipe.prepare(

@@ -30,7 +30,7 @@ RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
     xformers==0.0.30 --no-deps
 
 # Install StreamDiffusion lib into the comfystream environment
-ARG STREAMDIFFUSION_VERSION=304fe07162eb576f6457e4541c5fe56e99b4c392
+ARG STREAMDIFFUSION_VERSION=8bafafddaef0254298d171ca083333d0c6f20364
 RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt]
 
 # Pin versions of ONNX runtime which are too loose on streamdiffusion setup.py
