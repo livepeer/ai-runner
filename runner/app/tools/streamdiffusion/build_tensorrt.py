@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(__file__, "..", "..", "..", "live")))
 
-from pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig
+from pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig
 from pipelines.streamdiffusion import load_streamdiffusion_sync
 
 def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNetConfig]:
@@ -113,7 +113,6 @@ def main():
         width=args.width,
         height=args.height,
         controlnets=controlnets,
-        ip_adapter=IPAdapterConfig(enabled=True),
     )
     load_streamdiffusion_sync(params, min_batch_size=args.min_timesteps, max_batch_size=args.max_timesteps, engine_dir=args.engine_dir, build_engines_if_missing=True)
     print("TensorRT engine building completed successfully!")
