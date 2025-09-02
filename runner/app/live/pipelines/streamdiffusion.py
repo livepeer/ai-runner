@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from typing import Dict, List, Optional, Any, cast
+from typing import Dict, List, Optional, Any, cast, Tuple
 
 import torch
 from streamdiffusion import StreamDiffusionWrapper
@@ -284,11 +284,17 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
 
     return controlnet_configs
 
-def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[str, Any]]:
+def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Tuple[bool, Optional[Dict[str, Any]]]:
     """Prepare IPAdapter configurations for wrapper"""
-    if not params.ip_adapter:
-        return None
+    ipadapter_supported = params.model_id not in ['stabilityai/sd-turbo', 'stabilityai/sdxl-turbo']
+    if not ipadapter_supported:
+        if params.ip_adapter and params.ip_adapter.enabled:
+            raise ValueError(f"IPAdapter is not supported for {params.model_id}")
+        return False, None
 
+    if not params.ip_adapter:
+        # still return True if no IPAdapter is configured to be able to toggle it later
+        return True, None
 
     ip_cfg = params.ip_adapter.model_copy()
     if ip_cfg.ipadapter_model_path:
@@ -309,13 +315,13 @@ def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[s
     if not ip_cfg.image_encoder_path:
         ip_cfg.image_encoder_path = f"h94/IP-Adapter/{dir}/image_encoder" # type: ignore
 
-    return ip_cfg.model_dump()
+    return True, ip_cfg.model_dump()
 
 
 def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1, max_batch_size = 4, engine_dir = "engines", build_engines_if_missing = False):
     # Prepare ControlNet configuration
     controlnet_config = _prepare_controlnet_configs(params)
-    ipadapter_config = _prepare_ipadapter_configs(params)
+    use_ipadapter, ipadapter_config = _prepare_ipadapter_configs(params)
 
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
@@ -342,7 +348,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         normalize_prompt_weights=params.normalize_prompt_weights,
         use_controlnet=True,
         controlnet_config=controlnet_config,
-        use_ipadapter=(params.model_id not in ['stabilityai/sd-turbo']),
+        use_ipadapter=use_ipadapter,
         ipadapter_config=ipadapter_config,
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,
