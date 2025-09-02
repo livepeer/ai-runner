@@ -268,7 +268,7 @@ function build_streamdiffusion_tensorrt() {
               --dimensions '1024x1024' \
               --opt-timesteps '1' \
               --min-timesteps '1' \
-              --max-timesteps '1' \
+              --max-timesteps '4' \
               --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny' \
               --build-depth-anything \
               --build-pose \
