@@ -145,7 +145,7 @@ function download_streamdiffusion_live_models() {
   huggingface-cli download lllyasviel/control_v11p_sd15_canny --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   # SDXL controlnet models
   huggingface-cli download xinsir/controlnet-depth-sdxl-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download xinsir/controlnet-canny-sdxl-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download xinsir/controlnet-canny-sdxl-1.0 --include "diffusion_pytorch_model.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download xinsir/controlnet-tile-sdxl-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
   # IP-Adapter (only required files)
