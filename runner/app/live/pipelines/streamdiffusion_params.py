@@ -4,9 +4,11 @@ from pydantic import BaseModel, Field, model_validator
 
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
-IPADAPTER_SUPPORTED_TYPES = ["sd15"]
+ModelType = Literal["sd15", "sd21", "sdxl"]
 
-CONTROLNETS_BY_TYPE = {
+IPADAPTER_SUPPORTED_TYPES: List[ModelType] = ["sd15"]
+
+CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
     "sd21": [
         "thibaud/controlnet-sd21-openpose-diffusers",
         "thibaud/controlnet-sd21-hed-diffusers",
@@ -26,13 +28,17 @@ CONTROLNETS_BY_TYPE = {
     ],
 }
 
-def get_model_type(model_id: str) -> Literal["sd15", "sd21", "sdxl"]:
-    if model_id == "stabilityai/sd-turbo":
-        return "sd21"
-    elif model_id == "stabilityai/sdxl-turbo":
-        return "sdxl"
-    else:
-        return "sd15"
+MODEL_ID_TO_TYPE: Dict[str, ModelType] = {
+    "stabilityai/sd-turbo": "sd21",
+    "stable-diffusion-v1-5/stable-diffusion-v1-5": "sd15",
+    "varb15/PerfectPhotonV2.1": "sd15",
+    "stabilityai/sdxl-turbo": "sdxl",
+}
+
+def get_model_type(model_id: str) -> ModelType:
+    if model_id not in MODEL_ID_TO_TYPE:
+        raise ValueError(f"Invalid model_id: {model_id}")
+    return MODEL_ID_TO_TYPE[model_id]
 
 
 class ControlNetConfig(BaseModel):
@@ -194,6 +200,7 @@ class StreamDiffusionParams(BaseModel):
     # Model configuration
     model_id: Literal[
         "stabilityai/sd-turbo",
+        "stable-diffusion-v1-5/stable-diffusion-v1-5",
         "varb15/PerfectPhotonV2.1",
         "stabilityai/sdxl-turbo",
     ] = "stabilityai/sd-turbo"
