@@ -1,7 +1,7 @@
 import os
 import logging
 import asyncio
-from typing import Dict, List, Optional, Any, cast, Tuple
+from typing import Dict, List, Optional, Any, cast
 
 import torch
 from streamdiffusion import StreamDiffusionWrapper
