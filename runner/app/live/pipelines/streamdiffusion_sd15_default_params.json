@@ -1,5 +1,5 @@
 {
-  "model_id": "varb15/PerfectPhotonV2.1",
+  "model_id": "stable-diffusion-v1-5/stable-diffusion-v1-5",
   "prompt": "cyberpunk desert structures, masterpiece",
   "prompt_interpolation_method": "slerp",
   "normalize_prompt_weights": true,
