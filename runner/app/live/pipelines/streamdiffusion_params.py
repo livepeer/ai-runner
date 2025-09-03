@@ -152,13 +152,13 @@ class IPAdapterConfig(BaseModel):
         "h94/IP-Adapter-FaceID/ip-adapter-faceid_sd15.bin",
         "h94/IP-Adapter-FaceID/ip-adapter-faceid_sdxl.bin",
     ]] = None
-    """[DEPRECATED] This field is no longer used. The IPAdapter model path is automatically determined based on the IP-Adapter type and base model architecture."""
+    """[DEPRECATED] This field is no longer used. The IPAdapter model path is automatically determined based on the IP-Adapter type and diffusion model type."""
 
     image_encoder_path: Optional[Literal[
         "h94/IP-Adapter/models/image_encoder",
         "h94/IP-Adapter/sdxl_models/image_encoder",
     ]] = None
-    """[DEPRECATED] This field is no longer used. The image encoder path is automatically determined based on the IP-Adapter type and base model architecture."""
+    """[DEPRECATED] This field is no longer used. The image encoder path is automatically determined based on the IP-Adapter type and diffusion model type."""
 
     insightface_model_name: Optional[str] = None
     """InsightFace model name for FaceID. Used only if type is 'faceid'."""
