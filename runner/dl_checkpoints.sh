@@ -130,8 +130,9 @@ function download_streamdiffusion_live_models() {
 
   # U-net models
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download varb15/PerfectPhotonV2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download stable-diffusion-v1-5/stable-diffusion-v1-5 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download stabilityai/sdxl-turbo --include "*.json" "*.txt" "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download varb15/PerfectPhotonV2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
   # SD2.1 (turbo) ControlNet models
   huggingface-cli download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
@@ -250,7 +251,7 @@ function build_streamdiffusion_tensorrt() {
     -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
-              --models 'varb15/PerfectPhotonV2.1' \
+              --models 'stable-diffusion-v1-5/stable-diffusion-v1-5 varb15/PerfectPhotonV2.1' \
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
