@@ -290,16 +290,15 @@ def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[s
     if ip_cfg.image_encoder_path:
         logging.warning(f"[IPAdapter] image_encoder_path is deprecated and will be ignored. Use type instead.")
 
-    is_sdxl = 'sdxl' in params.model_id
-    arch = 'sdxl' if is_sdxl else 'sd15'
-    dir = 'sdxl_models' if is_sdxl else 'models'
+    model_type = get_model_type(params.model_id)
+    dir = 'sdxl_models' if model_type == 'sdxl' else 'models'
 
     if not ip_cfg.ipadapter_model_path:
         match ip_cfg.type:
             case 'regular':
-                ip_cfg.ipadapter_model_path = f"h94/IP-Adapter/{dir}/ip-adapter_{arch}.bin" # type: ignore
+                ip_cfg.ipadapter_model_path = f"h94/IP-Adapter/{dir}/ip-adapter_{model_type}.bin" # type: ignore
             case 'faceid':
-                ip_cfg.ipadapter_model_path = f"h94/IP-Adapter-FaceID/ip-adapter-faceid_{arch}.bin" # type: ignore
+                ip_cfg.ipadapter_model_path = f"h94/IP-Adapter-FaceID/ip-adapter-faceid_{model_type}.bin" # type: ignore
     if not ip_cfg.image_encoder_path:
         ip_cfg.image_encoder_path = f"h94/IP-Adapter/{dir}/image_encoder" # type: ignore
 
