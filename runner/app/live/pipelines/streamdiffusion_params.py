@@ -1,11 +1,8 @@
 from typing import Dict, List, Literal, Optional, Any, Tuple
 
 from pydantic import BaseModel, Field, model_validator
-from streamdiffusion import list_preprocessors
 
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
-
-AVAILABLE_PREPROCESSORS = list_preprocessors()
 
 IPADAPTER_SUPPORTED_TYPES = ["sd15"]
 
@@ -72,10 +69,12 @@ class ControlNetConfig(BaseModel):
     conditioning_scale: float = 1.0
     """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
 
-    preprocessor: Optional[str] = None
+    preprocessor: Literal[
+        "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation"
+    ] = "passthrough"
     """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
 
-    preprocessor_params: Optional[Dict[str, Any]] = None
+    preprocessor_params: Dict[str, Any] = {}
     """Additional parameters for the preprocessor. For example, canny edge detection uses 'low_threshold' and 'high_threshold' values."""
 
     enabled: bool = True
@@ -336,9 +335,5 @@ class StreamDiffusionParams(BaseModel):
         invalid_cns = [cn for cn in cn_ids if cn not in supported_cns]
         if invalid_cns:
             raise ValueError(f"Invalid ControlNets for model {model.model_id}: {invalid_cns}")
-
-        invalid_preprocessors = [cn.preprocessor for cn in model.controlnets if cn.preprocessor not in AVAILABLE_PREPROCESSORS]
-        if invalid_preprocessors:
-            raise ValueError(f"Invalid preprocessors: {invalid_preprocessors}")
 
         return model
