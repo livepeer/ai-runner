@@ -13,7 +13,7 @@ from .interface import Pipeline
 from .loading_overlay import LoadingOverlayRenderer
 from trickle import VideoFrame, VideoOutput
 
-from .streamdiffusion_params import StreamDiffusionParams, IPADAPTER_SUPPORTED_MODELS
+from .streamdiffusion_params import StreamDiffusionParams, get_model_type, IPADAPTER_SUPPORTED_TYPES
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -336,7 +336,7 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         normalize_prompt_weights=params.normalize_prompt_weights,
         use_controlnet=True,
         controlnet_config=_prepare_controlnet_configs(params),
-        use_ipadapter=params.model_id in IPADAPTER_SUPPORTED_MODELS,
+        use_ipadapter=get_model_type(params.model_id) in IPADAPTER_SUPPORTED_TYPES,
         ipadapter_config=_prepare_ipadapter_configs(params),
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines_if_missing,

@@ -7,9 +7,9 @@ from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 AVAILABLE_PREPROCESSORS = list_preprocessors()
 
-IPADAPTER_SUPPORTED_MODELS = ["varb15/PerfectPhotonV2.1"]
+IPADAPTER_SUPPORTED_TYPES = ["sd15"]
 
-CONTROLNETS_BY_ARCHITECTURE = {
+CONTROLNETS_BY_TYPE = {
     "sd21": [
         "thibaud/controlnet-sd21-openpose-diffusers",
         "thibaud/controlnet-sd21-hed-diffusers",
@@ -28,6 +28,15 @@ CONTROLNETS_BY_ARCHITECTURE = {
         "xinsir/controlnet-tile-sdxl-1.0",
     ],
 }
+
+def get_model_type(model_id: str) -> Literal["sd15", "sd21", "sdxl"]:
+    if model_id == "stabilityai/sd-turbo":
+        return "sd21"
+    elif model_id == "stabilityai/sdxl-turbo":
+        return "sdxl"
+    else:
+        return "sd15"
+
 
 class ControlNetConfig(BaseModel):
     """
@@ -303,7 +312,7 @@ class StreamDiffusionParams(BaseModel):
     @model_validator(mode="after")
     @staticmethod
     def check_ip_adapter(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
-        supported = model.model_id in IPADAPTER_SUPPORTED_MODELS
+        supported = get_model_type(model.model_id) in IPADAPTER_SUPPORTED_TYPES
         enabled = model.ip_adapter and model.ip_adapter.enabled
         if not supported and enabled:
             raise ValueError(f"IPAdapter is not supported for {model.model_id}")
@@ -321,10 +330,8 @@ class StreamDiffusionParams(BaseModel):
                 raise ValueError(f"Duplicate controlnet model_id: {cn.model_id}")
             cn_ids.add(cn.model_id)
 
-        arch = ('sdxl' if model.model_id == "stabilityai/sdxl-turbo"
-                else 'sd21' if model.model_id == "stabilityai/sd-turbo"
-                else 'sd15')
-        supported_cns = CONTROLNETS_BY_ARCHITECTURE.get(arch, [])
+        model_type = get_model_type(model.model_id)
+        supported_cns = CONTROLNETS_BY_TYPE.get(model_type, [])
 
         invalid_cns = [cn for cn in cn_ids if cn not in supported_cns]
         if invalid_cns:
