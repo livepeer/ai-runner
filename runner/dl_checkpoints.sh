@@ -130,7 +130,7 @@ function download_streamdiffusion_live_models() {
 
   # U-net models
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download stable-diffusion-v1-5/stable-diffusion-v1-5 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download stable-diffusion-v1-5/stable-diffusion-v1-5 --include "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download stabilityai/sdxl-turbo --include "*.json" "*.txt" "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download varb15/PerfectPhotonV2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
