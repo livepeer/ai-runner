@@ -200,7 +200,7 @@ class StreamDiffusionParams(BaseModel):
     """Base U-Net model to use for generation."""
 
     # Generation parameters
-    prompt: str | List[Tuple[str, float]] = "an anime render of a girl with purple hair, masterpiece"
+    prompt: str | List[Tuple[str, float]] = "flowers"
     """Text prompt describing the desired image. Can be a single string or weighted list of (prompt, weight) tuples."""
 
     prompt_interpolation_method: Literal["linear", "slerp"] = "slerp"
