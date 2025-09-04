@@ -130,17 +130,17 @@ function download_streamdiffusion_live_models() {
 
   # U-net models
   huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # huggingface-cli download SG161222/Realistic_Vision_V6.0_B1_noVAE --include "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download stabilityai/sdxl-turbo --include "*.json" "*.txt" "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download varb15/PerfectPhotonV2.1 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # Additional SD1.5 models (commented for optional download)
-  # huggingface-cli download Lykon/dreamshaper-8 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # huggingface-cli download prompthero/openjourney-v4 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # huggingface-cli download dreamlike-art/dreamlike-diffusion-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # huggingface-cli download dreamlike-art/dreamlike-photoreal-2.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # huggingface-cli download danbrown/Lyriel-v1-5 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # huggingface-cli download stablediffusionapi/deliberate-v2 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # huggingface-cli download Lykon/dreamshaper-8-lcm --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  # Additional SD1.5 models under evaluation
+  huggingface-cli download SG161222/Realistic_Vision_V6.0_B1_noVAE --include "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download Lykon/dreamshaper-8 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download prompthero/openjourney-v4 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download dreamlike-art/dreamlike-diffusion-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download dreamlike-art/dreamlike-photoreal-2.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download danbrown/Lyriel-v1-5 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download stablediffusionapi/deliberate-v2 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  huggingface-cli download Lykon/dreamshaper-8-lcm --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
 
   # SD2.1 (turbo) ControlNet models
   huggingface-cli download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
