@@ -311,10 +311,10 @@ def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[s
 
 def load_streamdiffusion_sync(
     params: StreamDiffusionParams,
-    min_batch_size = 1,
-    max_batch_size = 4,
-    engine_dir = "engines",
-    build_engines = False,
+    min_batch_size=1,
+    max_batch_size=4,
+    engine_dir="engines",
+    build_engines=False,
 ) -> StreamDiffusionWrapper:
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
