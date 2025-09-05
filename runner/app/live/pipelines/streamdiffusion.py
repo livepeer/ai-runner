@@ -346,6 +346,7 @@ def load_streamdiffusion_sync(
         build_engines_if_missing=build_engines,
         compile_engines_only=build_engines,
         use_safety_checker=params.use_safety_checker,
+        safety_checker_threshold=params.safety_checker_threshold,
     )
 
     pipe.prepare(
