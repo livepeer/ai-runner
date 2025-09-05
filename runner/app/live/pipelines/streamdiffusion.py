@@ -151,8 +151,9 @@ class StreamDiffusion(Pipeline):
         updatable_params = {
             'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
-            'seed', 'seed_interpolation_method', 'normalize_seed_weights', 'use_safety_checker',
-            'controlnets', 'ip_adapter', 'ip_adapter_style_image_url', 'show_reloading_frame'
+            'seed', 'seed_interpolation_method', 'normalize_seed_weights',
+            'use_safety_checker', 'safety_checker_threshold', 'controlnets',
+            'ip_adapter', 'ip_adapter_style_image_url', 'show_reloading_frame'
         }
 
         update_kwargs = {}
@@ -166,7 +167,7 @@ class StreamDiffusion(Pipeline):
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
             elif key == 'show_reloading_frame':
-                # Handled in update_params
+                # Handled by us in update_params, not a config from the lib
                 continue
 
             # at this point, we know it's an updatable parameter that changed

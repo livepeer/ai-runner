@@ -114,6 +114,7 @@ def main():
             width=args.width,
             height=args.height,
             controlnets=controlnets,
+            use_safety_checker=True,
         ),
         min_batch_size=args.min_timesteps,
         max_batch_size=args.max_timesteps,
