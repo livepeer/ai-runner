@@ -39,8 +39,7 @@ class StreamDiffusion(Pipeline):
         async with self._pipeline_lock:
             loading_frame = await self._overlay_renderer.render_if_active(self.params.width, self.params.height)
             if loading_frame is not None:
-                output = VideoOutput(frame, request_id).replace_tensor(loading_frame)
-                output.is_loading_frame = True
+                output = VideoOutput(frame, request_id, is_loading_frame=True).replace_tensor(loading_frame)
             else:
                 out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
                 output = VideoOutput(frame, request_id).replace_tensor(out_tensor)

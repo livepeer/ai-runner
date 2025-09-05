@@ -78,13 +78,14 @@ class VideoOutput(OutputFrame):
     frame: VideoFrame
     request_id: str
 
-    def __init__(self, frame: VideoFrame, request_id: str = ''):
+    def __init__(self, frame: VideoFrame, request_id: str = '', is_loading_frame: bool = False):
         self.frame = frame
         self.request_id = request_id
+        self.is_loading_frame = is_loading_frame
 
     def replace_tensor(self, tensor: torch.Tensor):
         new_frame = self.frame.replace_tensor(tensor)
-        return VideoOutput(new_frame, self.request_id)
+        return VideoOutput(new_frame, self.request_id, self.is_loading_frame)
 
     @property
     def tensor(self):
