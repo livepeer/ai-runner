@@ -106,15 +106,20 @@ def main():
         for i, cn_id in enumerate(controlnet_model_ids):
             print(f"  {i}: {cn_id}")
 
-    params = StreamDiffusionParams(
-        model_id=args.model_id,
-        t_index_list=t_index_list,
-        acceleration="tensorrt",
-        width=args.width,
-        height=args.height,
-        controlnets=controlnets,
+    load_streamdiffusion_sync(
+        params=StreamDiffusionParams(
+            model_id=args.model_id,
+            t_index_list=t_index_list,
+            acceleration="tensorrt",
+            width=args.width,
+            height=args.height,
+            controlnets=controlnets,
+        ),
+        min_batch_size=args.min_timesteps,
+        max_batch_size=args.max_timesteps,
+        engine_dir=args.engine_dir,
+        build_engines=True,
     )
-    load_streamdiffusion_sync(params, min_batch_size=args.min_timesteps, max_batch_size=args.max_timesteps, engine_dir=args.engine_dir, build_engines_if_missing=True)
     print("TensorRT engine building completed successfully!")
 
 if __name__ == "__main__":

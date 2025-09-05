@@ -309,7 +309,13 @@ def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[s
     return ip_cfg.model_dump()
 
 
-def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1, max_batch_size = 4, engine_dir = "engines", build_engines_if_missing = False):
+def load_streamdiffusion_sync(
+    params: StreamDiffusionParams,
+    min_batch_size = 1,
+    max_batch_size = 4,
+    engine_dir = "engines",
+    build_engines = False,
+) -> StreamDiffusionWrapper:
     pipe = StreamDiffusionWrapper(
         model_id_or_path=params.model_id,
         t_index_list=params.t_index_list,
@@ -338,7 +344,8 @@ def load_streamdiffusion_sync(params: StreamDiffusionParams, min_batch_size = 1,
         use_ipadapter=get_model_type(params.model_id) in IPADAPTER_SUPPORTED_TYPES,
         ipadapter_config=_prepare_ipadapter_configs(params),
         engine_dir=engine_dir,
-        build_engines_if_missing=build_engines_if_missing,
+        build_engines_if_missing=build_engines,
+        compile_engines_only=build_engines,
         use_safety_checker=params.use_safety_checker,
     )
 
