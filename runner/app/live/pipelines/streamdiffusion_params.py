@@ -6,7 +6,7 @@ from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 ModelType = Literal["sd15", "sd21", "sdxl"]
 
-IPADAPTER_SUPPORTED_TYPES: List[ModelType] = ["sd15"]
+IPADAPTER_SUPPORTED_TYPES: List[ModelType] = ["sd15", "sdxl"]
 
 CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
     "sd21": [
