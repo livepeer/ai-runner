@@ -158,6 +158,7 @@ def audio_to_text(
         return pipeline(
             audio=audio, return_timestamps=return_timestamps, duration=duration
         )
+        
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.
