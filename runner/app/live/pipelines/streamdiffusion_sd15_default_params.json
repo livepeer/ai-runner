@@ -44,7 +44,7 @@
     {
       "model_id": "lllyasviel/control_v11p_sd15_canny",
       "conditioning_scale": 0.0,
-      "preprocessor": "feedback",
+      "preprocessor": "canny",
       "preprocessor_params": {},
       "enabled": true,
       "control_guidance_start": 0.0,
