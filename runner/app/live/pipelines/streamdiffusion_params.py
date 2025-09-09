@@ -258,7 +258,7 @@ class StreamDiffusionParams(BaseModel):
     use_safety_checker: bool = True
     """Whether to use the safety checker to prevent generating NSFW images."""
 
-    safety_checker_threshold: float = 0.95
+    safety_checker_threshold: float = 0.5
     """Threshold for the safety checker. Higher values allow more NSFW images to passthrough."""
 
     use_denoising_batch: bool = True
