@@ -46,7 +46,8 @@ RUN conda run -n comfystream pip install --no-cache-dir --upgrade --root-user-ac
     polygraphy==0.49.24 \
     onnx-graphsurgeon==0.5.8 \
     controlnet-aux==0.0.10 \
-    mediapipe==0.10.21
+    mediapipe==0.10.21 \
+    insightface==0.7.3
 
 WORKDIR /app
 
