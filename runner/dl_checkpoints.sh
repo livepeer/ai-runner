@@ -159,7 +159,7 @@ function download_streamdiffusion_live_models() {
   huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
 
   # Post-processor models
-  huggingface-cli download Freepik/nsfw_image_detection --include "*.safetensors" "*.json" "*.txt" --cache-dir models
+  huggingface-cli download Freepik/nsfw_image_detector --include "*.safetensors" "*.json" "*.txt" --cache-dir models
 }
 
 function download_comfyui_live_models() {
