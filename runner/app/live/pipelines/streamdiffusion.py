@@ -13,7 +13,7 @@ from .interface import Pipeline
 from .loading_overlay import LoadingOverlayRenderer
 from trickle import VideoFrame, VideoOutput
 
-from .streamdiffusion_params import StreamDiffusionParams, get_model_type, IPADAPTER_SUPPORTED_TYPES
+from .streamdiffusion_params import StreamDiffusionParams, IPAdapterConfig, get_model_type, IPADAPTER_SUPPORTED_TYPES
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -178,6 +178,13 @@ class StreamDiffusion(Pipeline):
             elif key == 'controlnets':
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
             elif key == 'ip_adapter':
+                # Check if only dynamic params have changed
+                only_dynamic_changes = curr_params.get('ip_adapter') or IPAdapterConfig().model_dump()
+                for k in ['enabled', 'scale', 'weight_type']:
+                    only_dynamic_changes[k] = new_value[k]
+                if new_value != only_dynamic_changes:
+                    return False
+
                 update_kwargs['ipadapter_config'] = _prepare_ipadapter_configs(new_params)
                 changed_ipadapter = True
             elif key == 'ip_adapter_style_image_url':
