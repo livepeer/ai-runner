@@ -167,7 +167,7 @@ class IPAdapterConfig(BaseModel):
     ]] = None
     """[DEPRECATED] This field is no longer used. The image encoder path is automatically determined based on the IP-Adapter type and diffusion model type."""
 
-    insightface_model_name: Optional[str] = None
+    insightface_model_name: Optional[Literal["buffalo_l"]] = "buffalo_l"
     """InsightFace model name for FaceID. Used only if type is 'faceid'."""
 
     scale: float = 1.0
