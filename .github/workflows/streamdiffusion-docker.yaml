@@ -84,9 +84,10 @@ jobs:
             subtype: "sd15"
           - name: streamdiffusion-sdxl
             subtype: "sdxl"
+          - name: streamdiffusion-sdxl-faceid
+            subtype: "sdxl-faceid"
     env:
       DOCKER_SUFFIX: ${{ matrix.subtype && format('-{0}', matrix.subtype) }}
-      FILE_SUFFIX: ${{ matrix.subtype && format('_{0}', matrix.subtype) }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -127,6 +128,7 @@ jobs:
         id: params_json
         shell: bash
         run: |
+          FILE_SUFFIX="${env.DOCKER_SUFFIX//-/_}"
           JSON_FILE="runner/app/live/pipelines/streamdiffusion${FILE_SUFFIX}_default_params.json"
           if [ ! -f "$JSON_FILE" ]; then
             echo "Params file missing: $JSON_FILE" >&2
