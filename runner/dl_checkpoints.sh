@@ -257,6 +257,7 @@ function build_streamdiffusion_tensorrt() {
               --min-timesteps '1' \
               --max-timesteps '4' \
               --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny' \
+              --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \
               && \
@@ -276,6 +277,7 @@ function build_streamdiffusion_tensorrt() {
               --min-timesteps '1' \
               --max-timesteps '4' \
               --controlnets 'xinsir/controlnet-depth-sdxl-1.0 xinsir/controlnet-canny-sdxl-1.0 xinsir/controlnet-tile-sdxl-1.0' \
+              --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \
               && \
