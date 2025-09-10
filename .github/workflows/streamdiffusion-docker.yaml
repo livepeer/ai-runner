@@ -79,19 +79,11 @@ jobs:
       matrix:
         include:
           - name: streamdiffusion
-            image_tag_prefix: live-app-streamdiffusion
-            cache_ref: livepeer/ai-runner:live-app-streamdiffusion-dockerbuildcache
-            load_params: false
+            suffix: ""
           - name: streamdiffusion-sd15
-            image_tag_prefix: live-app-streamdiffusion-sd15
-            cache_ref: livepeer/ai-runner:live-app-streamdiffusion-sd15-dockerbuildcache
-            load_params: true
-            params_file: runner/app/live/pipelines/streamdiffusion_sd15_default_params.json
+            suffix: "-sd15"
           - name: streamdiffusion-sdxl
-            image_tag_prefix: live-app-streamdiffusion-sdxl
-            cache_ref: livepeer/ai-runner:live-app-streamdiffusion-sdxl-dockerbuildcache
-            load_params: true
-            params_file: runner/app/live/pipelines/streamdiffusion_sdxl_default_params.json
+            suffix: "-sdxl"
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -108,13 +100,13 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=${{ matrix.image_tag_prefix }},enable={{is_default_branch}}
-            type=sha,prefix=${{ matrix.image_tag_prefix }}-sha-
-            type=sha,format=long,prefix=${{ matrix.image_tag_prefix }}-sha-
-            type=ref,event=pr,prefix=${{ matrix.image_tag_prefix }}-pr-
-            type=ref,event=tag,prefix=${{ matrix.image_tag_prefix }}-
-            type=ref,event=branch,prefix=${{ matrix.image_tag_prefix }}-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=${{ matrix.image_tag_prefix }}-
+            type=raw,value=live-app-streamdiffusion${{ matrix.suffix }},enable={{is_default_branch}}
+            type=sha,prefix=live-app-streamdiffusion${{ matrix.suffix }}-sha-
+            type=sha,format=long,prefix=live-app-streamdiffusion${{ matrix.suffix }}-sha-
+            type=ref,event=pr,prefix=live-app-streamdiffusion${{ matrix.suffix }}-pr-
+            type=ref,event=tag,prefix=live-app-streamdiffusion${{ matrix.suffix }}-
+            type=ref,event=branch,prefix=live-app-streamdiffusion${{ matrix.suffix }}-
+            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-streamdiffusion${{ matrix.suffix }}-
 
       - name: Get version information (for docker build tag)
         id: version
@@ -127,14 +119,20 @@ jobs:
           username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
-      - name: Load params from file (compact via tr)
-        if: ${{ matrix.load_params }}
+      - name: Load params from file if present (compact via tr)
         id: params_json
         shell: bash
         run: |
-          JSON_FILE="${{ matrix.params_file }}"
-          JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
-          echo "json_compact=$JSON_COMPACT" >> "$GITHUB_OUTPUT"
+          SUFFIX="${{ matrix.suffix }}"
+          JSON_SUFFIX="${SUFFIX//-/_}"
+          JSON_FILE="runner/app/live/pipelines/streamdiffusion${JSON_SUFFIX}_default_params.json"
+          if [ -f "$JSON_FILE" ]; then
+            JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
+            echo "json_compact=$JSON_COMPACT" >> "$GITHUB_OUTPUT"
+          else
+            echo "json_compact=" >> "$GITHUB_OUTPUT"
+            echo "No params file found at $JSON_FILE; continuing without INFERPY_INITIAL_PARAMS."
+          fi
 
       - name: Build and push pipeline app image
         id: build-app
@@ -151,13 +149,13 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             # only specify base image if we just built it above, otherwise use whatever default is in the Dockerfile
             ${{ needs.base.outputs.image-digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.base.outputs.image-digest) }}
-            ${{ matrix.load_params && format('INFERPY_INITIAL_PARAMS={0}', steps.params_json.outputs.json_compact) }}
+            ${{ steps.params_json.outputs.json_compact && format('INFERPY_INITIAL_PARAMS={0}', steps.params_json.outputs.json_compact) }}
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ matrix.cache_ref }}
-          cache-to: type=registry,ref=${{ matrix.cache_ref }},mode=max
+          cache-from: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion${{ matrix.suffix }}-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion${{ matrix.suffix }}-dockerbuildcache,mode=max
 
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
