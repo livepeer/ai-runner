@@ -123,17 +123,20 @@ jobs:
           username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
-      - name: Load params for subtype (fail if missing)
+      - name: Load params for subtype
         if: ${{ matrix.subtype != '' }}
         id: params_json
         shell: bash
         run: |
+          set -ex
+
           FILE_SUFFIX="${env.DOCKER_SUFFIX//-/_}"
           JSON_FILE="runner/app/live/pipelines/streamdiffusion${FILE_SUFFIX}_default_params.json"
           if [ ! -f "$JSON_FILE" ]; then
             echo "Params file missing: $JSON_FILE" >&2
             exit 1
           fi
+
           JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
           echo "json_compact=$JSON_COMPACT" >> "$GITHUB_OUTPUT"
 
