@@ -72,21 +72,16 @@ jobs:
           cache-to: type=registry,ref=livepeer/ai-runner:live-base-streamdiffusion-dockerbuildcache,mode=max
 
   runner:
-    name: Build pipeline images (streamdiffusion variants)
+    name: Build pipeline images
     needs: base
     runs-on: [self-hosted, linux, amd64]
     strategy:
-      max-parallel: 1
       matrix:
         include:
-          - name: streamdiffusion
-            subtype: ""
-          - name: streamdiffusion-sd15
-            subtype: "sd15"
-          - name: streamdiffusion-sdxl
-            subtype: "sdxl"
-          - name: streamdiffusion-sdxl-faceid
-            subtype: "sdxl-faceid"
+          - subtype: ""
+          - subtype: "sd15"
+          - subtype: "sdxl"
+          - subtype: "sdxl-faceid"
     env:
       DOCKER_SUFFIX: ${{ matrix.subtype && format('-{0}', matrix.subtype) }}
     steps:
