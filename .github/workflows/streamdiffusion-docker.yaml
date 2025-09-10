@@ -79,11 +79,14 @@ jobs:
       matrix:
         include:
           - name: streamdiffusion
-            suffix: ""
+            subtype: ""
           - name: streamdiffusion-sd15
-            suffix: "-sd15"
+            subtype: "sd15"
           - name: streamdiffusion-sdxl
-            suffix: "-sdxl"
+            subtype: "sdxl"
+    env:
+      DOCKER_SUFFIX: ${{ matrix.subtype && format('-{0}', matrix.subtype) }}
+      FILE_SUFFIX: ${{ matrix.subtype && format('_{0}', matrix.subtype) }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -100,13 +103,13 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=live-app-streamdiffusion${{ matrix.suffix }},enable={{is_default_branch}}
-            type=sha,prefix=live-app-streamdiffusion${{ matrix.suffix }}-sha-
-            type=sha,format=long,prefix=live-app-streamdiffusion${{ matrix.suffix }}-sha-
-            type=ref,event=pr,prefix=live-app-streamdiffusion${{ matrix.suffix }}-pr-
-            type=ref,event=tag,prefix=live-app-streamdiffusion${{ matrix.suffix }}-
-            type=ref,event=branch,prefix=live-app-streamdiffusion${{ matrix.suffix }}-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-streamdiffusion${{ matrix.suffix }}-
+            type=raw,value=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }},enable={{is_default_branch}}
+            type=sha,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-sha-
+            type=sha,format=long,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-sha-
+            type=ref,event=pr,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-pr-
+            type=ref,event=tag,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-
+            type=ref,event=branch,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-
+            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-
 
       - name: Get version information (for docker build tag)
         id: version
@@ -119,20 +122,18 @@ jobs:
           username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
-      - name: Load params from file if present (compact via tr)
+      - name: Load params for subtype (fail if missing)
+        if: ${{ matrix.subtype != '' }}
         id: params_json
         shell: bash
         run: |
-          SUFFIX="${{ matrix.suffix }}"
-          JSON_SUFFIX="${SUFFIX//-/_}"
-          JSON_FILE="runner/app/live/pipelines/streamdiffusion${JSON_SUFFIX}_default_params.json"
-          if [ -f "$JSON_FILE" ]; then
-            JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
-            echo "json_compact=$JSON_COMPACT" >> "$GITHUB_OUTPUT"
-          else
-            echo "json_compact=" >> "$GITHUB_OUTPUT"
-            echo "No params file found at $JSON_FILE; continuing without INFERPY_INITIAL_PARAMS."
+          JSON_FILE="runner/app/live/pipelines/streamdiffusion${FILE_SUFFIX}_default_params.json"
+          if [ ! -f "$JSON_FILE" ]; then
+            echo "Params file missing: $JSON_FILE" >&2
+            exit 1
           fi
+          JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
+          echo "json_compact=$JSON_COMPACT" >> "$GITHUB_OUTPUT"
 
       - name: Build and push pipeline app image
         id: build-app
@@ -154,8 +155,8 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion${{ matrix.suffix }}-dockerbuildcache
-          cache-to: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion${{ matrix.suffix }}-dockerbuildcache,mode=max
+          cache-from: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-dockerbuildcache,mode=max
 
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
