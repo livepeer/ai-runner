@@ -76,6 +76,7 @@ jobs:
     needs: base
     runs-on: [self-hosted, linux, amd64]
     strategy:
+      max-parallel: 1
       matrix:
         include:
           - name: streamdiffusion
