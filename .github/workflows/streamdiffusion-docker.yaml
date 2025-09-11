@@ -71,7 +71,7 @@ jobs:
           cache-from: type=registry,ref=livepeer/ai-runner:live-base-streamdiffusion-dockerbuildcache
           cache-to: type=registry,ref=livepeer/ai-runner:live-base-streamdiffusion-dockerbuildcache,mode=max
 
-  runner:
+  app:
     name: Build pipeline images
     needs: base
     runs-on: [self-hosted, linux, amd64]
@@ -159,5 +159,10 @@ jobs:
           cache-from: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-dockerbuildcache
           cache-to: type=registry,ref=livepeer/ai-runner:live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-dockerbuildcache,mode=max
 
+  notify:
+    name: Notify new build upload
+    needs: app
+    runs-on: [self-hosted, linux, amd64]
+    steps:
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
