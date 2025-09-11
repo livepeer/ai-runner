@@ -6,7 +6,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(__file__, "..", "..", "..", "live")))
 
-from pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig
+from pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig
 from pipelines.streamdiffusion import load_streamdiffusion_sync
 
 def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNetConfig]:
@@ -79,10 +79,19 @@ def parse_args():
         default="",
         help="Space-separated list of ControlNet model IDs to compile (e.g. 'lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11f1p_sd15_depth')"
     )
+    parser.add_argument(
+        "--ipadapter-type",
+        type=str,
+        default="",
+        help="IPAdapter type to compile. If set, it must be either 'regular' or 'faceid'"
+    )
     return parser.parse_args()
 
 def main():
     args = parse_args()
+
+    if args.ipadapter_type not in ["", "regular", "faceid"]:
+        raise ValueError(f"Invalid IPAdapter type: {args.ipadapter_type}. Must be either '', 'regular' or 'faceid'")
 
     # Create t_index_list based on number of timesteps. Only the size matters...
     t_index_list = list(range(1, 50, 50 // args.opt_timesteps))[:args.opt_timesteps]
@@ -115,6 +124,7 @@ def main():
             height=args.height,
             controlnets=controlnets,
             use_safety_checker=True,
+            ip_adapter=IPAdapterConfig(type=args.ipadapter_type) if args.ipadapter_type else None,
         ),
         min_batch_size=args.min_timesteps,
         max_batch_size=args.max_timesteps,

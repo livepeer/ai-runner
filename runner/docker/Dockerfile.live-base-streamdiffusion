@@ -30,7 +30,7 @@ RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
     xformers==0.0.30 --no-deps
 
 # Install StreamDiffusion lib into the comfystream environment
-ARG STREAMDIFFUSION_VERSION=v0.1.0-beta
+ARG STREAMDIFFUSION_VERSION=74b747ea641ab0d61ed5a1f65a4bd72af33622e6
 RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt]
 
 # Pin versions of ONNX runtime which are too loose on streamdiffusion setup.py
@@ -46,7 +46,8 @@ RUN conda run -n comfystream pip install --no-cache-dir --upgrade --root-user-ac
     polygraphy==0.49.24 \
     onnx-graphsurgeon==0.5.8 \
     controlnet-aux==0.0.10 \
-    mediapipe==0.10.21
+    mediapipe==0.10.21 \
+    insightface==0.7.3
 
 WORKDIR /app
 
@@ -56,3 +57,4 @@ ENV HF_HUB_OFFLINE=1
 
 # Create symlink for where StreamDiffusion builds TensorRT engines at runtime
 RUN ln -s /models/StreamDiffusion--engines ./engines
+RUN mkdir -p /root && ln -s /models/insightface /root/.insightface

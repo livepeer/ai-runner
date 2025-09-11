@@ -14,6 +14,7 @@ MIN_TIMESTEPS="1" # Minimum number of timesteps for the t_index_list
 MAX_TIMESTEPS="4" # Maximum number of timesteps for the t_index_list
 DIMENSIONS="512x512" # Engines are now compiled for the 384-1024 range, but keep this in case it's useful in the future
 CONTROLNETS="" # Default empty, will be set from command line
+IPADAPTER_TYPES="" # Default empty, will be set from command line
 
 # Function to display help
 function display_help() {
@@ -27,6 +28,7 @@ function display_help() {
     echo "  --dimensions DIMS       Space-separated list of dimensions in WxH format (default: 384x704 704x384)"
     echo "  --output-dir DIR        Output directory for TensorRT engines (default: engines)"
     echo "  --controlnets CONTROLNETS Space-separated list of controlnet models"
+    echo "  --ipadapter-types TYPES   Space-separated list of IPAdapter types to compile ('regular' or 'faceid')"
     echo "  --build-depth-anything  Build Depth-Anything TensorRT engine (requires ONNX model to be downloaded)"
     echo "  --build-pose            Build YoloNas Pose TensorRT engine (requires ONNX model to be downloaded)"
     echo "  --help                  Display this help message"
@@ -67,6 +69,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --controlnets)
             CONTROLNETS="$2"
+            shift 2
+            ;;
+        --ipadapter-types)
+            IPADAPTER_TYPES="$2"
             shift 2
             ;;
         --build-depth-anything)
@@ -131,6 +137,13 @@ if [ -n "$CONTROLNETS" ]; then
 else
     echo "ControlNets: None"
 fi
+if [ -n "$IPADAPTER_TYPES" ]; then
+    read -r -a IPADAPTER_TYPES_ARR <<< "$IPADAPTER_TYPES"
+    echo "IPAdapter Types: $IPADAPTER_TYPES"
+else
+    IPADAPTER_TYPES_ARR=("")
+    echo "IPAdapter Types: None"
+fi
 if [ "$BUILD_DEPTH_ANYTHING" = true ]; then
     echo "Depth-Anything: Enabled"
 else
@@ -148,7 +161,9 @@ total_builds=0
 # Calculate total number of builds
 for model in $MODELS; do
     for dim in $DIMENSIONS; do
-        total_builds=$((total_builds + 1))
+        for ip_type in "${IPADAPTER_TYPES_ARR[@]}"; do
+            total_builds=$((total_builds + 1))
+        done
     done
 done
 
@@ -159,36 +174,42 @@ current_build=0
 
 for model in $MODELS; do
     for dim in $DIMENSIONS; do
-        current_build=$((current_build + 1))
-
         # Parse dimensions
         width=${dim%x*}
         height=${dim#*x}
 
-        echo "[$current_build/$total_builds] Building TensorRT engine for:"
-        echo "  Model: $model"
-        echo "  Opt Timesteps: $OPT_TIMESTEPS"
-        echo "  Min Timesteps: $MIN_TIMESTEPS"
-        echo "  Max Timesteps: $MAX_TIMESTEPS"
-        echo "  Dimensions: ${width}x${height}"
+        for ip_type in "${IPADAPTER_TYPES_ARR[@]}"; do
+            current_build=$((current_build + 1))
 
-        # Build the engine
-        if $CONDA_PYTHON "$BUILD_SCRIPT" \
-            --model-id "$model" \
-            --opt-timesteps "$OPT_TIMESTEPS" \
-            --min-timesteps "$MIN_TIMESTEPS" \
-            --max-timesteps "$MAX_TIMESTEPS" \
-            --width "$width" \
-            --height "$height" \
-            --engine-dir "$OUTPUT_DIR" \
-            --controlnets "$CONTROLNETS"; then
-            echo "  ✓ Success"
-        else
-            echo "  ✗ Failed"
-            echo "Aborting build process due to failure."
-            exit 1
-        fi
-        echo
+            echo "[$current_build/$total_builds] Building TensorRT engine for:"
+            echo "  Model: $model"
+            echo "  Opt Timesteps: $OPT_TIMESTEPS"
+            echo "  Min Timesteps: $MIN_TIMESTEPS"
+            echo "  Max Timesteps: $MAX_TIMESTEPS"
+            echo "  Dimensions: ${width}x${height}"
+            echo "  IPAdapter Type: ${ip_type:-None}"
+
+            build_args=(
+                --model-id "$model"
+                --opt-timesteps "$OPT_TIMESTEPS"
+                --min-timesteps "$MIN_TIMESTEPS"
+                --max-timesteps "$MAX_TIMESTEPS"
+                --width "$width"
+                --height "$height"
+                --engine-dir "$OUTPUT_DIR"
+                --controlnets "$CONTROLNETS"
+                --ipadapter-type "$ip_type"
+            )
+
+            if $CONDA_PYTHON "$BUILD_SCRIPT" "${build_args[@]}"; then
+                echo "  ✓ Success"
+            else
+                echo "  ✗ Failed"
+                echo "Aborting build process due to failure."
+                exit 1
+            fi
+            echo
+        done
     done
 done
 

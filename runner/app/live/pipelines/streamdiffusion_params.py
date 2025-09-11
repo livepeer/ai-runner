@@ -30,16 +30,8 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
 
 MODEL_ID_TO_TYPE: Dict[str, ModelType] = {
     "stabilityai/sd-turbo": "sd21",
-    "SG161222/Realistic_Vision_V6.0_B1_noVAE": "sd15",
-    "varb15/PerfectPhotonV2.1": "sd15",
     "stabilityai/sdxl-turbo": "sdxl",
-    "Lykon/dreamshaper-8": "sd15",
     "prompthero/openjourney-v4": "sd15",
-    "dreamlike-art/dreamlike-diffusion-1.0": "sd15",
-    "dreamlike-art/dreamlike-photoreal-2.0": "sd15",
-    "danbrown/Lyriel-v1-5": "sd15",
-    "stablediffusionapi/deliberate-v2": "sd15",
-    "Lykon/dreamshaper-8-lcm": "sd15",
 }
 
 def get_model_type(model_id: str) -> ModelType:
@@ -173,7 +165,7 @@ class IPAdapterConfig(BaseModel):
     ]] = None
     """[DEPRECATED] This field is no longer used. The image encoder path is automatically determined based on the IP-Adapter type and diffusion model type."""
 
-    insightface_model_name: Optional[str] = None
+    insightface_model_name: Optional[Literal["buffalo_l"]] = "buffalo_l"
     """InsightFace model name for FaceID. Used only if type is 'faceid'."""
 
     scale: float = 1.0
@@ -207,16 +199,8 @@ class StreamDiffusionParams(BaseModel):
     # Model configuration
     model_id: Literal[
         "stabilityai/sd-turbo",
-        "SG161222/Realistic_Vision_V6.0_B1_noVAE",
-        "varb15/PerfectPhotonV2.1",
         "stabilityai/sdxl-turbo",
-        "Lykon/dreamshaper-8",
         "prompthero/openjourney-v4",
-        "dreamlike-art/dreamlike-diffusion-1.0",
-        "dreamlike-art/dreamlike-photoreal-2.0",
-        "danbrown/Lyriel-v1-5",
-        "stablediffusionapi/deliberate-v2",
-        "Lykon/dreamshaper-8-lcm",
     ] = "stabilityai/sd-turbo"
     """Base U-Net model to use for generation."""
 
@@ -270,7 +254,7 @@ class StreamDiffusionParams(BaseModel):
     use_safety_checker: bool = True
     """Whether to use the safety checker to prevent generating NSFW images."""
 
-    safety_checker_threshold: float = 0.95
+    safety_checker_threshold: float = 0.5
     """Threshold for the safety checker. Higher values allow more NSFW images to passthrough."""
 
     use_denoising_batch: bool = True
