@@ -124,9 +124,27 @@ else
     echo
 fi
 
+# Check if the models are SDXL and split the controlnet list for separate builds.
+# SDXL models are big and can't be compiled all together.
+is_sdxl=false
+if [[ "$MODELS" == *sdxl* ]]; then
+    is_sdxl=true
+fi
+
+if $is_sdxl; then
+    if [ -n "$CONTROLNETS" ]; then
+        read -r -a controlnet_list <<< "$CONTROLNETS"
+    else
+        controlnet_list=( "" )
+    fi
+else
+    controlnet_list=( "$CONTROLNETS" )
+fi
+
 # Build TensorRT engines
 echo "Starting TensorRT engine build process..."
 echo "Models: $MODELS"
+echo "Is SDXL: $is_sdxl"
 echo "Opt Timesteps: $OPT_TIMESTEPS"
 echo "Min Timesteps: $MIN_TIMESTEPS"
 echo "Max Timesteps: $MAX_TIMESTEPS"
@@ -162,7 +180,9 @@ total_builds=0
 for model in $MODELS; do
     for dim in $DIMENSIONS; do
         for ip_type in "${IPADAPTER_TYPES_ARR[@]}"; do
-            total_builds=$((total_builds + 1))
+            for cnet in "${controlnet_list[@]}"; do
+                total_builds=$((total_builds + 1))
+            done
         done
     done
 done
@@ -179,36 +199,39 @@ for model in $MODELS; do
         height=${dim#*x}
 
         for ip_type in "${IPADAPTER_TYPES_ARR[@]}"; do
-            current_build=$((current_build + 1))
+            for cnet in "${controlnet_list[@]}"; do
+                current_build=$((current_build + 1))
 
-            echo "[$current_build/$total_builds] Building TensorRT engine for:"
-            echo "  Model: $model"
-            echo "  Opt Timesteps: $OPT_TIMESTEPS"
-            echo "  Min Timesteps: $MIN_TIMESTEPS"
-            echo "  Max Timesteps: $MAX_TIMESTEPS"
-            echo "  Dimensions: ${width}x${height}"
-            echo "  IPAdapter Type: ${ip_type:-None}"
+                echo "[$current_build/$total_builds] Building TensorRT engine for:"
+                echo "  Model: $model"
+                echo "  Opt Timesteps: $OPT_TIMESTEPS"
+                echo "  Min Timesteps: $MIN_TIMESTEPS"
+                echo "  Max Timesteps: $MAX_TIMESTEPS"
+                echo "  Dimensions: ${width}x${height}"
+                echo "  ControlNets: ${cnet:-None}"
+                echo "  IPAdapter Type: ${ip_type:-None}"
 
-            build_args=(
-                --model-id "$model"
-                --opt-timesteps "$OPT_TIMESTEPS"
-                --min-timesteps "$MIN_TIMESTEPS"
-                --max-timesteps "$MAX_TIMESTEPS"
-                --width "$width"
-                --height "$height"
-                --engine-dir "$OUTPUT_DIR"
-                --controlnets "$CONTROLNETS"
-                --ipadapter-type "$ip_type"
-            )
+                build_args=(
+                    --model-id "$model"
+                    --opt-timesteps "$OPT_TIMESTEPS"
+                    --min-timesteps "$MIN_TIMESTEPS"
+                    --max-timesteps "$MAX_TIMESTEPS"
+                    --width "$width"
+                    --height "$height"
+                    --engine-dir "$OUTPUT_DIR"
+                    --controlnets "$cnet"
+                    --ipadapter-type "$ip_type"
+                )
 
-            if $CONDA_PYTHON "$BUILD_SCRIPT" "${build_args[@]}"; then
-                echo "  ✓ Success"
-            else
-                echo "  ✗ Failed"
-                echo "Aborting build process due to failure."
-                exit 1
-            fi
-            echo
+                if $CONDA_PYTHON "$BUILD_SCRIPT" "${build_args[@]}"; then
+                    echo "  ✓ Success"
+                else
+                    echo "  ✗ Failed"
+                    echo "Aborting build process due to failure."
+                    exit 1
+                fi
+                echo
+            done
         done
     done
 done
