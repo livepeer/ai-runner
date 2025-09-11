@@ -126,7 +126,7 @@ jobs:
         run: |
           set -ex
 
-          FILE_SUFFIX="${env.DOCKER_SUFFIX//-/_}"
+          FILE_SUFFIX="$(printf '%s' "$DOCKER_SUFFIX" | tr '-' '_')"
           JSON_FILE="runner/app/live/pipelines/streamdiffusion${FILE_SUFFIX}_default_params.json"
           if [ ! -f "$JSON_FILE" ]; then
             echo "Params file missing: $JSON_FILE" >&2
