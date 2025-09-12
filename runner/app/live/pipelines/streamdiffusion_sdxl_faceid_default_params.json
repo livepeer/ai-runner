@@ -1,13 +1,15 @@
 {
   "model_id": "stabilityai/sdxl-turbo",
-  "prompt": "face-focused webcam portrait blooming into stained-glass prisms and aurora ribbons, retro studio glow, friendly cardigan vibes, dreamlike, cinematic, ultra-detailed",
+  "prompt": "mona lisa, face-focused webcam portrait blooming into stained-glass prisms and aurora ribbons, retro studio glow, friendly cardigan vibes, dreamlike, cinematic, ultra-detailed",
   "prompt_interpolation_method": "slerp",
   "normalize_prompt_weights": true,
   "negative_prompt": "blurry, low quality, flat, 2d",
-  "guidance_scale": 1.0,
+  "guidance_scale": 1,
   "delta": 0.7,
   "num_inference_steps": 50,
-  "t_index_list": [36],
+  "t_index_list": [
+    36
+  ],
   "width": 512,
   "height": 512,
   "lora_dict": null,
@@ -29,8 +31,8 @@
       "preprocessor": "depth_tensorrt",
       "preprocessor_params": {},
       "enabled": true,
-      "control_guidance_start": 0.0,
-      "control_guidance_end": 1.0
+      "control_guidance_start": 0,
+      "control_guidance_end": 1
     },
     {
       "model_id": "xinsir/controlnet-canny-sdxl-1.0",
@@ -38,8 +40,8 @@
       "preprocessor": "canny",
       "preprocessor_params": {},
       "enabled": true,
-      "control_guidance_start": 0.0,
-      "control_guidance_end": 1.0
+      "control_guidance_start": 0,
+      "control_guidance_end": 1
     },
     {
       "model_id": "xinsir/controlnet-tile-sdxl-1.0",
@@ -47,12 +49,14 @@
       "preprocessor": "feedback",
       "preprocessor_params": {},
       "enabled": true,
-      "control_guidance_start": 0.0,
-      "control_guidance_end": 1.0
+      "control_guidance_start": 0,
+      "control_guidance_end": 1
     }
   ],
-  "ip_adapter": { "type": "faceid", "scale": 1.0, "enabled": true },
-  "ip_adapter_style_image_url": "https://example.com/path/to/face_image.jpg"
+  "ip_adapter": {
+    "type": "faceid",
+    "scale": 1,
+    "enabled": true
+  },
+  "ip_adapter_style_image_url": "https://ipfs.livepeer.com/ipfs/bafkreifyvsoa6pbt5r5ahedl6ann4nsp7m2vezkjuwn7uvxuqbie2un4wi"
 }
-
-
