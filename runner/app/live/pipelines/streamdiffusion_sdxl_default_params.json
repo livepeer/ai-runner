@@ -12,7 +12,7 @@
   "height": 512,
   "lora_dict": null,
   "use_lcm_lora": true,
-  "lcm_lora_id": "latent-consistency/lcm-lora-sdxl",
+  "lcm_lora_id": "latent-consistency/lcm-lora-sdv1-5",
   "acceleration": "tensorrt",
   "use_denoising_batch": true,
   "do_add_noise": true,
