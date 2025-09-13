@@ -131,6 +131,10 @@ class LiveVideoToVideoResponse(BaseModel):
         default='',
         description="URL for subscribing to events for pipeline status and logs",
     )
+    data_url: str = Field(
+        default='',
+        description="URL for publishing data for pipeline",
+    )
     request_id: str = Field(
         default='',
         description="The ID generated for this request",
