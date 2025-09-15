@@ -142,7 +142,7 @@ class PipelineProcess:
         try:
             asyncio.run(self._run_pipeline_loops())
         except Exception as e:
-            self._report_error(f"Error in process run method: {e}")
+            self._report_error("Error in process run method", e)
 
 
     def _handle_logging_params(self, params: dict) -> bool:
@@ -169,8 +169,7 @@ class PipelineProcess:
                 await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:
-            self._report_error(f"Error loading pipeline: {e}")
-            logging.exception(e)
+            self._report_error("Error loading pipeline", e)
             if not params:
                 # Already tried loading with default params
                 raise
@@ -182,7 +181,7 @@ class PipelineProcess:
                     await pipeline.initialize()
                     return pipeline
             except Exception as e:
-                self._report_error(f"Error loading pipeline with default params: {e}")
+                self._report_error("Error loading pipeline with default params", e)
                 raise
 
     async def _run_pipeline_loops(self):
@@ -201,7 +200,7 @@ class PipelineProcess:
         try:
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         except Exception as e:
-            self._report_error(f"Error in pipeline loops: {e}")
+            self._report_error("Error in pipeline loops", e)
         finally:
             for task in tasks:
                 task.cancel()
@@ -223,8 +222,7 @@ class PipelineProcess:
                 # Timeout ensures the non-daemon threads from to_thread can exit if task is cancelled
                 continue
             except Exception as e:
-                self._report_error(f"Error processing input frame: {e}")
-                logging.exception(e)
+                self._report_error("Error processing input frame", e)
 
     async def _output_loop(self, pipeline: Pipeline):
         while not self.is_done():
@@ -235,7 +233,7 @@ class PipelineProcess:
                 output.log_timestamps["post_process_frame"] = time.time()
                 self._try_queue_put(self.output_queue, output)
             except Exception as e:
-                self._report_error(f"Error processing output frame: {e}")
+                self._report_error("Error processing output frame", e)
 
     async def _param_update_loop(self, pipeline: Pipeline):
         while not self.is_done():
@@ -250,7 +248,7 @@ class PipelineProcess:
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
                     await pipeline.update_params(**params)
             except Exception as e:
-                self._report_error(f"Error updating params: {e}")
+                self._report_error("Error updating params", e)
 
     async def _get_latest_params(self, timeout: float) -> dict | None:
         """
@@ -278,12 +276,14 @@ class PipelineProcess:
 
         return params
 
-    def _report_error(self, error_msg: str):
+    def _report_error(self, msg: str, error: Exception | None = None, silent = False):
+        if not silent:
+            logging.error(msg, exc_info=error)
+
         error_event = {
-            "message": error_msg,
+            "message": f"{msg}: {error}" if error else msg,
             "timestamp": time.time()
         }
-        logging.error(error_msg)
         self._try_queue_put(self.error_queue, error_event)
 
     async def _cleanup_pipeline(self, pipeline):
@@ -358,7 +358,7 @@ class LogQueueHandler(logging.Handler):
         self.process._try_queue_put(self.process.log_queue, msg)
         try:
             if getattr(record, "report_error", False):
-                self.process._report_error(record.getMessage())
+                self.process._report_error(record.getMessage(), silent=True)
         except Exception as e:
             logging.error(f"Error reporting error: {e}")
 
