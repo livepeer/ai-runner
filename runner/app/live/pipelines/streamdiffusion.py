@@ -106,7 +106,18 @@ class StreamDiffusion(Pipeline):
                 if await self._update_params_dynamic(new_params):
                     return
             except Exception as e:
-                logging.error(f"Error updating parameters dynamically: {e}")
+                logging.error(
+                    f"Error updating parameters dynamically: {e}",
+                    extra={
+                        "report_error": True,
+                        "error_code": "SD_UPDATE_DYNAMIC_ERROR",
+                        "error_context": {
+                            "stage": "update_params.dynamic",
+                            "exception_type": type(e).__name__,
+                        },
+                    },
+                    exc_info=True,
+                )
 
         logging.info(f"Resetting pipeline for params change")
 
@@ -125,12 +136,33 @@ class StreamDiffusion(Pipeline):
         try:
             new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
         except Exception:
-            logging.error(f"Error resetting pipeline, reloading with previous params", exc_info=True)
+            logging.error(
+                "Error resetting pipeline, reloading with previous params",
+                extra={
+                    "report_error": True,
+                    "error_code": "SD_PIPELINE_RESET_ERROR",
+                    "error_context": {
+                        "stage": "update_params.reset_initial",
+                    },
+                },
+                exc_info=True,
+            )
             try:
                 new_params = prev_params or StreamDiffusionParams()
                 new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
             except Exception:
-                logging.exception("Failed to reload pipeline with fallback params", stack_info=True)
+                logging.error(
+                    "Failed to reload pipeline with fallback params",
+                    extra={
+                        "report_error": True,
+                        "error_code": "SD_PIPELINE_RESET_FALLBACK_ERROR",
+                        "error_context": {
+                            "stage": "update_params.reset_fallback",
+                        },
+                    },
+                    exc_info=True,
+                    stack_info=True,
+                )
                 raise
 
         async with self._pipeline_lock:
