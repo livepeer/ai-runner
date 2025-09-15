@@ -105,13 +105,10 @@ class StreamDiffusion(Pipeline):
             try:
                 if await self._update_params_dynamic(new_params):
                     return
-            except Exception:
+            except Exception as e:
                 logging.error(
-                    "Error updating parameters dynamically",
-                    extra={
-                        "report_error": True,
-                        "error": "[update_params] Error updating params dynamically",
-                    },
+                    f"[update_params] Error updating params dynamically: {e}",
+                    extra={"report_error": True},
                     exc_info=True,
                 )
 
@@ -131,25 +128,19 @@ class StreamDiffusion(Pipeline):
         new_pipe: Optional[StreamDiffusionWrapper] = None
         try:
             new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
-        except Exception:
+        except Exception as e:
             logging.error(
-                "Error resetting pipeline, reloading with previous params",
-                extra={
-                    "report_error": True,
-                    "error": "[update_params] Error resetting pipeline; attempting fallback",
-                },
+                f"[update_params] Error resetting pipeline, reloading with previous params: {e}",
+                extra={"report_error": True},
                 exc_info=True,
             )
             try:
                 new_params = prev_params or StreamDiffusionParams()
                 new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
-            except Exception:
+            except Exception as e:
                 logging.error(
-                    "Failed to reload pipeline with fallback params",
-                    extra={
-                        "report_error": True,
-                        "error": "[update_params] Fallback reload failed",
-                    },
+                    f"[update_params] Fallback reload with previous params failed: {e}",
+                    extra={"report_error": True},
                     exc_info=True,
                 )
                 raise

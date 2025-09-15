@@ -354,13 +354,13 @@ class LogQueueHandler(logging.Handler):
         self.process = process
 
     def emit(self, record):
+        msg = self.format(record)
+        self.process._try_queue_put(self.process.log_queue, msg)
         try:
             if getattr(record, "report_error", False):
-                error_message = getattr(record, "error", None) or record.getMessage()
-                self.process._report_error(error_message)
-        finally:
-            msg = self.format(record)
-            self.process._try_queue_put(self.process.log_queue, msg)
+                self.process._report_error(record.getMessage())
+        except Exception as e:
+            logging.error(f"Error reporting error: {e}")
 
 # Function to clear the queue
 def clear_queue(queue):
