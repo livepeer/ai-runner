@@ -356,23 +356,8 @@ class LogQueueHandler(logging.Handler):
     def emit(self, record):
         try:
             if getattr(record, "report_error", False):
-                message = record.getMessage()
-                error_code = getattr(record, "error_code", None)
-                error_context = getattr(record, "error_context", None)
-
-                parts = []
-                if error_code:
-                    parts.append(f"[{error_code}]")
-                parts.append(message)
-
-                if error_context is not None:
-                    try:
-                        ctx_json = json.dumps(error_context, sort_keys=True)
-                    except Exception:
-                        ctx_json = str(error_context)
-                    parts.append(f"context={ctx_json}")
-
-                self.process._report_error(" ".join(parts))
+                error_message = getattr(record, "error", None) or record.getMessage()
+                self.process._report_error(error_message)
         finally:
             msg = self.format(record)
             self.process._try_queue_put(self.process.log_queue, msg)

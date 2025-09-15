@@ -105,16 +105,12 @@ class StreamDiffusion(Pipeline):
             try:
                 if await self._update_params_dynamic(new_params):
                     return
-            except Exception as e:
+            except Exception:
                 logging.error(
-                    f"Error updating parameters dynamically: {e}",
+                    "Error updating parameters dynamically",
                     extra={
                         "report_error": True,
-                        "error_code": "SD_UPDATE_DYNAMIC_ERROR",
-                        "error_context": {
-                            "stage": "update_params.dynamic",
-                            "exception_type": type(e).__name__,
-                        },
+                        "error": "[update_params] Error updating params dynamically",
                     },
                     exc_info=True,
                 )
@@ -140,10 +136,7 @@ class StreamDiffusion(Pipeline):
                 "Error resetting pipeline, reloading with previous params",
                 extra={
                     "report_error": True,
-                    "error_code": "SD_PIPELINE_RESET_ERROR",
-                    "error_context": {
-                        "stage": "update_params.reset_initial",
-                    },
+                    "error": "[update_params] Error resetting pipeline; attempting fallback",
                 },
                 exc_info=True,
             )
@@ -155,13 +148,9 @@ class StreamDiffusion(Pipeline):
                     "Failed to reload pipeline with fallback params",
                     extra={
                         "report_error": True,
-                        "error_code": "SD_PIPELINE_RESET_FALLBACK_ERROR",
-                        "error_context": {
-                            "stage": "update_params.reset_fallback",
-                        },
+                        "error": "[update_params] Fallback reload failed",
                     },
                     exc_info=True,
-                    stack_info=True,
                 )
                 raise
 
