@@ -113,7 +113,9 @@ class StreamDiffusion(Pipeline):
                 )
 
         logging.info(f"Resetting pipeline for params change")
+        return asyncio.create_task(self._reload_pipeline(new_params))
 
+    async def _reload_pipeline(self, new_params: StreamDiffusionParams):
         try:
             await self._overlay_renderer.prewarm(new_params.width, new_params.height)
         except Exception:
