@@ -152,7 +152,7 @@ class ProcessGuardian:
         if not self.process or not self.process.is_alive():
             logging.error("Process is not alive. Returning ERROR state")
             return PipelineState.ERROR
-        elif not self.process.is_pipeline_initialized() or self.process.done.is_set():
+        elif not self.process.is_pipeline_ready() or self.process.done.is_set():
             # done is only set in the middle of the restart process so also return INITIALIZING
             return PipelineState.LOADING
 

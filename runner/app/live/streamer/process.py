@@ -34,7 +34,7 @@ class PipelineProcess:
         self.error_queue = self.ctx.Queue()
         self.log_queue = self.ctx.Queue(maxsize=100)  # Keep last 100 log lines
 
-        self.pipeline_initialized = self.ctx.Event()
+        self.pipeline_ready = self.ctx.Event()
         self.done = self.ctx.Event()
         self.process = self.ctx.Process(target=self.process_loop, args=())
         self.start_time = 0.0
@@ -78,8 +78,8 @@ class PipelineProcess:
     def is_done(self):
         return self.done.is_set()
 
-    def is_pipeline_initialized(self):
-        return self.pipeline_initialized.is_set()
+    def is_pipeline_ready(self):
+        return self.pipeline_ready.is_set()
 
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
@@ -182,10 +182,10 @@ class PipelineProcess:
 
     async def _run_pipeline_loops(self):
         pipeline = await self._initialize_pipeline()
-        self.pipeline_initialized.set()
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
         param_task = asyncio.create_task(self._param_update_loop(pipeline))
+        self.pipeline_ready.set()
 
         async def wait_for_stop():
             while not self.is_done():
@@ -245,11 +245,11 @@ class PipelineProcess:
                     reload_task = await pipeline.update_params(**params)
 
                 if reload_task is not None:
-                    self.pipeline_initialized.clear()
+                    self.pipeline_ready.clear()
                     try:
                         with log_timing(f"PipelineProcess: Reloading pipeline"):
                             await reload_task
-                        self.pipeline_initialized.set()
+                        self.pipeline_ready.set()
                     except Exception as e:
                         self._report_error("Error reloading pipeline", e)
                         os._exit(1) # shutdown the sub-process
