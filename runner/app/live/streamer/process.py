@@ -242,7 +242,17 @@ class PipelineProcess:
                 logging.info(f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}")
 
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
-                    await pipeline.update_params(**params)
+                    reload_task = await pipeline.update_params(**params)
+
+                if reload_task is not None:
+                    self.pipeline_initialized.clear()
+                    try:
+                        with log_timing(f"PipelineProcess: Reloading pipeline"):
+                            await reload_task
+                        self.pipeline_initialized.set()
+                    except Exception as e:
+                        self._report_error("Error reloading pipeline", e)
+                        os._exit(1) # shutdown the sub-process
             except Exception as e:
                 self._report_error("Error updating params", e)
 
