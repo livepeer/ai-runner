@@ -101,9 +101,6 @@ class PipelineProcess:
         self._try_queue_put(self.input_queue, frame)
 
     async def recv_output(self) -> OutputFrame | None:
-        # we cannot do a long get with timeout as that would block the asyncio
-        # event loop, so we loop with nowait and sleep async instead.
-        # TODO: use asyncio.to_thread instead
         while not self.is_done():
             try:
                 return await asyncio.to_thread(self.output_queue.get, timeout=0.1)
@@ -124,7 +121,6 @@ class PipelineProcess:
 
     def process_loop(self):
         self._setup_logging()
-        pipeline = None
 
         # Ensure CUDA environment is available inside the subprocess.
         # Multiprocessing (spawn mode) does not inherit environment variables by default,
