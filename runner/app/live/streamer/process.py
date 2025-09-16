@@ -232,6 +232,7 @@ class PipelineProcess:
 
     async def _param_update_loop(self, pipeline: Pipeline):
         while not self.is_done():
+            reload_task = None
             try:
                 params = await self._get_latest_params(timeout=0.1)
                 if params is None:
@@ -242,18 +243,21 @@ class PipelineProcess:
 
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
                     reload_task = await pipeline.update_params(**params)
-
-                if reload_task is not None:
-                    self.pipeline_ready.clear()
-                    try:
-                        with log_timing(f"PipelineProcess: Reloading pipeline"):
-                            await reload_task
-                        self.pipeline_ready.set()
-                    except Exception as e:
-                        self._report_error("Error reloading pipeline", e)
-                        os._exit(1) # shutdown the sub-process
             except Exception as e:
                 self._report_error("Error updating params", e)
+
+            if reload_task is None:
+                # This means update_params was already able to update the pipeline dynamically
+                continue
+
+            try:
+                with log_timing(f"PipelineProcess: Reloading pipeline"):
+                    self.pipeline_ready.clear()
+                    await reload_task
+                    self.pipeline_ready.set()
+            except Exception as e:
+                self._report_error("Error reloading pipeline", e)
+                os._exit(1) # shutdown the sub-process altogether
 
     async def _get_latest_params(self, timeout: float) -> dict | None:
         """
