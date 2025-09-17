@@ -29,7 +29,10 @@ class StreamDiffusion(Pipeline):
 
     async def initialize(self, **params):
         logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
-        await self.update_params(**params)
+        reload_task = await self.update_params(**params)
+        if reload_task:
+            logging.info("Task returned, waiting for pipeline reload")
+            await reload_task
         logging.info("Pipeline initialization complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
