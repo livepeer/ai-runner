@@ -69,7 +69,7 @@ class ControlNetConfig(BaseModel):
     - canny: Crisp silhouette/edge guidance; follows strong, high-contrast boundaries
     - depth: Depth guidance for 3D structure and spatial layout
     - color: Increases adherence/pass-through to the input's color palette (raise to keep colors)
-    - tile: Super-resolution/detail refinement. When paired with the 'feedback' preprocessor, higher conditioning often behaves like temporal stabilization by reusing details from the previous frame"""
+    - tile: Super-resolution and detail refinement through tiling"""
 
     conditioning_scale: float = 1.0
     """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
@@ -77,17 +77,7 @@ class ControlNetConfig(BaseModel):
     preprocessor: Literal[
         "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation"
     ] = "passthrough"
-    """Preprocessor to apply to input frames before feeding to the ControlNet.
-    Common options and intents:
-    - pose_tensorrt/mediapipe_pose: Human pose keypoints
-    - canny: Crisp edges/silhouette map (pairs well with canny ControlNet)
-    - hed/soft_edge: Soft edges/inner contours (pairs well with HED ControlNet)
-    - depth_tensorrt: Depth map for 3D structure (pairs well with depth ControlNet)
-    - passthrough: Use the raw image/control map as-is (e.g., for color)
-    - feedback: Feed previous output as control to encourage temporal consistency; often combined with tile for stability
-    - external: Use an externally provided control map
-    - mediapipe_segmentation: Foreground/background segmentation mask
-    If None, no preprocessing is applied."""
+    """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
 
     preprocessor_params: Dict[str, Any] = {}
     """Additional parameters for the preprocessor. For example, canny edge detection uses 'low_threshold' and 'high_threshold' values."""
