@@ -16,9 +16,9 @@ from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput
 
 class PipelineProcess:
     @staticmethod
-    def start(pipeline_name: str, params: dict):
+    def start(pipeline_name: str, params: dict | None = None):
         instance = PipelineProcess(pipeline_name)
-        if params:
+        if params is not None:
             instance.update_params(params)
         instance.process.start()
         instance.start_time = time.time()
@@ -152,7 +152,7 @@ class PipelineProcess:
 
     async def _initialize_pipeline(self):
         try:
-            params = await self._get_latest_params(timeout=0.005)
+            params = await self._get_latest_params(timeout=0.1)
             if params is not None:
                 logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
             else:
