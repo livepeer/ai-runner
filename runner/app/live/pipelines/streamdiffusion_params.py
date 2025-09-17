@@ -15,6 +15,8 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
         "thibaud/controlnet-sd21-canny-diffusers",
         "thibaud/controlnet-sd21-depth-diffusers",
         "thibaud/controlnet-sd21-color-diffusers",
+        "thibaud/controlnet-sd21-ade20k-diffusers",
+        "thibaud/controlnet-sd21-normalbae-diffusers",
     ],
     "sd15": [
         "lllyasviel/control_v11f1p_sd15_depth",
@@ -56,6 +58,8 @@ class ControlNetConfig(BaseModel):
         "thibaud/controlnet-sd21-canny-diffusers",
         "thibaud/controlnet-sd21-depth-diffusers",
         "thibaud/controlnet-sd21-color-diffusers",
+        "thibaud/controlnet-sd21-ade20k-diffusers",
+        "thibaud/controlnet-sd21-normalbae-diffusers",
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
