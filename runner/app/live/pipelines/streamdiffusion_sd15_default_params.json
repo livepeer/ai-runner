@@ -1,5 +1,5 @@
 {
-  "model_id": "prompthero/openjourney-v4",
+  "model_id": "Lykon/dreamshaper-8",
   "prompt": "cyberpunk desert structures, masterpiece",
   "prompt_interpolation_method": "slerp",
   "normalize_prompt_weights": true,
