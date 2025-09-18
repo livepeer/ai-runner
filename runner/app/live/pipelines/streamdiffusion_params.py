@@ -34,6 +34,7 @@ MODEL_ID_TO_TYPE: Dict[str, ModelType] = {
     "stabilityai/sd-turbo": "sd21",
     "stabilityai/sdxl-turbo": "sdxl",
     "prompthero/openjourney-v4": "sd15",
+    "Lykon/dreamshaper-8": "sd15",
 }
 
 def get_model_type(model_id: str) -> ModelType:
@@ -205,6 +206,7 @@ class StreamDiffusionParams(BaseModel):
         "stabilityai/sd-turbo",
         "stabilityai/sdxl-turbo",
         "prompthero/openjourney-v4",
+        "Lykon/dreamshaper-8",
     ] = "stabilityai/sd-turbo"
     """Base U-Net model to use for generation."""
 
