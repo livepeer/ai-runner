@@ -152,16 +152,40 @@ class ProcessGuardian:
         if not self.process or not self.process.is_alive():
             logging.error("Process is not alive. Returning ERROR state")
             return PipelineState.ERROR
-        elif not self.process.is_pipeline_ready() or self.process.done.is_set():
-            # done is only set in the middle of the restart process so also return INITIALIZING
-            return PipelineState.LOADING
 
-        # Special case: stream not running
+        # Compute some state metrics
         current_time = time.time()
         input = self.status.input_status
         start_time = max(self.process.start_time, self.status.start_time)
         time_since_last_input = current_time - (input.last_input_time or start_time)
 
+        inference = self.status.inference_status
+        time_since_last_output = current_time - (inference.last_output_time or 0)
+        pipeline_load_time = max(inference.last_params_update_time or 0, start_time)
+        # -2s to be conservative and avoid race conditions on the timestamp comparisons below
+        time_since_pipeline_load = max(0, current_time - pipeline_load_time - 2)
+
+        # Special case: pipeline loading
+        is_process_loading = not self.process.is_pipeline_ready() or self.process.done.is_set()
+        active_after_load = time_since_last_output < time_since_pipeline_load
+        logging.debug(f"[_compute_current_state] is_process_loading={is_process_loading} active_after_load={active_after_load} time_since_last_output={time_since_last_output:.1f}s time_since_pipeline_load={time_since_pipeline_load:.1f}s")
+        if is_process_loading or not active_after_load:
+            # The pipeline process shouldn't stop for too long if it's not loading.
+            load_grace_period = 60 if is_process_loading else 1
+            load_timeout = 120 if is_process_loading else 10
+            # Do not propagate a LOADING state for quick stops (e.g. params updates).
+            healthy_state = PipelineState.LOADING if is_process_loading else PipelineState.ONLINE
+            return (
+                healthy_state
+                if time_since_pipeline_load < load_grace_period
+                else PipelineState.DEGRADED_INPUT
+                if time_since_last_input > time_since_pipeline_load
+                else PipelineState.DEGRADED_INFERENCE
+                if time_since_pipeline_load < load_timeout
+                else PipelineState.ERROR  # Not starting after timeout, declare ERROR
+            )
+
+        # Special case: stream not running
         if not self.streamer.is_stream_running():
             # give it 3s `DEGRADED_INPUT` grace period after shutdown
             is_offline = time_since_last_input > 3 or not input.last_input_time
@@ -178,29 +202,6 @@ class ProcessGuardian:
             # Stream hasn't shut down 30s after the trigger above (90s total idle time).
             # Declare ERROR so the container gets restarted by the worker.
             return PipelineState.ERROR
-
-        # Special case: pipeline load
-        inference = self.status.inference_status
-        time_since_last_output = current_time - (inference.last_output_time or 0)
-        pipeline_load_time = max(inference.last_params_update_time or 0, start_time)
-        # -2s to be conservative and avoid race conditions on the timestamp comparisons below
-        time_since_pipeline_load = max(0, current_time - pipeline_load_time - 2)
-
-        active_after_load = time_since_last_output < time_since_pipeline_load
-        logging.debug(f"[_compute_current_state] active_after_load={active_after_load} time_since_last_output={time_since_last_output:.1f}s time_since_pipeline_load={time_since_pipeline_load:.1f}s")
-        if not active_after_load:
-            is_params_update = (inference.last_params_update_time or 0) > start_time
-            load_grace_period = 2 if is_params_update else 10
-            load_timeout = 60 if is_params_update else 120
-            return (
-                PipelineState.ONLINE
-                if time_since_pipeline_load < load_grace_period
-                else PipelineState.DEGRADED_INPUT
-                if time_since_last_input > time_since_pipeline_load
-                else PipelineState.DEGRADED_INFERENCE
-                if time_since_pipeline_load < load_timeout
-                else PipelineState.ERROR  # Not starting after timeout, declare ERROR
-            )
 
         # Normal case: active stream
         stopped_producing_frames = (
