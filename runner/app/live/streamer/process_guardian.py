@@ -167,22 +167,13 @@ class ProcessGuardian:
 
         # Special case: pipeline loading
         is_process_loading = not self.process.is_pipeline_ready() or self.process.done.is_set()
-        active_after_load = time_since_last_output < time_since_pipeline_load
-        logging.debug(f"[_compute_current_state] is_process_loading={is_process_loading} active_after_load={active_after_load} time_since_last_output={time_since_last_output:.1f}s time_since_pipeline_load={time_since_pipeline_load:.1f}s")
-        if is_process_loading or not active_after_load:
-            # The pipeline process shouldn't stop for too long if it's not loading.
-            load_grace_period = 60 if is_process_loading else 1
-            load_timeout = 120 if is_process_loading else 10
-            # Do not propagate a LOADING state for quick stops (e.g. params updates).
-            healthy_state = PipelineState.LOADING if is_process_loading else PipelineState.ONLINE
+        if is_process_loading:
             return (
-                healthy_state
-                if time_since_pipeline_load < load_grace_period
-                else PipelineState.DEGRADED_INPUT
-                if time_since_last_input > time_since_pipeline_load
+                PipelineState.LOADING
+                if time_since_pipeline_load < 60
                 else PipelineState.DEGRADED_INFERENCE
-                if time_since_pipeline_load < load_timeout
-                else PipelineState.ERROR  # Not starting after timeout, declare ERROR
+                if time_since_pipeline_load < 120
+                else PipelineState.ERROR  # Not loading after timeout, declare ERROR
             )
 
         # Special case: stream not running
@@ -202,6 +193,19 @@ class ProcessGuardian:
             # Stream hasn't shut down 30s after the trigger above (90s total idle time).
             # Declare ERROR so the container gets restarted by the worker.
             return PipelineState.ERROR
+
+        # Special case: short halt after params update
+        active_after_load = time_since_last_output < time_since_pipeline_load
+        if not active_after_load:
+            return (
+                PipelineState.ONLINE
+                if time_since_pipeline_load < 2
+                else PipelineState.DEGRADED_INPUT
+                if time_since_last_input > time_since_pipeline_load
+                else PipelineState.DEGRADED_INFERENCE
+                if time_since_pipeline_load < 10
+                else PipelineState.ERROR
+            )
 
         # Normal case: active stream
         stopped_producing_frames = (
