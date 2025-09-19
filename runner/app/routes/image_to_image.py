@@ -69,7 +69,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def image_to_image(
+def image_to_image(
     prompt: Annotated[
         str,
         Form(description="Text prompt(s) to guide image generation."),

@@ -69,7 +69,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def image_to_video(
+def image_to_video(
     image: Annotated[
         UploadFile,
         File(description="Uploaded image to generate a video from."),
@@ -168,6 +168,7 @@ async def image_to_video(
             safety_check=safety_check,
             seed=seed,
         )
+
     except Exception as e:
         if isinstance(e, torch.cuda.OutOfMemoryError):
             # TODO: Investigate why not all VRAM memory is cleared.
