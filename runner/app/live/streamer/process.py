@@ -16,9 +16,9 @@ from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput
 
 class PipelineProcess:
     @staticmethod
-    def start(pipeline_name: str, params: dict):
+    def start(pipeline_name: str, params: dict | None = None):
         instance = PipelineProcess(pipeline_name)
-        if params:
+        if params is not None:
             instance.update_params(params)
         instance.process.start()
         instance.start_time = time.time()
@@ -34,7 +34,8 @@ class PipelineProcess:
         self.error_queue = self.ctx.Queue()
         self.log_queue = self.ctx.Queue(maxsize=100)  # Keep last 100 log lines
 
-        self.pipeline_initialized = self.ctx.Event()
+        self.pipeline_ready = self.ctx.Event()
+        self.pipeline_ready_time = self.ctx.Value('d', 0.0)
         self.done = self.ctx.Event()
         self.process = self.ctx.Process(target=self.process_loop, args=())
         self.start_time = 0.0
@@ -48,23 +49,22 @@ class PipelineProcess:
 
         if not self.process.is_alive():
             logging.info("Process already not alive")
-            return
+        else:
+            logging.info("Terminating pipeline process")
 
-        logging.info("Terminating pipeline process")
+            async def wait_stop(timeout: float) -> bool:
+                try:
+                    await asyncio.to_thread(self.process.join, timeout=timeout)
+                    return not self.process.is_alive()
+                except Exception as e:
+                    logging.error(f"Process join error: {e}")
+                    return False
 
-        async def wait_stop(timeout: float) -> bool:
-            try:
-                await asyncio.to_thread(self.process.join, timeout=timeout)
-                return not self.process.is_alive()
-            except Exception as e:
-                logging.error(f"Process join error: {e}")
-                return False
-
-        if not await wait_stop(10):
-            logging.error("Failed to terminate process, killing")
-            self.process.kill()
-            if not await wait_stop(5):
-                logging.error("Failed to kill process")
+            if not await wait_stop(10):
+                logging.error("Failed to terminate process, killing")
+                self.process.kill()
+                if not await wait_stop(5):
+                    logging.error("Failed to kill process")
 
         logging.info("Pipeline process terminated, closing queues")
 
@@ -78,8 +78,26 @@ class PipelineProcess:
     def is_done(self):
         return self.done.is_set()
 
-    def is_pipeline_initialized(self):
-        return self.pipeline_initialized.is_set()
+    def is_pipeline_ready(self) -> tuple[bool, float | None]:
+        """
+        Returns a tuple [bool, float] where the bool indicates if the pipeline is
+        ready and the float is the timestamp of when it became ready.
+        """
+        # Also return not ready if the process is shutting down (done event is set)
+        if not self.pipeline_ready.is_set() or self.done.is_set():
+            return (False, None)
+
+        with self.pipeline_ready_time.get_lock():
+            return (True, self.pipeline_ready_time.value)
+
+    def _set_pipeline_ready(self, ready: bool):
+        if not ready:
+            self.pipeline_ready.clear()
+            return
+
+        with self.pipeline_ready_time.get_lock():
+            self.pipeline_ready_time.value = time.time()
+        self.pipeline_ready.set()
 
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
@@ -101,9 +119,6 @@ class PipelineProcess:
         self._try_queue_put(self.input_queue, frame)
 
     async def recv_output(self) -> OutputFrame | None:
-        # we cannot do a long get with timeout as that would block the asyncio
-        # event loop, so we loop with nowait and sleep async instead.
-        # TODO: use asyncio.to_thread instead
         while not self.is_done():
             try:
                 return await asyncio.to_thread(self.output_queue.get, timeout=0.1)
@@ -124,7 +139,6 @@ class PipelineProcess:
 
     def process_loop(self):
         self._setup_logging()
-        pipeline = None
 
         # Ensure CUDA environment is available inside the subprocess.
         # Multiprocessing (spawn mode) does not inherit environment variables by default,
@@ -157,7 +171,7 @@ class PipelineProcess:
 
     async def _initialize_pipeline(self):
         try:
-            params = await self._get_latest_params(timeout=0.005)
+            params = await self._get_latest_params(timeout=0.1)
             if params is not None:
                 logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
             else:
@@ -186,10 +200,10 @@ class PipelineProcess:
 
     async def _run_pipeline_loops(self):
         pipeline = await self._initialize_pipeline()
-        self.pipeline_initialized.set()
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
         param_task = asyncio.create_task(self._param_update_loop(pipeline))
+        self._set_pipeline_ready(True)
 
         async def wait_for_stop():
             while not self.is_done():
@@ -237,6 +251,7 @@ class PipelineProcess:
 
     async def _param_update_loop(self, pipeline: Pipeline):
         while not self.is_done():
+            reload_task = None
             try:
                 params = await self._get_latest_params(timeout=0.1)
                 if params is None:
@@ -246,9 +261,23 @@ class PipelineProcess:
                 logging.info(f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}")
 
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
-                    await pipeline.update_params(**params)
+                    reload_task = await pipeline.update_params(**params)
             except Exception as e:
                 self._report_error("Error updating params", e)
+
+            if reload_task is None:
+                # This means update_params was already able to update the pipeline dynamically
+                continue
+
+            try:
+                with log_timing(f"PipelineProcess: Reloading pipeline"):
+                    self._set_pipeline_ready(False)
+                    await reload_task
+                    self._set_pipeline_ready(True)
+            except Exception as e:
+                self._report_error("Error reloading pipeline", e)
+                self.done.set()
+                os._exit(1) # shutdown the sub-process altogether
 
     async def _get_latest_params(self, timeout: float) -> dict | None:
         """

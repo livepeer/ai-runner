@@ -1,4 +1,4 @@
-from PIL import Image
+from asyncio import Task
 from abc import ABC, abstractmethod
 from trickle import VideoFrame, VideoOutput
 
@@ -8,14 +8,11 @@ class Pipeline(ABC):
     Processes frames sequentially and supports dynamic parameter updates.
 
     Notes:
-    - Methods are only called one at a time in a separate process, so no need
-      for any locking.
     - Error handling is done by the caller, so the implementation can let
       exceptions propagate for optimal error reporting.
     """
 
     def __init__(self):
-        """Initialize pipeline with optional parameters."""
         pass
 
     @abstractmethod
@@ -24,7 +21,6 @@ class Pipeline(ABC):
 
         This method sets up the initial pipeline state and performs warmup operations.
         Must maintain valid state on success or restore previous state on failure.
-        Starts the pipeline loops in comfystream.
 
         Args:
             **params: Implementation-specific parameters
@@ -50,11 +46,14 @@ class Pipeline(ABC):
         pass
 
     @abstractmethod
-    async def update_params(self, **params):
+    async def update_params(self, **params) -> Task[None] | None:
         """Update pipeline parameters.
 
         Must maintain valid state on success or restore previous state on failure.
         Called sequentially with process_frame so concurrency is not an issue.
+
+        If the update will take a long time (e.g. reloading the pipeline),
+        return a Task that will be awaited by the caller.
 
         Args:
             **params: Implementation-specific parameters
