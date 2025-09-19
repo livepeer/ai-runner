@@ -276,6 +276,7 @@ class PipelineProcess:
                     self._set_pipeline_ready(True)
             except Exception as e:
                 self._report_error("Error reloading pipeline", e)
+                self.done.set()
                 os._exit(1) # shutdown the sub-process altogether
 
     async def _get_latest_params(self, timeout: float) -> dict | None:
