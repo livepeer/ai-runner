@@ -35,6 +35,7 @@ class PipelineProcess:
         self.log_queue = self.ctx.Queue(maxsize=100)  # Keep last 100 log lines
 
         self.pipeline_ready = self.ctx.Event()
+        self.pipeline_ready_time = self.ctx.Value('d', 0.0)
         self.done = self.ctx.Event()
         self.process = self.ctx.Process(target=self.process_loop, args=())
         self.start_time = 0.0
@@ -77,8 +78,26 @@ class PipelineProcess:
     def is_done(self):
         return self.done.is_set()
 
-    def is_pipeline_ready(self):
-        return self.pipeline_ready.is_set()
+    def is_pipeline_ready(self) -> tuple[bool, float | None]:
+        """
+        Returns a tuple [bool, float] where the bool indicates if the pipeline is
+        ready and the float is the timestamp of when it became ready.
+        """
+        # Also return not ready if the process is shutting down (done event is set)
+        if not self.pipeline_ready.is_set() or self.done.is_set():
+            return (False, None)
+
+        with self.pipeline_ready_time.get_lock():
+            return (True, self.pipeline_ready_time.value)
+
+    def _set_pipeline_ready(self, ready: bool):
+        if not ready:
+            self.pipeline_ready.clear()
+            return
+
+        with self.pipeline_ready_time.get_lock():
+            self.pipeline_ready_time.value = time.time()
+        self.pipeline_ready.set()
 
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
@@ -184,7 +203,7 @@ class PipelineProcess:
         input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline))
         param_task = asyncio.create_task(self._param_update_loop(pipeline))
-        self.pipeline_ready.set()
+        self._set_pipeline_ready(True)
 
         async def wait_for_stop():
             while not self.is_done():
@@ -252,9 +271,9 @@ class PipelineProcess:
 
             try:
                 with log_timing(f"PipelineProcess: Reloading pipeline"):
-                    self.pipeline_ready.clear()
+                    self._set_pipeline_ready(False)
                     await reload_task
-                    self.pipeline_ready.set()
+                    self._set_pipeline_ready(True)
             except Exception as e:
                 self._report_error("Error reloading pipeline", e)
                 os._exit(1) # shutdown the sub-process altogether
