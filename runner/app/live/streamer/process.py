@@ -276,7 +276,7 @@ class PipelineProcess:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-            await self._cleanup_pipeline(pipeline)
+            await self._cleanup_pipeline(pipeline, overlay)
 
         logging.info("PipelineProcess: _run_pipeline_loops finished.")
 
@@ -292,17 +292,11 @@ class PipelineProcess:
                             overlay.begin_reload()
                         w = self._overlay_width
                         h = self._overlay_height
-                        if not isinstance(w, int) or not isinstance(h, int):
-                            # Fallback to input frame size if params not received yet
-                            _, h_in, w_in, _ = input_frame.tensor.shape
-                            w, h = w_in, h_in
-
-                        loading_tensor = None
-                        if overlay.is_active():
-                            loading_tensor = await overlay.render_if_active(w, h)
-                        if loading_tensor is None:
-                            # Overlay disabled or unavailable; skip emitting frames while loading
+                        if w is None or h is None:
+                            # No dimensions from params yet; skip emitting loading frames until set
                             continue
+
+                        loading_tensor = await overlay.render_if_active(w, h)
 
                         if torch.cuda.is_available() and not loading_tensor.is_cuda:
                             loading_tensor = loading_tensor.cuda()
@@ -310,9 +304,7 @@ class PipelineProcess:
                         self._try_queue_put(self.output_queue, output)
                         continue
 
-                    # Pipeline ready path: ensure we close any active overlay session
-                    if overlay.is_active():
-                        overlay.end_reload()
+                    # Pipeline ready path: overlay session is closed when the first output arrives (see _output_loop)
                     await pipeline.put_video_frame(input_frame, self.request_id)
                 elif isinstance(input_frame, AudioFrame):
                     self._try_queue_put(self.output_queue, AudioOutput([input_frame], self.request_id))
@@ -329,10 +321,19 @@ class PipelineProcess:
                 if isinstance(output, VideoOutput) and not output.tensor.is_cuda and torch.cuda.is_available():
                     output = output.replace_tensor(output.tensor.cuda())
                 output.log_timestamps["post_process_frame"] = time.time()
+                # Ignore out-of-band outputs when the pipeline is not ready to avoid overlay thrashing
+                if not self.pipeline_ready.is_set():
+                    continue
+
                 self._try_queue_put(self.output_queue, output)
-                # Cache last good frame for overlay background after sending to avoid extra latency
+
+                # Cache a recent frame for use as the overlay background while loading
                 if isinstance(output, VideoOutput) and not output.is_loading_frame:
                     overlay.update_last_frame(output.tensor)
+
+                # First real output after a reload: close overlay session
+                if overlay.is_active():
+                    overlay.end_reload()
             except Exception as e:
                 self._report_error("Error processing output frame", e)
 
@@ -403,13 +404,14 @@ class PipelineProcess:
         }
         self._try_queue_put(self.error_queue, error_event)
 
-    async def _cleanup_pipeline(self, pipeline):
+    async def _cleanup_pipeline(self, pipeline, overlay: LoadingOverlayRenderer | None = None):
         if pipeline is not None:
             try:
                 await pipeline.stop()
             except Exception as e:
                 logging.error(f"Error stopping pipeline: {e}")
-        # Nothing overlay-specific to cleanup; renderer is local to subprocess loops
+        if overlay is not None and overlay.is_active():
+            overlay.end_reload()
 
     def _setup_logging(self):
         level = (
