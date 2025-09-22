@@ -111,6 +111,7 @@ class StreamDiffusion(Pipeline):
 
     async def _reload_pipeline(self, new_params: StreamDiffusionParams):
         async with self._pipeline_lock:
+            # Clear the pipeline while loading the new one.
             self.pipe = None
             prev_params = self.params
 

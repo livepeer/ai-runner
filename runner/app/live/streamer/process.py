@@ -53,9 +53,11 @@ class PipelineProcess:
         self.start_time = 0.0
         self.request_id = ""
 
-        # Loading overlay management (centralized here so all pipelines benefit transparently)
-        self.overlay_renderer = LoadingOverlayRenderer()
-        self.overlay_enabled: bool = True
+        # Overlay resolution cache (width/height from params). Set in subprocess.
+        # Using underscored names to emphasize they're set in the child process.
+        # Defaults are None and will fall back to input frame dimensions if missing.
+        self._overlay_width: int | None = None
+        self._overlay_height: int | None = None
 
     def is_alive(self):
         return self.process.is_alive()
@@ -125,19 +127,26 @@ class PipelineProcess:
             self.pipeline_ready_time.value = time.time()
         self.pipeline_ready.set()
 
-    def _apply_overlay_param(self, params: dict | None) -> dict | None:
+    def _extract_overlay_and_dims(self, params: dict | None, overlay: LoadingOverlayRenderer | None = None) -> dict | None:
         """
-        Extracts the untyped 'show_reloading_frame' flag from params (if present),
-        validates it is a bool, applies it to this process, and removes it from the
-        dict so individual pipelines don't need to declare or handle it.
+        Read overlay-related untyped fields from params and update local caches:
+          - show_reloading_frame: bool -> overlay.set_show_overlay
+          - width/height: cache as overlay render resolution
+        Removes show_reloading_frame from params so pipelines don't need to type it.
         """
         if not isinstance(params, dict):
             return params
 
+        if "width" in params and isinstance(params["width"], int):
+            self._overlay_width = params["width"]
+        if "height" in params and isinstance(params["height"], int):
+            self._overlay_height = params["height"]
+
         if "show_reloading_frame" in params:
             value = params.pop("show_reloading_frame")
             if isinstance(value, bool):
-                self.overlay_enabled = value
+                if overlay is not None:
+                    overlay.set_show_overlay(value)
             else:
                 logging.warning(
                     "Ignoring non-bool 'show_reloading_frame' value: %s (type=%s)",
@@ -218,7 +227,7 @@ class PipelineProcess:
             return True
         return False
 
-    async def _initialize_pipeline(self):
+    async def _initialize_pipeline(self, overlay: LoadingOverlayRenderer):
         try:
             params = await self._get_latest_params(timeout=0.1)
             if params is not None:
@@ -229,7 +238,8 @@ class PipelineProcess:
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
-                await pipeline.initialize(**params)
+                params = self._extract_overlay_and_dims(params, overlay)
+                await pipeline.initialize(**(params or {}))
                 return pipeline
         except Exception as e:
             self._report_error("Error loading pipeline", e)
@@ -248,16 +258,13 @@ class PipelineProcess:
                 raise
 
     async def _run_pipeline_loops(self):
-        pipeline = await self._initialize_pipeline()
-        input_task = asyncio.create_task(self._input_loop(pipeline))
-        output_task = asyncio.create_task(self._output_loop(pipeline))
-        param_task = asyncio.create_task(self._param_update_loop(pipeline))
+        # Create overlay renderer only in the subprocess to avoid cross-process state confusion
+        overlay = LoadingOverlayRenderer()
+        pipeline = await self._initialize_pipeline(overlay)
+        input_task = asyncio.create_task(self._input_loop(pipeline, overlay))
+        output_task = asyncio.create_task(self._output_loop(pipeline, overlay))
+        param_task = asyncio.create_task(self._param_update_loop(pipeline, overlay))
         self._set_pipeline_ready(True)
-        # In case a previous reload left the overlay active, ensure it's off once ready
-        try:
-            self.overlay_renderer.end_reload()
-        except Exception:
-            logging.warning("Failed to end loading overlay after pipeline became ready", exc_info=True)
 
         async def wait_for_stop():
             while not self.is_done():
@@ -277,37 +284,39 @@ class PipelineProcess:
 
         logging.info("PipelineProcess: _run_pipeline_loops finished.")
 
-    async def _input_loop(self, pipeline: Pipeline):
+    async def _input_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
         while not self.is_done():
             try:
                 input_frame = await asyncio.to_thread(self.input_queue.get, timeout=0.1)
                 if isinstance(input_frame, VideoFrame):
                     input_frame.log_timestamps["pre_process_frame"] = time.time()
+                    # If pipeline is not ready: ensure overlay session, render, and emit loading frame if enabled
+                    if not self.pipeline_ready.is_set():
+                        if not overlay.is_active():
+                            overlay.begin_reload()
+                        w = self._overlay_width
+                        h = self._overlay_height
+                        if not isinstance(w, int) or not isinstance(h, int):
+                            # Fallback to input frame size if params not received yet
+                            _, h_in, w_in, _ = input_frame.tensor.shape
+                            w, h = w_in, h_in
 
-                    # If pipeline is not ready and overlay is enabled, emit a loading frame instead of
-                    # sending the frame to the pipeline. This keeps output flowing and makes overlay universal.
-                    if self.overlay_enabled and not self.pipeline_ready.is_set():
-                        try:
-                            if not self.overlay_renderer.is_active():
-                                self.overlay_renderer.begin_reload()
-                            # Frame tensor is (B, H, W, C)
-                            _, h, w, _ = input_frame.tensor.shape
-                            loading_tensor = await self.overlay_renderer.render_if_active(w, h)
-                        except Exception:
-                            logging.warning("Failed to render loading overlay", exc_info=True)
-                            loading_tensor = None
+                        loading_tensor = None
+                        if overlay.is_active():
+                            loading_tensor = await overlay.render_if_active(w, h)
+                        if loading_tensor is None:
+                            # Overlay disabled or unavailable; skip emitting frames while loading
+                            continue
 
-                        output = VideoOutput(input_frame, self.request_id, is_loading_frame=True)
-                        if loading_tensor is not None:
-                            if torch.cuda.is_available() and not loading_tensor.is_cuda:
-                                try:
-                                    loading_tensor = loading_tensor.cuda()
-                                except Exception:
-                                    logging.debug("Failed to move overlay tensor to CUDA", exc_info=True)
-                            output = output.replace_tensor(loading_tensor)
+                        if torch.cuda.is_available() and not loading_tensor.is_cuda:
+                            loading_tensor = loading_tensor.cuda()
+                        output = VideoOutput(input_frame, self.request_id, is_loading_frame=True).replace_tensor(loading_tensor)
                         self._try_queue_put(self.output_queue, output)
                         continue
 
+                    # Pipeline ready path: ensure we close any active overlay session
+                    if overlay.is_active():
+                        overlay.end_reload()
                     await pipeline.put_video_frame(input_frame, self.request_id)
                 elif isinstance(input_frame, AudioFrame):
                     self._try_queue_put(self.output_queue, AudioOutput([input_frame], self.request_id))
@@ -317,24 +326,21 @@ class PipelineProcess:
             except Exception as e:
                 self._report_error("Error processing input frame", e)
 
-    async def _output_loop(self, pipeline: Pipeline):
+    async def _output_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
         while not self.is_done():
             try:
                 output = await pipeline.get_processed_video_frame()
                 if isinstance(output, VideoOutput) and not output.tensor.is_cuda and torch.cuda.is_available():
                     output = output.replace_tensor(output.tensor.cuda())
                 output.log_timestamps["post_process_frame"] = time.time()
-                # Cache last good frame for overlay background when reloading
-                try:
-                    if isinstance(output, VideoOutput) and self.overlay_enabled and not output.is_loading_frame:
-                        self.overlay_renderer.update_last_frame(output.tensor)
-                except Exception:
-                    logging.debug("Failed to update overlay last frame cache", exc_info=True)
                 self._try_queue_put(self.output_queue, output)
+                # Cache last good frame for overlay background after sending to avoid extra latency
+                if isinstance(output, VideoOutput) and not output.is_loading_frame:
+                    overlay.update_last_frame(output.tensor)
             except Exception as e:
                 self._report_error("Error processing output frame", e)
 
-    async def _param_update_loop(self, pipeline: Pipeline):
+    async def _param_update_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
         while not self.is_done():
             reload_task = None
             try:
@@ -346,7 +352,8 @@ class PipelineProcess:
                 logging.info(f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}")
 
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
-                    reload_task = await pipeline.update_params(**params)
+                    params = self._extract_overlay_and_dims(params, overlay)
+                    reload_task = await pipeline.update_params(**(params or {}))
             except Exception as e:
                 self._report_error("Error updating params", e)
 
@@ -356,20 +363,9 @@ class PipelineProcess:
 
             try:
                 with log_timing(f"PipelineProcess: Reloading pipeline"):
-                    # Begin overlay and flag not-ready while reloading
-                    if self.overlay_enabled:
-                        try:
-                            self.overlay_renderer.begin_reload()
-                        except Exception:
-                            logging.debug("Overlay begin_reload failed", exc_info=True)
                     self._set_pipeline_ready(False)
                     await reload_task
                     self._set_pipeline_ready(True)
-                    if self.overlay_enabled:
-                        try:
-                            self.overlay_renderer.end_reload()
-                        except Exception:
-                            logging.debug("Overlay end_reload failed", exc_info=True)
             except Exception as e:
                 self._report_error("Error reloading pipeline", e)
                 self.done.set()
@@ -399,8 +395,7 @@ class PipelineProcess:
             except queue.Empty:
                 break
 
-        # Extract and consume any process-level params (e.g. overlay flag)
-        return self._apply_overlay_param(params)
+        return params
 
     def _report_error(self, msg: str, error: Exception | None = None, silent = False):
         if not silent:
@@ -418,11 +413,7 @@ class PipelineProcess:
                 await pipeline.stop()
             except Exception as e:
                 logging.error(f"Error stopping pipeline: {e}")
-        # Ensure overlay is not left active on cleanup
-        try:
-            self.overlay_renderer.end_reload()
-        except Exception:
-            pass
+        # Nothing overlay-specific to cleanup; renderer is local to subprocess loops
 
     def _setup_logging(self):
         level = (
