@@ -10,7 +10,6 @@ from io import BytesIO
 import aiohttp
 
 from .interface import Pipeline
-from .loading_overlay import LoadingOverlayRenderer
 from trickle import VideoFrame, VideoOutput
 
 from .streamdiffusion_params import StreamDiffusionParams, IPAdapterConfig, get_model_type, IPADAPTER_SUPPORTED_TYPES
@@ -23,7 +22,6 @@ class StreamDiffusion(Pipeline):
         self.first_frame = True
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
-        self._overlay_renderer = LoadingOverlayRenderer()
         self._cached_style_image_tensor: Optional[torch.Tensor] = None
         self._cached_style_image_url: Optional[str] = None
 
@@ -40,13 +38,8 @@ class StreamDiffusion(Pipeline):
             raise RuntimeError("Pipeline not initialized")
 
         async with self._pipeline_lock:
-            loading_frame = await self._overlay_renderer.render_if_active(self.params.width, self.params.height)
-            if loading_frame is not None:
-                output = VideoOutput(frame, request_id, is_loading_frame=True).replace_tensor(loading_frame)
-            else:
-                out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
-                output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
-                self._overlay_renderer.update_last_frame(out_tensor)
+            out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
+            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
 
         await self.frame_queue.put(output)
 
@@ -94,8 +87,6 @@ class StreamDiffusion(Pipeline):
             logging.info("No parameters changed")
             return
 
-        self._overlay_renderer.set_show_overlay(new_params.show_reloading_frame)
-
         # Pre-fetch the style image before locking. This raises any errors early (e.g. invalid URL or image) and also
         # allows us to fetch the style image without blocking inference with the lock.
         if (
@@ -119,16 +110,9 @@ class StreamDiffusion(Pipeline):
         return asyncio.create_task(self._reload_pipeline(new_params))
 
     async def _reload_pipeline(self, new_params: StreamDiffusionParams):
-        try:
-            await self._overlay_renderer.prewarm(new_params.width, new_params.height)
-        except Exception:
-            logging.warning("Failed to prewarm loading overlay caches", exc_info=True)
-
         async with self._pipeline_lock:
-            # Clear the pipeline while loading the new one. The loading overlay will be shown while this is happening.
             self.pipe = None
             prev_params = self.params
-            self._overlay_renderer.begin_reload()
 
         new_pipe: Optional[StreamDiffusionWrapper] = None
         try:
@@ -150,7 +134,6 @@ class StreamDiffusion(Pipeline):
             self.pipe = new_pipe
             self.params = new_params
             self.first_frame = True
-            self._overlay_renderer.end_reload()
 
             if new_params.ip_adapter and new_params.ip_adapter.enabled:
                 await self._update_style_image(new_params)
@@ -166,7 +149,7 @@ class StreamDiffusion(Pipeline):
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
             'use_safety_checker', 'safety_checker_threshold', 'controlnets',
-            'ip_adapter', 'ip_adapter_style_image_url', 'show_reloading_frame'
+            'ip_adapter', 'ip_adapter_style_image_url'
         }
 
         update_kwargs = {}
@@ -179,9 +162,6 @@ class StreamDiffusion(Pipeline):
             elif key not in updatable_params:
                 logging.info(f"Non-updatable parameter changed: {key}")
                 return False
-            elif key == 'show_reloading_frame':
-                # Handled by us in update_params, not a config from the lib
-                continue
 
             # at this point, we know it's an updatable parameter that changed
             if key == 'prompt':
@@ -254,8 +234,6 @@ class StreamDiffusion(Pipeline):
             self.pipe = None
             self.params = None
             self.frame_queue = asyncio.Queue()
-            self._overlay_renderer.end_reload()
-            self._overlay_renderer.reset_session(0.0)
 
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
