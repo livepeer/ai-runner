@@ -11,6 +11,7 @@ from typing import Any
 import torch
 
 from pipelines import load_pipeline, Pipeline
+from pipelines.loading_overlay import LoadingOverlayRenderer
 from log import config_logging, config_logging_fields, log_timing
 from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
 
@@ -40,6 +41,13 @@ class PipelineProcess:
         self.process = self.ctx.Process(target=self.process_loop, args=())
         self.start_time = 0.0
         self.request_id = ""
+
+        # Centralized loading overlay management
+        self._overlay_renderer = LoadingOverlayRenderer()
+        self._output_width = 0
+        self._output_height = 0
+        self._last_input_width = 0
+        self._last_input_height = 0
 
     def is_alive(self):
         return self.process.is_alive()
@@ -178,6 +186,10 @@ class PipelineProcess:
                 logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
                 params = {}
 
+            # Extract overlay settings and preferred output size in an untyped way
+            params = self._apply_overlay_settings_from_params(params)
+            await self._maybe_prewarm_overlay()
+
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
                 await pipeline.initialize(**params)
@@ -228,7 +240,29 @@ class PipelineProcess:
             try:
                 input_frame = await asyncio.to_thread(self.input_queue.get, timeout=0.1)
                 if isinstance(input_frame, VideoFrame):
+                    # Track last input size for overlay fallback sizing
+                    try:
+                        h = int(input_frame.tensor.shape[1])
+                        w = int(input_frame.tensor.shape[2])
+                        if h > 0 and w > 0:
+                            self._last_input_height = h
+                            self._last_input_width = w
+                    except Exception:
+                        pass
+
                     input_frame.log_timestamps["pre_process_frame"] = time.time()
+
+                    # If pipeline is not ready, emit a loading overlay frame instead of calling into the pipeline
+                    if not self.pipeline_ready.is_set():
+                        ow, oh = self._get_overlay_size()
+                        loading_tensor = await self._overlay_renderer.render_if_active(ow, oh)
+                        if loading_tensor is not None:
+                            if torch.cuda.is_available():
+                                loading_tensor = loading_tensor.cuda()
+                            output = VideoOutput(input_frame, self.request_id, is_loading_frame=True).replace_tensor(loading_tensor)
+                            self._try_queue_put(self.output_queue, output)
+                            continue
+
                     await pipeline.put_video_frame(input_frame, self.request_id)
                 elif isinstance(input_frame, AudioFrame):
                     self._try_queue_put(self.output_queue, AudioOutput([input_frame], self.request_id))
@@ -245,6 +279,12 @@ class PipelineProcess:
                 if isinstance(output, VideoOutput) and not output.tensor.is_cuda and torch.cuda.is_available():
                     output = output.replace_tensor(output.tensor.cuda())
                 output.log_timestamps["post_process_frame"] = time.time()
+                # Update overlay base frame cache with the latest processed frame
+                try:
+                    if isinstance(output, VideoOutput):
+                        self._overlay_renderer.update_last_frame(output.tensor if not output.tensor.is_cuda else output.tensor.cpu())
+                except Exception:
+                    pass
                 self._try_queue_put(self.output_queue, output)
             except Exception as e:
                 self._report_error("Error processing output frame", e)
@@ -256,6 +296,9 @@ class PipelineProcess:
                 params = await self._get_latest_params(timeout=0.1)
                 if params is None:
                     continue
+
+                # Extract overlay settings and preferred output size in an untyped way
+                params = self._apply_overlay_settings_from_params(params)
 
                 params_hash = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
                 logging.info(f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}")
@@ -271,9 +314,19 @@ class PipelineProcess:
 
             try:
                 with log_timing(f"PipelineProcess: Reloading pipeline"):
+                    # Activate overlay while the pipeline is reloading
+                    try:
+                        await self._maybe_prewarm_overlay()
+                        self._overlay_renderer.begin_reload()
+                    except Exception:
+                        logging.warning("Failed to prepare loading overlay for reload", exc_info=True)
                     self._set_pipeline_ready(False)
                     await reload_task
                     self._set_pipeline_ready(True)
+                    try:
+                        self._overlay_renderer.end_reload()
+                    except Exception:
+                        pass
             except Exception as e:
                 self._report_error("Error reloading pipeline", e)
                 self.done.set()
@@ -357,6 +410,54 @@ class PipelineProcess:
             except queue.Empty:
                 break
         return (last_error["message"], last_error["timestamp"]) if last_error else None
+
+    def _get_overlay_size(self) -> tuple[int, int]:
+        # Prefer explicit output size from params, then last input size, then a conservative default
+        w = self._output_width or self._last_input_width or 640
+        h = self._output_height or self._last_input_height or 360
+        return (int(w), int(h))
+
+    def _apply_overlay_settings_from_params(self, params: dict) -> dict:
+        """
+        Read overlay-related flags and output size from params in an untyped way, then delete
+        those overlay-only flags so pipelines don't need to type them. Returns a possibly
+        modified params dict to be forwarded to the pipeline.
+        """
+        if not isinstance(params, dict):
+            return params
+
+        # Work on a shallow copy to avoid side-effects on callers
+        updated = dict(params)
+
+        # Overlay visibility flag: must be a strict bool if present
+        if "show_reloading_frame" in updated:
+            value = updated.pop("show_reloading_frame")
+            if isinstance(value, bool):
+                self._overlay_renderer.set_show_overlay(value)
+            else:
+                logging.warning(f"Ignoring non-bool show_reloading_frame value: {value!r}")
+
+        # Capture preferred output size if present (do not remove; pipelines may need it)
+        try:
+            ow = updated.get("width")
+            oh = updated.get("height")
+            if isinstance(ow, int) and isinstance(oh, int) and ow > 0 and oh > 0:
+                self._output_width = ow
+                self._output_height = oh
+        except Exception:
+            pass
+
+        return updated
+
+    async def _maybe_prewarm_overlay(self):
+        try:
+            if self._overlay_renderer.is_active() or True:
+                w, h = self._get_overlay_size()
+                if w > 0 and h > 0:
+                    await self._overlay_renderer.prewarm(w, h)
+        except Exception:
+            # Best-effort; ignore failures
+            pass
 
 class QueueTeeStream:
     """Tee all stream (stdout or stderr) messages to the process log queue"""
