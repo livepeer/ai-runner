@@ -127,16 +127,13 @@ class PipelineProcess:
             self.pipeline_ready_time.value = time.time()
         self.pipeline_ready.set()
 
-    def _extract_overlay_and_dims(self, params: dict | None, overlay: LoadingOverlayRenderer | None = None) -> dict | None:
+    def _extract_overlay_params(self, params: dict, overlay: LoadingOverlayRenderer) -> dict:
         """
         Read overlay-related untyped fields from params and update local caches:
           - show_reloading_frame: bool -> overlay.set_show_overlay
           - width/height: cache as overlay render resolution
         Removes show_reloading_frame from params so pipelines don't need to type it.
         """
-        if not isinstance(params, dict):
-            return params
-
         if "width" in params and isinstance(params["width"], int):
             self._overlay_width = params["width"]
         if "height" in params and isinstance(params["height"], int):
@@ -145,8 +142,7 @@ class PipelineProcess:
         if "show_reloading_frame" in params:
             value = params.pop("show_reloading_frame")
             if isinstance(value, bool):
-                if overlay is not None:
-                    overlay.set_show_overlay(value)
+                overlay.set_show_overlay(value)
             else:
                 logging.warning(
                     "Ignoring non-bool 'show_reloading_frame' value: %s (type=%s)",
@@ -238,8 +234,8 @@ class PipelineProcess:
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
-                params = self._extract_overlay_and_dims(params, overlay)
-                await pipeline.initialize(**(params or {}))
+                params = self._extract_overlay_params(params, overlay)
+                await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:
             self._report_error("Error loading pipeline", e)
@@ -352,8 +348,8 @@ class PipelineProcess:
                 logging.info(f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}")
 
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
-                    params = self._extract_overlay_and_dims(params, overlay)
-                    reload_task = await pipeline.update_params(**(params or {}))
+                    params = self._extract_overlay_params(params, overlay)
+                    reload_task = await pipeline.update_params(**params)
             except Exception as e:
                 self._report_error("Error updating params", e)
 
