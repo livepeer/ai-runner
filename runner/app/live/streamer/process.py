@@ -254,7 +254,6 @@ class PipelineProcess:
                 raise
 
     async def _run_pipeline_loops(self):
-        # Create overlay renderer only in the subprocess to avoid cross-process state confusion
         overlay = LoadingOverlayRenderer()
         pipeline = await self._initialize_pipeline(overlay)
         input_task = asyncio.create_task(self._input_loop(pipeline, overlay))
