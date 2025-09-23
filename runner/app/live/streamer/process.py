@@ -347,11 +347,10 @@ class PipelineProcess:
 
                     self._try_queue_put(self.output_queue, output)
 
-                    # Keep a recent frame as overlay background and close overlay on first real frame
+                    # Cache a recent frame for overlay background and close overlay on the first real output
                     if isinstance(output, VideoOutput) and not output.is_loading_frame:
                         overlay.update_last_frame(output.tensor)
-                        if overlay.is_active():
-                            overlay.end_reload()
+                        overlay.end_reload()
                         last_output_was_loading = False
                     continue
 
@@ -448,14 +447,13 @@ class PipelineProcess:
         }
         self._try_queue_put(self.error_queue, error_event)
 
-    async def _cleanup_pipeline(self, pipeline, overlay: LoadingOverlayRenderer | None = None):
+    async def _cleanup_pipeline(self, pipeline, overlay: LoadingOverlayRenderer):
         if pipeline is not None:
             try:
                 await pipeline.stop()
             except Exception as e:
                 logging.error(f"Error stopping pipeline: {e}")
-        if overlay is not None and overlay.is_active():
-            overlay.end_reload()
+        overlay.end_reload()
 
     def _setup_logging(self):
         level = (
