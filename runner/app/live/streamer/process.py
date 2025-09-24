@@ -24,7 +24,18 @@ from trickle import (
     OutputFrame,
     VideoOutput,
     AudioOutput,
+    DEFAULT_WIDTH,
+    DEFAULT_HEIGHT,
 )
+
+class BaseParams(BaseModel):
+    """
+    Base parameters for all pipelines. The PipelineProcess uses this for some features like loading overlay.
+    """
+
+    width: int = DEFAULT_WIDTH
+    height: int = DEFAULT_HEIGHT
+    show_reloading_frame: bool = True
 
 
 class PipelineProcess:
@@ -54,11 +65,8 @@ class PipelineProcess:
         self.start_time = 0.0
         self.request_id = ""
 
-        # Overlay resolution cache (width/height from params). Set in subprocess.
-        # Using underscored names to emphasize they're set in the child process.
-        # Defaults are None and will fall back to input frame dimensions if missing.
-        self._overlay_width: int | None = None
-        self._overlay_height: int | None = None
+        # Using underscored names to emphasize state used only from the child process.
+        self._last_params: BaseParams | None = None
         self._last_input_frame: VideoFrame | None = None
 
     def is_alive(self):
@@ -135,32 +143,22 @@ class PipelineProcess:
             self.pipeline_ready_time.value = time.time()
         self.pipeline_ready.set()
 
-    def _extract_overlay_params(
-        self, params: dict, overlay: LoadingOverlayRenderer
+    def _handle_base_params(
+        self, params_dict: dict, overlay: LoadingOverlayRenderer
     ) -> dict:
         """
-        Parse common overlay-related fields from untyped params using a permissive BaseParams model
-        and apply them here, removing only the overlay toggle so pipelines don't need to declare it.
+        Parse common base params from untyped params using and apply them here.
+        Remove show_reloading_frame from params_dict so pipelines don't need to declare it.
         """
+        params = BaseParams(**params_dict)
+        self._last_params = params
 
-        class BaseParams(BaseModel):
-            class Config:
-                extra = "allow"
+        overlay.set_show_overlay(params.show_reloading_frame)
 
-            width: int | None = None
-            height: int | None = None
-            show_reloading_frame: bool | None = None
+        params_dict = params_dict.copy()
+        params_dict.pop("show_reloading_frame", None)
 
-        base = BaseParams(**params)
-        if base.width is not None:
-            self._overlay_width = base.width
-        if base.height is not None:
-            self._overlay_height = base.height
-        if base.show_reloading_frame is not None:
-            overlay.set_show_overlay(bool(base.show_reloading_frame))
-            if "show_reloading_frame" in params:
-                params.pop("show_reloading_frame")
-        return params
+        return params_dict
 
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
@@ -266,7 +264,7 @@ class PipelineProcess:
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
-                params = self._extract_overlay_params(params, overlay)
+                params = self._handle_base_params(params, overlay)
                 await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:
@@ -352,14 +350,12 @@ class PipelineProcess:
                         overlay.begin_reload()
                     now = time.time()
                     if (
-                        self._overlay_width is not None
-                        and self._overlay_height is not None
+                        self._last_params is not None
                         and (now - last_overlay_emit) >= overlay_interval
                         and self._last_input_frame is not None
                     ):
-                        loading_tensor = await overlay.render_if_active(
-                            self._overlay_width, self._overlay_height
-                        )
+                        w, h = self._last_params.width, self._last_params.height
+                        loading_tensor = await overlay.render_if_active(w, h)
                         if loading_tensor is not None:
                             if torch.cuda.is_available() and not loading_tensor.is_cuda:
                                 loading_tensor = loading_tensor.cuda()
@@ -410,13 +406,11 @@ class PipelineProcess:
                         continue
                     # Emit another loading frame to bridge the gap
                     if (
-                        self._overlay_width is not None
-                        and self._overlay_height is not None
+                        self._last_params is not None
                         and self._last_input_frame is not None
                     ):
-                        loading_tensor = await overlay.render_if_active(
-                            self._overlay_width, self._overlay_height
-                        )
+                        w, h = self._last_params.width, self._last_params.height
+                        loading_tensor = await overlay.render_if_active(w, h)
                         if loading_tensor is not None:
                             if torch.cuda.is_available() and not loading_tensor.is_cuda:
                                 loading_tensor = loading_tensor.cuda()
@@ -454,7 +448,7 @@ class PipelineProcess:
                 with log_timing(
                     f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"
                 ):
-                    params = self._extract_overlay_params(params, overlay)
+                    params = self._handle_base_params(params, overlay)
                     reload_task = await pipeline.update_params(**params)
             except Exception as e:
                 self._report_error("Error updating params", e)
