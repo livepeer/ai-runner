@@ -101,15 +101,9 @@ async def main(
                 await streamer.start(params)
             api = await start_http_server(http_port, process, streamer)
 
-        async def wait_uncaught():
-            await _UNCAUGHT_EXCEPTION_EVENT.wait()
-            logging.error(
-                "Uncaught exception event received. Initiating graceful shutdown."
-            )
-
         lifecycle_tasks: List[asyncio.Task] = [
             asyncio.create_task(block_until_signal([signal.SIGINT, signal.SIGTERM])),
-            asyncio.create_task(wait_uncaught()),
+            asyncio.create_task(wait_uncaught_exception()),
         ]
         if streamer:
             lifecycle_tasks.append(asyncio.create_task(streamer.wait()))
@@ -145,13 +139,18 @@ async def block_until_signal(sigs: List[signal.Signals]):
     future: asyncio.Future[signal.Signals] = loop.create_future()
 
     def signal_handler(sig, _):
-        logging.info(f"Received signal: {sig}")
+        logging.info(f"Received signal, initiating graceful shutdown. signal={sig}")
         loop.call_soon_threadsafe(future.set_result, sig)
 
     for sig in sigs:
         signal.signal(sig, signal_handler)
     return await future
 
+async def wait_uncaught_exception():
+    await _UNCAUGHT_EXCEPTION_EVENT.wait()
+    logging.error(
+        "Uncaught exception event received, initiating graceful shutdown."
+    )
 
 if __name__ == "__main__":
     threading.excepthook = thread_exception_hook(threading.excepthook)
