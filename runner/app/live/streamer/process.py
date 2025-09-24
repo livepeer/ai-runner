@@ -149,9 +149,9 @@ class PipelineProcess:
         return logs[-n:] if n is not None else logs  # Only limit if n is specified
 
     def process_loop(self):
-        setup_signal_handlers(self.done)
-        setup_parent_death_signal()
-        start_parent_watchdog(self.done)
+        _setup_signal_handlers(self.done)
+        _setup_parent_death_signal()
+        _start_parent_watchdog(self.done)
         self._setup_logging()
 
         # Ensure CUDA environment is available inside the subprocess.
@@ -412,7 +412,7 @@ def clear_queue(queue):
         except Exception as e:
             logging.error(f"Error while clearing queue: {e}")
 
-def setup_signal_handlers(
+def _setup_signal_handlers(
     done: mp.Event,
     signals: list[signal.Signals] = [signal.SIGTERM, signal.SIGINT],
 ):
@@ -423,13 +423,20 @@ def setup_signal_handlers(
 
     def _handle(sig, _frame):
         logging.info(f"Received signal: {sig}. Initiating graceful shutdown.")
-        done.set()
+        try:
+            done.set()
+        except Exception as e:
+            logging.error(
+                "Terminating process (child) due to failure handling signal",
+                exc_info=e,
+            )
+            os._exit(1)
 
     for sig in signals:
         signal.signal(sig, _handle)
 
 
-def setup_parent_death_signal():
+def _setup_parent_death_signal():
     """
     Ensure the child gets a SIGTERM if the parent dies when running in Linux.
     This is a best-effort attempt, and errors are logged but ignored.
@@ -454,7 +461,7 @@ def setup_parent_death_signal():
         logging.warning(f"Unable to set PDEATHSIG: {e}")
 
 
-def start_parent_watchdog(done: mp.Event):
+def _start_parent_watchdog(done: mp.Event):
     """
     Start a lightweight watchdog to observe parent death as a cross-platform fallback
     """
@@ -471,7 +478,11 @@ def start_parent_watchdog(done: mp.Event):
                     done.set()
                     break
         except Exception as e:
-            logging.error(f"Parent watchdog error: {e}")
+            logging.error(
+                "Terminating child process due to failure in watchdog",
+                exc_info=e,
+            )
+            os._exit(1)
 
     t = threading.Thread(target=_watch_parent, name="parent-watchdog", daemon=True)
     t.start()
