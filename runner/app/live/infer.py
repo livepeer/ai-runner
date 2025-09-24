@@ -21,13 +21,23 @@ from streamer.protocol.trickle import TrickleProtocol, DEFAULT_WIDTH, DEFAULT_HE
 from streamer.protocol.zeromq import ZeroMQProtocol
 
 
+_UNCAUGHT_EXCEPTION_EVENT = asyncio.Event()
+_MAIN_LOOP: asyncio.AbstractEventLoop | None = None
+
+
 def asyncio_exception_handler(loop, context):
     """
     Handles unhandled exceptions in asyncio tasks, logging the error and terminating the application.
     """
     exception = context.get('exception')
-    logging.error(f"Terminating process due to unhandled exception in asyncio task", exc_info=exception)
-    os._exit(1)
+    logging.error(
+        f"Terminating process due to unhandled exception in asyncio task: {exception}",
+        exc_info=exception,
+    )
+    try:
+        _UNCAUGHT_EXCEPTION_EVENT.set()
+    except Exception:
+        os._exit(1)
 
 
 def thread_exception_hook(original_hook):
@@ -35,9 +45,15 @@ def thread_exception_hook(original_hook):
     Creates a custom exception hook for threads that logs the error and terminates the application.
     """
     def custom_hook(args):
-        logging.error("Terminating process due to unhandled exception in thread", exc_info=args.exc_value)
-        original_hook(args) # this is most likely a noop
-        os._exit(1)
+        logging.error(
+            f"Terminating process due to unhandled exception in thread: {args.exc_value}",
+            exc_info=args.exc_value,
+        )
+        original_hook(args)  # this is most likely a noop
+        try:
+            _MAIN_LOOP.call_soon_threadsafe(_UNCAUGHT_EXCEPTION_EVENT.set)  # type: ignore
+        except Exception:
+            os._exit(1)
     return custom_hook
 
 
@@ -55,8 +71,9 @@ async def main(
     manifest_id: str,
     stream_id: str,
 ):
-    loop = asyncio.get_event_loop()
-    loop.set_exception_handler(asyncio_exception_handler)
+    global _MAIN_LOOP
+    _MAIN_LOOP = asyncio.get_event_loop()
+    _MAIN_LOOP.set_exception_handler(asyncio_exception_handler)
 
     process = ProcessGuardian(pipeline, params or {})
     # Only initialize the streamer if we have a protocol and URLs to connect to
@@ -72,7 +89,9 @@ async def main(
             protocol = ZeroMQProtocol(subscribe_url, publish_url)
         else:
             raise ValueError(f"Unsupported protocol: {stream_protocol}")
-        streamer = PipelineStreamer(protocol, process, request_id, stream_id)
+        streamer = PipelineStreamer(
+            protocol, process, request_id, manifest_id, stream_id
+        )
 
     api = None
     try:
@@ -82,25 +101,39 @@ async def main(
                 await streamer.start(params)
             api = await start_http_server(http_port, process, streamer)
 
-        tasks: List[asyncio.Task] = []
-        if streamer:
-            tasks.append(asyncio.create_task(streamer.wait()))
-        tasks.append(
-            asyncio.create_task(block_until_signal([signal.SIGINT, signal.SIGTERM]))
-        )
+        async def wait_uncaught():
+            await _UNCAUGHT_EXCEPTION_EVENT.wait()
+            logging.error(
+                "Uncaught exception event received. Initiating graceful shutdown."
+            )
 
-        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        lifecycle_tasks: List[asyncio.Task] = [
+            asyncio.create_task(block_until_signal([signal.SIGINT, signal.SIGTERM])),
+            asyncio.create_task(wait_uncaught()),
+        ]
+        if streamer:
+            lifecycle_tasks.append(asyncio.create_task(streamer.wait()))
+
+        await asyncio.wait(lifecycle_tasks, return_when=asyncio.FIRST_COMPLETED)
     except Exception as e:
         logging.error(f"Error starting socket handler or HTTP server: {e}")
         logging.error(f"Stack trace:\n{traceback.format_exc()}")
         raise e
     finally:
+        stop_coros: List[asyncio._CoroutineLike] = [
+            process.stop(),
+        ]
         if streamer:
             streamer.trigger_stop_stream()
-            await streamer.wait(timeout=5)
+            stop_coros.append(streamer.wait())
         if api:
-            await api.cleanup()
-        await process.stop()
+            stop_coros.append(api.cleanup())
+
+        try:
+            stops = asyncio.gather(*stop_coros, return_exceptions=True)
+            await asyncio.wait_for(stops, timeout=20)
+        except Exception:
+            os._exit(1)
 
 
 async def block_until_signal(sigs: List[signal.Signals]):
