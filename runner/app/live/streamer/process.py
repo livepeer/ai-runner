@@ -71,11 +71,14 @@ class PipelineProcess:
                     logging.error(f"Process join error: {e}")
                     return False
 
+            self.process.terminate()
             if not await wait_stop(5):
                 logging.error("Failed to terminate process, killing")
+
                 self.process.kill()
                 if not await wait_stop(3):
-                    logging.error("Failed to kill process")
+                    logging.error(f"Failed to kill process parent_pid={os.getppid()} pid={self.process.pid} is_alive={self.process.is_alive()}")
+                    raise RuntimeError("Failed to kill process")
 
         logging.info("Pipeline process terminated, closing queues")
 
