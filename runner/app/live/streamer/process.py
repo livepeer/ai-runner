@@ -58,36 +58,43 @@ class PipelineProcess:
     async def stop(self):
         self.done.set()
 
-        if not self.process.is_alive():
+
+        is_terminating = False
+        if not self.is_alive():
             logging.info("Process already not alive")
         else:
             logging.info("Terminating pipeline process")
-
-            async def wait_stop(timeout: float) -> bool:
-                try:
-                    await asyncio.to_thread(self.process.join, timeout=timeout)
-                    return not self.process.is_alive()
-                except Exception as e:
-                    logging.error(f"Process join error: {e}")
-                    return False
-
+            is_terminating = True
             self.process.terminate()
-            if not await wait_stop(5):
-                logging.error("Failed to terminate process, killing")
 
-                self.process.kill()
-                if not await wait_stop(3):
-                    logging.error(f"Failed to kill process self_pid={os.getpid()} child_pid={self.process.pid} is_alive={self.process.is_alive()}")
-                    raise RuntimeError("Failed to kill process")
+            if await self._wait_stop(5):
+                is_terminating = False
 
-        logging.info("Pipeline process terminated, closing queues")
-
-        for q in [self.input_queue, self.output_queue, self.param_update_queue,
-                  self.error_queue, self.log_queue]:
+        logging.info("Closing process queues")
+        for queue_name in ["input_queue", "output_queue", "param_update_queue", "error_queue", "log_queue"]:
+            q: mp.Queue | None = getattr(self, queue_name)
+            if q is None:
+                continue
             q.cancel_join_thread()
             q.close()
+            setattr(self, queue_name, None)
+
+        if is_terminating and self.is_alive():
+            logging.error("Failed to terminate process, killing")
+            self.process.kill()
+            if not await self._wait_stop(3):
+                logging.error(f"Failed to kill process self_pid={os.getpid()} child_pid={self.process.pid} is_alive={self.process.is_alive()}")
+                raise RuntimeError("Failed to kill process")
 
         logging.info("Pipeline process cleanup complete")
+
+    async def _wait_stop(self, timeout: float) -> bool:
+        try:
+            await asyncio.to_thread(self.process.join, timeout=timeout)
+            return not self.process.is_alive()
+        except Exception as e:
+            logging.error(f"Process join error: {e}")
+            return False
 
     def is_done(self):
         return self.done.is_set()
