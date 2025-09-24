@@ -131,8 +131,12 @@ async def main(
 
         try:
             stops = asyncio.gather(*stop_coros, return_exceptions=True)
-            await asyncio.wait_for(stops, timeout=20)
-        except Exception:
+            results = await asyncio.wait_for(stops, timeout=10)
+            exceptions = [result for result in results if isinstance(result, Exception)]
+            if exceptions:
+                raise ExceptionGroup("Error stopping components", exceptions)
+        except Exception as e:
+            logging.error(f"Graceful shutdown error, exiting abruptly: {e}", exc_info=True)
             os._exit(1)
 
 

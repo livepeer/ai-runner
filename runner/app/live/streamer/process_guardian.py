@@ -61,16 +61,21 @@ class ProcessGuardian:
         self.monitor_task = asyncio.create_task(self._monitor_loop())
 
     async def stop(self):
+        stop_coros = []
         if self.monitor_task:
             self.monitor_task.cancel()
-            try:
-                await self.monitor_task
-            except asyncio.CancelledError:
-                pass
-            self.monitor_task = None
+            stop_coros.append(asyncio.wait_for(self.monitor_task, timeout=5))
         if self.process:
-            await self.process.stop()
-            self.process = None
+            # process.stop() has its own timeouts, so we don't need one here
+            stop_coros.append(self.process.stop())
+
+        results = await asyncio.gather(*stop_coros, return_exceptions=True)
+        exceptions = [result for result in results if isinstance(result, Exception)]
+        if exceptions:
+            raise ExceptionGroup("Error stopping ProcessGuardian", exceptions)
+
+        self.monitor_task = None
+        self.process = None
 
     async def reset_stream(
         self,
