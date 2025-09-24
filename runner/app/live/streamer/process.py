@@ -71,13 +71,10 @@ class PipelineProcess:
                 is_terminating = False
 
         logging.info("Closing process queues")
-        for queue_name in ["input_queue", "output_queue", "param_update_queue", "error_queue", "log_queue"]:
-            q: mp.Queue | None = getattr(self, queue_name)
-            if q is None:
-                continue
+        for q in [self.input_queue, self.output_queue, self.param_update_queue,
+                  self.error_queue, self.log_queue]:
             q.cancel_join_thread()
             q.close()
-            setattr(self, queue_name, None)
 
         if is_terminating and self.is_alive():
             logging.error("Failed to terminate process, killing")
