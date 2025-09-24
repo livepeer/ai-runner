@@ -6,13 +6,24 @@ import json
 import torch.multiprocessing as mp
 import queue
 import sys
+import signal
+import threading
 import time
 from typing import Any
+
 import torch
 
 from pipelines import load_pipeline, Pipeline
 from log import config_logging, config_logging_fields, log_timing
-from trickle import InputFrame, AudioFrame, VideoFrame, OutputFrame, VideoOutput, AudioOutput
+from trickle import (
+    InputFrame,
+    AudioFrame,
+    VideoFrame,
+    OutputFrame,
+    VideoOutput,
+    AudioOutput,
+)
+
 
 class PipelineProcess:
     @staticmethod
@@ -138,6 +149,9 @@ class PipelineProcess:
         return logs[-n:] if n is not None else logs  # Only limit if n is specified
 
     def process_loop(self):
+        setup_signal_handlers(self.done)
+        setup_parent_death_signal()
+        start_parent_watchdog(self.done)
         self._setup_logging()
 
         # Ensure CUDA environment is available inside the subprocess.
@@ -157,7 +171,6 @@ class PipelineProcess:
             asyncio.run(self._run_pipeline_loops())
         except Exception as e:
             self._report_error("Error in process run method", e)
-
 
     def _handle_logging_params(self, params: dict) -> bool:
         if isinstance(params, dict) and "request_id" in params and "manifest_id" in params and "stream_id" in params:
@@ -398,3 +411,67 @@ def clear_queue(queue):
             queue.get_nowait()  # Remove items without blocking
         except Exception as e:
             logging.error(f"Error while clearing queue: {e}")
+
+def setup_signal_handlers(
+    done: mp.Event,
+    signals: list[signal.Signals] = [signal.SIGTERM, signal.SIGINT],
+):
+    """
+    Install signal handlers for graceful shutdown in the process. When a signal is received,
+    we set the provided done_event (supports multiprocessing.Event or similar interfaces).
+    """
+
+    def _handle(sig, _frame):
+        logging.info(f"Received signal: {sig}. Initiating graceful shutdown.")
+        done.set()
+
+    for sig in signals:
+        signal.signal(sig, _handle)
+
+
+def setup_parent_death_signal():
+    """
+    Ensure the child gets a SIGTERM if the parent dies when running in Linux.
+    This is a best-effort attempt, and errors are logged but ignored.
+    """
+    if not sys.platform.startswith("linux"):
+        return
+
+    try:
+        import ctypes
+        from ctypes.util import find_library
+
+        libc_path = find_library("c") or "libc.so.6"
+        libc = ctypes.CDLL(libc_path, use_errno=True)
+
+        # This is the code for the "parent death signal" feature in Linux
+        PR_SET_PDEATHSIG = 1
+        res = libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
+        if res != 0:
+            err = ctypes.get_errno()
+            logging.warning(f"prctl(PR_SET_PDEATHSIG) failed with errno={err}")
+    except Exception as e:
+        logging.warning(f"Unable to set PDEATHSIG: {e}")
+
+
+def start_parent_watchdog(done: mp.Event):
+    """
+    Start a lightweight watchdog to observe parent death as a cross-platform fallback
+    """
+
+    def _watch_parent():
+        try:
+            while not done.is_set():
+                time.sleep(1)
+                # On Linux/macOS, PID 1 means our parent is gone
+                if os.getppid() == 1:
+                    logging.error(
+                        "Parent process died; initiating graceful shutdown in child"
+                    )
+                    done.set()
+                    break
+        except Exception as e:
+            logging.error(f"Parent watchdog error: {e}")
+
+    t = threading.Thread(target=_watch_parent, name="parent-watchdog", daemon=True)
+    t.start()
