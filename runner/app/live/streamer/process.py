@@ -86,6 +86,9 @@ class PipelineProcess:
         logging.info("Pipeline process cleanup complete")
 
     async def _wait_stop(self, timeout: float) -> bool:
+        """
+        Wait for the process to stop and return True if it did, False otherwise.
+        """
         try:
             await asyncio.to_thread(self.process.join, timeout=timeout)
             return not self.process.is_alive()
