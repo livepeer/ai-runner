@@ -34,7 +34,7 @@ class LiveVideoToVideoPipeline(Pipeline):
     ):
         if not self.process:
             raise RuntimeError("Pipeline process not running")
-        
+
         max_retries = 10
         thrown_ex = None
         for attempt in range(max_retries):
@@ -158,10 +158,10 @@ class LiveVideoToVideoPipeline(Pipeline):
             self.log_process_diagnostics(full=True)
             break
 
-        self.restart_count += 1
-        if self.restart_count > 10:
-            logging.error("infer.py process has restarted more than 10 times. Exiting.")
+        if self.restart_count >= 3:
+            logging.error("infer.py process has crashed more than 3 times. Exiting.")
             os._exit(1)
+        self.restart_count += 1
 
         # Start a separate thread to restart the process since it will
         # restart the monitor thread itself (the current thread).
