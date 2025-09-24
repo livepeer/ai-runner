@@ -77,7 +77,7 @@ class PipelineProcess:
 
                 self.process.kill()
                 if not await wait_stop(3):
-                    logging.error(f"Failed to kill process parent_pid={os.getppid()} pid={self.process.pid} is_alive={self.process.is_alive()}")
+                    logging.error(f"Failed to kill process self_pid={os.getpid()} child_pid={self.process.pid} is_alive={self.process.is_alive()}")
                     raise RuntimeError("Failed to kill process")
 
         logging.info("Pipeline process terminated, closing queues")
