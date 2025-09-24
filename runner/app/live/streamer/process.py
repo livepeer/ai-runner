@@ -436,12 +436,19 @@ def _setup_signal_handlers(
         signal.signal(sig, _handle)
 
 
+is_linux = sys.platform.startswith("linux")
+is_unix = is_linux or sys.platform == "darwin"
+
+
 def _setup_parent_death_signal():
     """
     Ensure the child gets a SIGTERM if the parent dies when running in Linux.
     This is a best-effort attempt, and errors are logged but ignored.
     """
-    if not sys.platform.startswith("linux"):
+    if not is_linux:
+        logging.info(
+            f"Skipping Linux-only parent death signal setup due to unsupported platform={sys.platform}"
+        )
         return
 
     try:
@@ -466,11 +473,18 @@ def _start_parent_watchdog(done: mp.Event):
     Start a lightweight watchdog to observe parent death as a cross-platform fallback
     """
 
+    # Only supported on Unix-like systems where PPID becomes 1 after parent death.
+    # TODO: Add Windows support using a parent process handle wait (OpenProcess + WaitForSingleObject).
+    if not is_unix:
+        logging.info(
+            f"Skipping Unix-only parent watchdog due to unsupported platform={sys.platform}"
+        )
+        return
+
     def _watch_parent():
         try:
             while not done.is_set():
                 time.sleep(1)
-                # On Linux/macOS, PID 1 means our parent is gone
                 if os.getppid() == 1:
                     logging.error(
                         "Parent process died; initiating graceful shutdown in child"
