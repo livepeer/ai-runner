@@ -323,7 +323,7 @@ class PipelineProcess:
 
     async def _output_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
         pipe_output_task: asyncio.Task[VideoOutput] | None = None
-        last_overlay_frame_ts = 0.0
+        last_overlay_frame_time = 0.0
 
         while not self.is_done():
             try:
@@ -332,16 +332,15 @@ class PipelineProcess:
                         pipeline.get_processed_video_frame()
                     )
 
-                now = time.time()
                 is_loading = not self.pipeline_ready.is_set()
                 timeout = _OVERLAY_INTERVAL
-                if is_loading and last_overlay_frame_ts > 0:
-                    timeout = _OVERLAY_INTERVAL - (now - last_overlay_frame_ts)
+                if is_loading and last_overlay_frame_time > 0:
+                    timeout = _OVERLAY_INTERVAL - (time.time() - last_overlay_frame_time)
 
                 out: VideoOutput | None
                 if timeout > 0:
                     try:
-                        out = await asyncio.wait_for(pipe_output_task, timeout=timeout)
+                        out = await asyncio.wait_for(asyncio.shield(pipe_output_task), timeout=timeout)
                         pipe_output_task = None
                     except asyncio.TimeoutError:
                         pass
@@ -349,78 +348,47 @@ class PipelineProcess:
                     out = pipe_output_task.result()
                     pipe_output_task = None
 
-                # Pipeline not ready or no output: render overlay at ~24 FPS
-                if is_loading and out is None:
+                if out is not None:
+                    if overlay.is_active():
+                        overlay.end_reload()
+                    overlay.update_last_frame(out.tensor)
+                    last_overlay_frame_time = 0.0
+                else:
+                    if not is_loading or self._last_params is None or self._last_output_frame is None:
+                        continue
+
+                    # No output and pipeline is loading. Render overlay at ~24 FPS
                     if not overlay.is_active():
                         overlay.begin_reload()
-                    if (
-                        self._last_params is not None
-                        and (now - last_overlay_frame_ts) >= _OVERLAY_INTERVAL
-                        and self._last_output_frame is not None
-                    ):
-                        w, h = self._last_params.width, self._last_params.height
-                        loading_tensor = await overlay.render_if_active(w, h)
-                        if loading_tensor is not None:
-                            if torch.cuda.is_available() and not loading_tensor.is_cuda:
-                                loading_tensor = loading_tensor.cuda()
 
-                            delay_since_last_output = now - self._last_output_frame.timestamp
-                            tb = self._last_output_frame.time_base
-                            new_timestamp = int((self._last_output_frame.timestamp * tb + delay_since_last_output) / tb)
-                            out_frame = VideoFrame(loading_tensor, new_timestamp, tb)
-                            out = VideoOutput(out_frame, self.request_id, is_loading_frame=True)
-
-                            self._try_queue_put(self.output_queue, out)
-                            last_output_was_overlay = True
-                            last_overlay_frame_ts = now
-                    continue
-
-                # Pipeline is ready
-                if pipe_output_task.done():
-                    output = pipe_output_task.result()
-                    pipe_output_task = None
-
-                    if (
-                        isinstance(output, VideoOutput)
-                        and not output.tensor.is_cuda
-                        and torch.cuda.is_available()
-                    ):
-                        output = output.replace_tensor(output.tensor.cuda())
-                    output.log_timestamps["post_process_frame"] = time.time()
-
-                    self._try_queue_put(self.output_queue, output)
-
-                    # Cache a recent frame for overlay background and close overlay on the first real output
-                    if isinstance(output, VideoOutput) and not output.is_loading_frame:
-                        overlay.update_last_frame(output.tensor)
-                        overlay.end_reload()
-                        last_overlay_frame_ts = 0.0
-                    continue
-
-                # Pipeline ready but still no output
-                if last_overlay_frame_ts > 0:
-                    done, _ = await asyncio.wait({pipe_output_task}, timeout=0.04)
-                    if done:
-                        # Loop back to handle the output on next iteration
+                    w, h = self._last_params.width, self._last_params.height
+                    loading_tensor = await overlay.render_if_active(w, h)
+                    if loading_tensor is None:
                         continue
-                    # Emit another loading frame to bridge the gap
-                    if self._last_params is not None and self._last_output_frame is not None:
-                        w, h = self._last_params.width, self._last_params.height
-                        loading_tensor = await overlay.render_if_active(w, h)
-                        if loading_tensor is not None:
-                            if torch.cuda.is_available() and not loading_tensor.is_cuda:
-                                loading_tensor = loading_tensor.cuda()
-                            out = VideoOutput(
-                                self._last_output_frame,
-                                self.request_id,
-                                is_loading_frame=True,
-                            ).replace_tensor(loading_tensor)
-                            self._try_queue_put(self.output_queue, out)
-                            last_output_was_overlay = True
+
+                    if torch.cuda.is_available() and not loading_tensor.is_cuda:
+                        loading_tensor = loading_tensor.cuda()
+
+                    now = time.time()
+                    tb = self._last_output_frame.time_base
+                    # Start with the same timestamp as the last output frame then increase it with wallclock time
+                    new_timestamp = self._last_output_frame.timestamp
+                    if last_overlay_frame_time > 0:
+                        time_since_last_output = now - last_overlay_frame_time
+                        new_timestamp = int((new_timestamp * tb + time_since_last_output) / tb)
+
+                    out_frame = VideoFrame(loading_tensor, new_timestamp, tb)
+                    out = VideoOutput(out_frame, self.request_id, is_loading_frame=True)
+
+                    last_overlay_frame_time = now
                     continue
 
-                # Normal case: wait for pipeline output without producing overlay
-                await asyncio.sleep(0.005)
+                if isinstance(out, VideoOutput) and not out.tensor.is_cuda and torch.cuda.is_available():
+                    out = out.replace_tensor(out.tensor.cuda())
+                out.log_timestamps["post_process_frame"] = time.time()
+
+                self._try_queue_put(self.output_queue, out)
+                self._last_output_frame = out.frame
             except Exception as e:
                 self._report_error("Error processing output frame", e)
 
