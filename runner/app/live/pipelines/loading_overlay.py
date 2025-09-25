@@ -382,7 +382,7 @@ class LoadingOverlayRenderer:
 
     # Removed composite-per-index helpers; using fast torch ROI blend instead
 
-    def render(self, width: int, height: int) -> torch.Tensor:
+    def render_sync(self, width: int, height: int) -> torch.Tensor:
         w = int(width)
         h = int(height)
 
@@ -475,11 +475,9 @@ class LoadingOverlayRenderer:
     def set_show_overlay(self, show_overlay: bool) -> None:
         self._show_overlay = bool(show_overlay)
 
-    async def render_if_active(self, width: int, height: int):
-        if not self.is_active():
-            return None
+    async def render(self, width: int, height: int):
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._executor, self.render, width, height)
+        return await loop.run_in_executor(self._executor, self.render_sync, width, height)
 
     async def prewarm(self, width: int, height: int) -> None:
         """

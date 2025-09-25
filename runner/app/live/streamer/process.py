@@ -56,8 +56,7 @@ class PipelineProcess:
         self.request_id = ""
 
         # Using underscored names to emphasize state used only from the child process.
-        self._last_params: BaseParams | None = None
-        self._last_output_frame: VideoFrame | None = None
+        self._last_params = BaseParams()
 
     def is_alive(self):
         return self.process.is_alive()
@@ -124,6 +123,10 @@ class PipelineProcess:
         with self.pipeline_ready_time.get_lock():
             return (True, self.pipeline_ready_time.value)
 
+    def _is_loading(self) -> bool:
+        is_ready, _ = self.is_pipeline_ready()
+        return not is_ready
+
     def _set_pipeline_ready(self, ready: bool):
         if not ready:
             self.pipeline_ready.clear()
@@ -133,9 +136,7 @@ class PipelineProcess:
             self.pipeline_ready_time.value = time.time()
         self.pipeline_ready.set()
 
-    def _handle_base_params(
-        self, params_dict: dict, overlay: LoadingOverlayRenderer
-    ) -> dict:
+    def _handle_base_params(self, params_dict: dict, overlay: LoadingOverlayRenderer):
         """
         Parse common base params from untyped params and apply host-side behavior
         (e.g., loading overlay). Pipelines inherit these via BaseParams.
@@ -144,8 +145,6 @@ class PipelineProcess:
         self._last_params = params
 
         overlay.set_show_overlay(params.show_reloading_frame)
-
-        return params_dict
 
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
@@ -168,11 +167,7 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
-        if (
-            isinstance(frame, VideoFrame)
-            and not frame.tensor.is_cuda
-            and torch.cuda.is_available()
-        ):
+        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
             frame = frame.replace_tensor(frame.tensor.cuda())
         self._try_queue_put(self.input_queue, frame)
 
@@ -220,19 +215,12 @@ class PipelineProcess:
             self._report_error("Error in process run method", e)
 
     def _handle_logging_params(self, params: dict) -> bool:
-        if (
-            isinstance(params, dict)
-            and "request_id" in params
-            and "manifest_id" in params
-            and "stream_id" in params
-        ):
+        if isinstance(params, dict) and "request_id" in params and "manifest_id" in params and "stream_id" in params:
             logging.info(
                 f"PipelineProcess: Resetting logging fields with request_id={params['request_id']}, manifest_id={params['manifest_id']} stream_id={params['stream_id']}"
             )
             self.request_id = params["request_id"]
-            self._reset_logging_fields(
-                params["request_id"], params["manifest_id"], params["stream_id"]
-            )
+            self._reset_logging_fields(params["request_id"], params["manifest_id"], params["stream_id"])
             return True
         return False
 
@@ -241,18 +229,14 @@ class PipelineProcess:
         try:
             params = await self._get_latest_params(timeout=0.1)
             if params is not None:
-                logging.info(
-                    f"PipelineProcess: Got params from param_update_queue {params}"
-                )
+                logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
             else:
-                logging.info(
-                    "PipelineProcess: No params found in param_update_queue, loading with default params"
-                )
+                logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
                 params = {}
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
                 pipeline = load_pipeline(self.pipeline_name)
-                params = self._handle_base_params(params, overlay)
+                self._handle_base_params(params, overlay)
                 await pipeline.initialize(**params)
                 return pipeline, overlay
         except Exception as e:
@@ -265,6 +249,7 @@ class PipelineProcess:
                     f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"
                 ):
                     pipeline = load_pipeline(self.pipeline_name)
+                    self._handle_base_params({}, overlay)
                     await pipeline.initialize()
                     return pipeline, overlay
             except Exception as e:
@@ -273,7 +258,7 @@ class PipelineProcess:
 
     async def _run_pipeline_loops(self):
         pipeline, overlay = await self._initialize_pipeline()
-        input_task = asyncio.create_task(self._input_loop(pipeline))
+        input_task = asyncio.create_task(self._input_loop(pipeline, overlay))
         output_task = asyncio.create_task(self._output_loop(pipeline, overlay))
         param_task = asyncio.create_task(self._param_update_loop(pipeline, overlay))
         self._set_pipeline_ready(True)
@@ -301,94 +286,57 @@ class PipelineProcess:
 
         logging.info("PipelineProcess: _run_pipeline_loops finished.")
 
-    async def _input_loop(self, pipeline: Pipeline):
+    async def _input_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
         while not self.is_done():
             try:
-                input_frame = await asyncio.to_thread(self.input_queue.get, timeout=0.1)
-                if isinstance(input_frame, VideoFrame):
-                    input_frame.log_timestamps["pre_process_frame"] = time.time()
-                    # Init the last output frame with the first input frame just to have a timestamp for the overlay
-                    if self._last_output_frame is None:
-                        self._last_output_frame = input_frame
-                    await pipeline.put_video_frame(input_frame, self.request_id)
-                elif isinstance(input_frame, AudioFrame):
-                    self._try_queue_put(
-                        self.output_queue, AudioOutput([input_frame], self.request_id)
-                    )
+                input = await asyncio.to_thread(self.input_queue.get, timeout=0.1)
+                if isinstance(input, VideoFrame):
+                    input.log_timestamps["pre_process_frame"] = time.time()
+
+                    if self._is_loading():
+                        await self._render_loading_frame(overlay, input)
+                    else:
+                        await pipeline.put_video_frame(input, self.request_id)
+                elif isinstance(input, AudioFrame):
+                    self._try_queue_put(self.output_queue, AudioOutput([input], self.request_id))
             except queue.Empty:
                 # Timeout ensures the non-daemon threads from to_thread can exit if task is cancelled
                 continue
             except Exception as e:
                 self._report_error("Error processing input frame", e)
 
-    async def _output_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
-        pipe_output_task: asyncio.Task[VideoOutput] | None = None
-        last_overlay_frame_time = 0.0
+    async def _render_loading_frame(self, overlay: LoadingOverlayRenderer, input: VideoFrame):
+        if not overlay.is_active():
+            overlay.begin_reload()
 
+        w, h = self._last_params.width, self._last_params.height
+        loading_tensor = await overlay.render(w, h)
+        if torch.cuda.is_available() and not loading_tensor.is_cuda:
+            loading_tensor = loading_tensor.cuda()
+
+        out_frame = input.replace_tensor(loading_tensor)
+        out = VideoOutput(out_frame, self.request_id, is_loading_frame=True)
+
+        out.log_timestamps["post_process_frame"] = time.time()
+        self._try_queue_put(self.output_queue, out)
+
+    async def _output_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
         while not self.is_done():
             try:
-                if pipe_output_task is None:
-                    pipe_output_task = asyncio.create_task(
-                        pipeline.get_processed_video_frame()
-                    )
+                out = await pipeline.get_processed_video_frame()
+                overlay.update_last_frame(out.tensor)
 
-                is_loading = not self.pipeline_ready.is_set()
-                timeout = _OVERLAY_INTERVAL
-                if is_loading and last_overlay_frame_time > 0:
-                    timeout = _OVERLAY_INTERVAL - (time.time() - last_overlay_frame_time)
-
-                out: VideoOutput | None
-                if timeout > 0:
-                    try:
-                        out = await asyncio.wait_for(asyncio.shield(pipe_output_task), timeout=timeout)
-                        pipe_output_task = None
-                    except asyncio.TimeoutError:
-                        pass
-                elif pipe_output_task.done():
-                    out = pipe_output_task.result()
-                    pipe_output_task = None
-
-                if out is not None:
-                    if overlay.is_active():
-                        overlay.end_reload()
-                    overlay.update_last_frame(out.tensor)
-                    last_overlay_frame_time = 0.0
-                else:
-                    if not is_loading or self._last_params is None or self._last_output_frame is None:
+                if overlay.is_active():
+                    if self._is_loading():
+                        # Ignore frames that may come after the loading started to avoid thrashing the loading overlay.
                         continue
-
-                    # No output and pipeline is loading. Render overlay at ~24 FPS
-                    if not overlay.is_active():
-                        overlay.begin_reload()
-
-                    w, h = self._last_params.width, self._last_params.height
-                    loading_tensor = await overlay.render_if_active(w, h)
-                    if loading_tensor is None:
-                        continue
-
-                    if torch.cuda.is_available() and not loading_tensor.is_cuda:
-                        loading_tensor = loading_tensor.cuda()
-
-                    now = time.time()
-                    tb = self._last_output_frame.time_base
-                    # Start with the same timestamp as the last output frame then increase it with wallclock time
-                    new_timestamp = self._last_output_frame.timestamp
-                    if last_overlay_frame_time > 0:
-                        time_since_last_output = now - last_overlay_frame_time
-                        new_timestamp = int((new_timestamp * tb + time_since_last_output) / tb)
-
-                    out_frame = VideoFrame(loading_tensor, new_timestamp, tb)
-                    out = VideoOutput(out_frame, self.request_id, is_loading_frame=True)
-
-                    last_overlay_frame_time = now
-                    continue
+                    overlay.end_reload()
 
                 if isinstance(out, VideoOutput) and not out.tensor.is_cuda and torch.cuda.is_available():
                     out = out.replace_tensor(out.tensor.cuda())
-                out.log_timestamps["post_process_frame"] = time.time()
 
+                out.log_timestamps["post_process_frame"] = time.time()
                 self._try_queue_put(self.output_queue, out)
-                self._last_output_frame = out.frame
             except Exception as e:
                 self._report_error("Error processing output frame", e)
 
@@ -412,7 +360,7 @@ class PipelineProcess:
                 with log_timing(
                     f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"
                 ):
-                    params = self._handle_base_params(params, overlay)
+                    self._handle_base_params(params, overlay)
                     reload_task = await pipeline.update_params(**params)
             except Exception as e:
                 self._report_error("Error updating params", e)
