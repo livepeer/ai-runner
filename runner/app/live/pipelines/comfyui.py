@@ -3,12 +3,12 @@ import json
 import torch
 import asyncio
 from typing import Union
-from pydantic import BaseModel, field_validator
+from pydantic import field_validator
 import pathlib
 
-from .interface import Pipeline
+from .interface import Pipeline, BaseParams
 from comfystream.client import ComfyStreamClient
-from trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
+from trickle import VideoFrame, VideoOutput
 
 import logging
 
@@ -20,17 +20,13 @@ with open(_default_workflow_path, 'r') as f:
     DEFAULT_WORKFLOW_JSON = json.load(f)
 
 
-class ComfyUIParams(BaseModel):
+class ComfyUIParams(BaseParams):
     class Config:
         extra = "forbid"
 
     prompt: Union[str, dict] = DEFAULT_WORKFLOW_JSON
 
-    # NOTE: Dimensions must be maintained with the workflow dimensions and is shared with other pipelines
-    width: int = DEFAULT_WIDTH
-    height: int = DEFAULT_HEIGHT
-
-    @field_validator('prompt')
+    @field_validator("prompt")
     @classmethod
     def validate_prompt(cls, v) -> dict:
         if v == "":
@@ -48,7 +44,9 @@ class ComfyUIParams(BaseModel):
             except json.JSONDecodeError:
                 raise ValueError("Provided prompt string must be valid JSON")
 
-        raise ValueError("Prompt must be either a JSON object or such JSON object serialized as a string")
+        raise ValueError(
+            "Prompt must be either a JSON object or such JSON object serialized as a string"
+        )
 
 
 class ComfyUI(Pipeline):
@@ -68,7 +66,9 @@ class ComfyUI(Pipeline):
 
         # Warm up the pipeline
         dummy_frame = VideoFrame(None, 0, 0)
-        dummy_frame.side_data.input = torch.randn(1, new_params.height, new_params.width, 3)
+        dummy_frame.side_data.input = torch.randn(
+            1, new_params.height, new_params.width, 3
+        )
 
         for _ in range(WARMUP_RUNS):
             self.client.put_video_input(dummy_frame)
@@ -121,7 +121,7 @@ class ComfyUI(Pipeline):
             if torch.cuda.is_available():
                 torch.cuda.synchronize()  # Wait for all CUDA operations to complete
                 torch.cuda.empty_cache()
-                
+
         except Exception as e:
             logging.error(f"Error stopping ComfyUI pipeline: {e}")
         finally:

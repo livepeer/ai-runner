@@ -1,6 +1,37 @@
 from asyncio import Task
 from abc import ABC, abstractmethod
-from trickle import VideoFrame, VideoOutput
+from pydantic import BaseModel, Field
+from trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
+
+
+class BaseParams(BaseModel):
+    """
+    Base parameters common to all pipelines.
+
+    Includes shared image dimensions and UI behavior used by the orchestrating
+    process (e.g., loading overlay while (re)initializing pipelines).
+    """
+
+    width: int = Field(
+        default=DEFAULT_WIDTH,
+        ge=384,
+        le=1024,
+        multiple_of=64,
+        description="Output image width in pixels. Must be divisible by 64 and between 384-1024.",
+    )
+
+    height: int = Field(
+        default=DEFAULT_HEIGHT,
+        ge=384,
+        le=1024,
+        multiple_of=64,
+        description="Output image height in pixels. Must be divisible by 64 and between 384-1024.",
+    )
+
+    show_reloading_frame: bool = Field(
+        default=True,
+        description="Whether to render a loading overlay while the pipeline initializes or reloads.",
+    )
 
 class Pipeline(ABC):
     """Abstract base class for image processing pipelines.

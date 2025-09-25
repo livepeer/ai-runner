@@ -1,8 +1,8 @@
 from typing import Dict, List, Literal, Optional, Any, Tuple
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 
-from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
+from .interface import BaseParams
 
 ModelType = Literal["sd15", "sd21", "sdxl"]
 
@@ -188,7 +188,7 @@ class IPAdapterConfig(BaseModel):
     """Whether this IPAdapter is active"""
 
 
-class StreamDiffusionParams(BaseModel):
+class StreamDiffusionParams(BaseParams):
     """
     StreamDiffusion pipeline parameters.
 
@@ -234,13 +234,6 @@ class StreamDiffusionParams(BaseModel):
 
     t_index_list: List[int] = [12, 20, 32]
     """The ordered list of step indices from the num_inference_steps schedule to execute per frame. Each index is one model pass, so latency scales with the list length. Higher indices (e.g., 40–49 on a 50-step grid) mainly polish and preserve structure (lower flicker), while lower indices (<20) rewrite structure (more flicker, creative). Values must be non-decreasing, and each between 0 and num_inference_steps."""
-
-    # Image dimensions
-    width: int = Field(default=DEFAULT_WIDTH, ge=384, le=1024, multiple_of=64)
-    """Output image width in pixels. Must be divisible by 64 and between 384-1024."""
-
-    height: int = Field(default=DEFAULT_HEIGHT, ge=384, le=1024, multiple_of=64)
-    """Output image height in pixels. Must be divisible by 64 and between 384-1024."""
 
     # LoRA settings
     lora_dict: Optional[Dict[str, float]] = None
@@ -298,8 +291,6 @@ class StreamDiffusionParams(BaseModel):
 
     ip_adapter_style_image_url: str = "https://ipfs.livepeer.com/ipfs/bafkreibnlg3nfizj6ixc2flljo3pewo2ycnxitczawu4d5vmxkejnjwxca"
     """URL to fetch the style image for IPAdapter."""
-
-    
 
     @model_validator(mode="after")
     @staticmethod

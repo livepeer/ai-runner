@@ -12,9 +12,8 @@ import time
 from typing import Any
 
 import torch
-from pydantic import BaseModel
 
-from pipelines import load_pipeline, Pipeline
+from pipelines import load_pipeline, Pipeline, BaseParams
 from pipelines.loading_overlay import LoadingOverlayRenderer
 from log import config_logging, config_logging_fields, log_timing
 from trickle import (
@@ -24,18 +23,7 @@ from trickle import (
     OutputFrame,
     VideoOutput,
     AudioOutput,
-    DEFAULT_WIDTH,
-    DEFAULT_HEIGHT,
 )
-
-class BaseParams(BaseModel):
-    """
-    Base parameters for all pipelines. The PipelineProcess uses this for some features like loading overlay.
-    """
-
-    width: int = DEFAULT_WIDTH
-    height: int = DEFAULT_HEIGHT
-    show_reloading_frame: bool = True
 
 
 class PipelineProcess:
@@ -147,16 +135,13 @@ class PipelineProcess:
         self, params_dict: dict, overlay: LoadingOverlayRenderer
     ) -> dict:
         """
-        Parse common base params from untyped params using and apply them here.
-        Remove show_reloading_frame from params_dict so pipelines don't need to declare it.
+        Parse common base params from untyped params and apply host-side behavior
+        (e.g., loading overlay). Pipelines inherit these via BaseParams.
         """
         params = BaseParams(**params_dict)
         self._last_params = params
 
         overlay.set_show_overlay(params.show_reloading_frame)
-
-        params_dict = params_dict.copy()
-        params_dict.pop("show_reloading_frame", None)
 
         return params_dict
 
@@ -458,7 +443,7 @@ class PipelineProcess:
                 continue
 
             try:
-                with log_timing(f"PipelineProcess: Reloading pipeline"):
+                with log_timing("PipelineProcess: Reloading pipeline"):
                     self._set_pipeline_ready(False)
                     await reload_task
                     self._set_pipeline_ready(True)
