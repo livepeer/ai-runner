@@ -10,11 +10,6 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 import torch.nn.functional as F
-from fractions import Fraction
-from trickle import VideoFrame
-
-
-_OVERLAY_INTERVAL = 1.0 / 24.0  # 24 FPS
 
 
 class LoadingOverlayRenderer:
@@ -33,13 +28,8 @@ class LoadingOverlayRenderer:
         self._base_tensor: Optional[torch.Tensor] = None
         self._base_tensor_wallclock: float = 0.0
         self._last_output_tensor: Optional[torch.Tensor] = None
-        self._last_frame_wallclock: float = 0.0
+        self._last_output_wallclock: float = 0.0
         self._base_max_age_seconds: float = 5.0
-        # Track last real output timestamp/time_base for generating overlay PTS
-        self._last_frame_timestamp: int = 0
-        self._last_frame_time_base: Optional[Fraction] = None
-        # Track last emitted overlay wallclock to advance PTS
-        self._last_overlay_frame_wallclock: float = 0.0
 
         # Text caching
         self._font: Optional[Any] = None
@@ -445,17 +435,11 @@ class LoadingOverlayRenderer:
         self._last_output_tensor_cached = self._scratch_tensor
         return self._scratch_tensor
 
-    def update_last_frame(self, out_frame: VideoFrame, is_input: bool = False) -> None:
+    def update_last_frame(self, out_bhwc: torch.Tensor) -> None:
         try:
             with torch.no_grad():
-                if not is_input:
-                    # Input frames are only used for timing, not for the base tensor
-                    self._last_output_tensor = out_frame.tensor.detach().cpu().contiguous()
-                    # Reset overlay pacing when a real output frame arrives
-                    self._last_overlay_frame_wallclock = 0.0
-                self._last_frame_wallclock = time.time()
-                self._last_frame_timestamp = out_frame.timestamp
-                self._last_frame_time_base = out_frame.time_base
+                self._last_output_tensor = out_bhwc.detach().cpu().contiguous()
+                self._last_output_wallclock = time.time()
         except Exception:
             # Best-effort cache, just log
             logging.error("Failed to update last frame", exc_info=True)
@@ -465,7 +449,10 @@ class LoadingOverlayRenderer:
         now = time.time()
         # Choose base tensor if recent enough
         base: Optional[torch.Tensor] = None
-        if self._last_output_tensor is not None and (now - self._last_frame_wallclock) <= self._base_max_age_seconds:
+        if (
+            self._last_output_tensor is not None
+            and (now - self._last_output_wallclock) <= self._base_max_age_seconds
+        ):
             try:
                 with torch.no_grad():
                     base = self._last_output_tensor.detach().cpu().contiguous()
@@ -473,7 +460,6 @@ class LoadingOverlayRenderer:
                 base = None
         self._base_tensor = base
         self._base_tensor_wallclock = now
-        self._last_overlay_frame_wallclock = 0.0
         # Reset per-session caches
         self.reset_session(now)
 
@@ -481,41 +467,19 @@ class LoadingOverlayRenderer:
         self._active = False
         self._base_tensor = None
         self._base_tensor_wallclock = 0.0
-        self._last_overlay_frame_wallclock = 0.0
         self.reset_session(0.0)
 
     def is_active(self) -> bool:
         return self._active and self._show_overlay
 
-    def time_until_next_frame(self) -> float | None:
-        if not self.is_active():
-            return None
-        if self._last_overlay_frame_wallclock <= 0.0:
-            return _OVERLAY_INTERVAL
-        time_since_last_output = time.time() - self._last_overlay_frame_wallclock
-        return _OVERLAY_INTERVAL - time_since_last_output
-
     def set_show_overlay(self, show_overlay: bool) -> None:
         self._show_overlay = bool(show_overlay)
 
     async def render_if_active(self, width: int, height: int):
-        if not self.is_active() or self._last_frame_time_base is None:
-            # Without a reference time base, we can't construct a valid VideoFrame
+        if not self.is_active():
             return None
-
         loop = asyncio.get_running_loop()
-        loading_tensor = await loop.run_in_executor(self._executor, self.render, width, height)
-
-        now = time.time()
-        tb = self._last_frame_time_base
-        # Start with the last output timestamp then increase it with wallclock time
-        new_timestamp = self._last_frame_timestamp
-        if self._last_overlay_frame_wallclock > 0.0:
-            time_since_last_output = now - self._last_overlay_frame_wallclock
-            new_timestamp = int((new_timestamp * tb + time_since_last_output) / tb)
-        self._last_overlay_frame_wallclock = now
-
-        return VideoFrame(loading_tensor, new_timestamp, tb)
+        return await loop.run_in_executor(self._executor, self.render, width, height)
 
     async def prewarm(self, width: int, height: int) -> None:
         """
