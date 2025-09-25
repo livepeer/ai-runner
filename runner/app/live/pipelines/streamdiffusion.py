@@ -38,15 +38,16 @@ class StreamDiffusion(Pipeline):
             raise RuntimeError("Pipeline not initialized")
 
         async with self._pipeline_lock:
+            if self.pipe is None:
+                # We are likely loading a new pipeline, so drop input input frames
+                return
             out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
             output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
 
         await self.frame_queue.put(output)
 
     def process_tensor_sync(self, img_tensor: torch.Tensor):
-        if self.pipe is None:
-            raise RuntimeError("Pipeline not initialized")
-
+        assert self.pipe is not None
         # The incoming frame.tensor is (B, H, W, C) in range [-1, 1] while the
         # VaeImageProcessor inside the wrapper expects (B, C, H, W) in [0, 1].
         img_tensor = img_tensor.permute(0, 3, 1, 2)

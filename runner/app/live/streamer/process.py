@@ -25,6 +25,8 @@ from trickle import (
     AudioOutput,
 )
 
+_OVERLAY_INTERVAL = 1.0 / 24.0  # 24 FPS
+
 
 class PipelineProcess:
     @staticmethod
@@ -234,7 +236,8 @@ class PipelineProcess:
             return True
         return False
 
-    async def _initialize_pipeline(self, overlay: LoadingOverlayRenderer):
+    async def _initialize_pipeline(self):
+        overlay = LoadingOverlayRenderer()
         try:
             params = await self._get_latest_params(timeout=0.1)
             if params is not None:
@@ -251,7 +254,7 @@ class PipelineProcess:
                 pipeline = load_pipeline(self.pipeline_name)
                 params = self._handle_base_params(params, overlay)
                 await pipeline.initialize(**params)
-                return pipeline
+                return pipeline, overlay
         except Exception as e:
             self._report_error("Error loading pipeline", e)
             if not params:
@@ -263,15 +266,14 @@ class PipelineProcess:
                 ):
                     pipeline = load_pipeline(self.pipeline_name)
                     await pipeline.initialize()
-                    return pipeline
+                    return pipeline, overlay
             except Exception as e:
                 self._report_error("Error loading pipeline with default params", e)
                 raise
 
     async def _run_pipeline_loops(self):
-        overlay = LoadingOverlayRenderer()
-        pipeline = await self._initialize_pipeline(overlay)
-        input_task = asyncio.create_task(self._input_loop(pipeline, overlay))
+        pipeline, overlay = await self._initialize_pipeline()
+        input_task = asyncio.create_task(self._input_loop(pipeline))
         output_task = asyncio.create_task(self._output_loop(pipeline, overlay))
         param_task = asyncio.create_task(self._param_update_loop(pipeline, overlay))
         self._set_pipeline_ready(True)
@@ -299,7 +301,7 @@ class PipelineProcess:
 
         logging.info("PipelineProcess: _run_pipeline_loops finished.")
 
-    async def _input_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
+    async def _input_loop(self, pipeline: Pipeline):
         while not self.is_done():
             try:
                 input_frame = await asyncio.to_thread(self.input_queue.get, timeout=0.1)
@@ -319,24 +321,25 @@ class PipelineProcess:
                 self._report_error("Error processing input frame", e)
 
     async def _output_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
-        get_task: asyncio.Task | None = None
-        last_overlay_emit: float = 0.0
-        last_output_was_loading: bool = False
-        overlay_interval: float = 1.0 / 24.0
+        pipe_output_task: asyncio.Task | None = None
+        last_overlay_emit = 0.0
+        last_output_was_overlay = False
 
         while not self.is_done():
             try:
-                if get_task is None:
-                    get_task = asyncio.create_task(pipeline.get_processed_video_frame())
+                if pipe_output_task is None:
+                    pipe_output_task = asyncio.create_task(
+                        pipeline.get_processed_video_frame()
+                    )
 
-                # Pipeline not ready: drive overlay at ~24 FPS, ignore any out-of-band outputs
+                # Pipeline not ready: render overlay at ~24 FPS
                 if not self.pipeline_ready.is_set():
                     if not overlay.is_active():
                         overlay.begin_reload()
                     now = time.time()
                     if (
                         self._last_params is not None
-                        and (now - last_overlay_emit) >= overlay_interval
+                        and (now - last_overlay_emit) >= _OVERLAY_INTERVAL
                         and self._last_input_frame is not None
                     ):
                         w, h = self._last_params.width, self._last_params.height
@@ -350,21 +353,21 @@ class PipelineProcess:
                                 is_loading_frame=True,
                             ).replace_tensor(loading_tensor)
                             self._try_queue_put(self.output_queue, out)
-                            last_output_was_loading = True
+                            last_output_was_overlay = True
                             last_overlay_emit = now
 
                     # Do not cancel the in-flight get_task; just yield briefly
                     await asyncio.sleep(0.005)
                     # Drop any completed pipeline outputs until ready
-                    if get_task.done():
-                        _ = get_task.result()
-                        get_task = None
+                    if pipe_output_task.done():
+                        _ = pipe_output_task.result()
+                        pipe_output_task = None
                     continue
 
                 # Pipeline is ready
-                if get_task.done():
-                    output = get_task.result()
-                    get_task = None
+                if pipe_output_task.done():
+                    output = pipe_output_task.result()
+                    pipe_output_task = None
 
                     if (
                         isinstance(output, VideoOutput)
@@ -380,12 +383,12 @@ class PipelineProcess:
                     if isinstance(output, VideoOutput) and not output.is_loading_frame:
                         overlay.update_last_frame(output.tensor)
                         overlay.end_reload()
-                        last_output_was_loading = False
+                        last_output_was_overlay = False
                     continue
 
                 # Pipeline ready but still no output
-                if last_output_was_loading:
-                    done, _ = await asyncio.wait({get_task}, timeout=0.04)
+                if last_output_was_overlay:
+                    done, _ = await asyncio.wait({pipe_output_task}, timeout=0.04)
                     if done:
                         # Loop back to handle the output on next iteration
                         continue
@@ -405,7 +408,7 @@ class PipelineProcess:
                                 is_loading_frame=True,
                             ).replace_tensor(loading_tensor)
                             self._try_queue_put(self.output_queue, out)
-                            last_output_was_loading = True
+                            last_output_was_overlay = True
                     continue
 
                 # Normal case: wait for pipeline output without producing overlay
