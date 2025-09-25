@@ -9,16 +9,16 @@ import traceback
 import threading
 from typing import List
 
-from streamer import PipelineStreamer, ProcessGuardian
-
 # loads neighbouring modules with absolute paths
 infer_root = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, infer_root)
 
+from process import ProcessGuardian
+from streamer import PipelineStreamer
+from streamer.protocol import TrickleProtocol, ZeroMQProtocol
+from streamer.protocol.trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 from api import start_http_server
 from log import config_logging, log_timing
-from streamer.protocol.trickle import TrickleProtocol, DEFAULT_WIDTH, DEFAULT_HEIGHT
-from streamer.protocol.zeromq import ZeroMQProtocol
 
 
 _UNCAUGHT_EXCEPTION_EVENT = asyncio.Event()

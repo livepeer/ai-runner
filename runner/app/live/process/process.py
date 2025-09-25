@@ -14,7 +14,6 @@ from typing import Any
 import torch
 
 from pipelines import load_pipeline, Pipeline, BaseParams
-from pipelines.loading_overlay import LoadingOverlayRenderer
 from log import config_logging, config_logging_fields, log_timing
 from trickle import (
     InputFrame,
@@ -24,6 +23,8 @@ from trickle import (
     VideoOutput,
     AudioOutput,
 )
+
+from .loading_overlay import LoadingOverlayRenderer
 
 
 class PipelineProcess:

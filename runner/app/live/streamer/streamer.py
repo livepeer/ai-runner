@@ -2,13 +2,14 @@ import asyncio
 import logging
 import os
 import time
-import numpy as np
-from typing import AsyncGenerator, Awaitable, Optional
+from typing import AsyncGenerator, Awaitable
 from asyncio import Lock
-from .process_guardian import ProcessGuardian, StreamerCallbacks
-from .protocol.protocol import StreamProtocol
-from .status import timestamp_to_ms
+
 from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
+from process import ProcessGuardian, StreamerCallbacks
+from process.status import timestamp_to_ms
+
+from .protocol.protocol import StreamProtocol
 
 fps_log_interval = 10
 status_report_interval = 10

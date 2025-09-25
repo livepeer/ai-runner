@@ -10,9 +10,10 @@ from aiohttp import web
 from pydantic import BaseModel, Field
 from typing import Annotated, Dict
 
-from streamer import PipelineStreamer, ProcessGuardian
-from streamer.protocol.trickle import TrickleProtocol
-from streamer.process import config_logging
+from log import config_logging
+from process import ProcessGuardian
+from streamer import PipelineStreamer
+from streamer.protocol import TrickleProtocol
 from trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 MAX_FILE_AGE = 86400  # 1 day
