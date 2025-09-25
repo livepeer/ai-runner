@@ -17,7 +17,6 @@ class LoadingOverlayRenderer:
         # Session tracking to invalidate caches when reload sessions change
         self._session_wallclock: float = 0.0
         self._active: bool = False
-        self._show_overlay: bool = True
 
         # Cached size and base images
         self._cached_size: Tuple[int, int] = (0, 0)
@@ -470,10 +469,7 @@ class LoadingOverlayRenderer:
         self.reset_session(0.0)
 
     def is_active(self) -> bool:
-        return self._active and self._show_overlay
-
-    def set_show_overlay(self, show_overlay: bool) -> None:
-        self._show_overlay = bool(show_overlay)
+        return self._active
 
     async def render(self, width: int, height: int):
         loop = asyncio.get_running_loop()

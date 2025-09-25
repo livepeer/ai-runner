@@ -25,8 +25,6 @@ from trickle import (
     AudioOutput,
 )
 
-_OVERLAY_INTERVAL = 1.0 / 24.0  # 24 FPS
-
 
 class PipelineProcess:
     @staticmethod
@@ -136,16 +134,6 @@ class PipelineProcess:
             self.pipeline_ready_time.value = time.time()
         self.pipeline_ready.set()
 
-    def _handle_base_params(self, params_dict: dict, overlay: LoadingOverlayRenderer):
-        """
-        Parse common base params from untyped params and apply host-side behavior
-        (e.g., loading overlay). Pipelines inherit these via BaseParams.
-        """
-        params = BaseParams(**params_dict)
-        self._last_params = params
-
-        overlay.set_show_overlay(params.show_reloading_frame)
-
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
 
@@ -225,7 +213,6 @@ class PipelineProcess:
         return False
 
     async def _initialize_pipeline(self):
-        overlay = LoadingOverlayRenderer()
         try:
             params = await self._get_latest_params(timeout=0.1)
             if params is not None:
@@ -235,10 +222,10 @@ class PipelineProcess:
                 params = {}
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
+                self._last_params = BaseParams(**params)
                 pipeline = load_pipeline(self.pipeline_name)
-                self._handle_base_params(params, overlay)
                 await pipeline.initialize(**params)
-                return pipeline, overlay
+                return pipeline
         except Exception as e:
             self._report_error("Error loading pipeline", e)
             if not params:
@@ -248,31 +235,27 @@ class PipelineProcess:
                 with log_timing(
                     f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"
                 ):
+                    self._last_params = BaseParams()
                     pipeline = load_pipeline(self.pipeline_name)
-                    self._handle_base_params({}, overlay)
                     await pipeline.initialize()
-                    return pipeline, overlay
+                    return pipeline
             except Exception as e:
                 self._report_error("Error loading pipeline with default params", e)
                 raise
 
     async def _run_pipeline_loops(self):
-        pipeline, overlay = await self._initialize_pipeline()
+        overlay = LoadingOverlayRenderer()
+        pipeline = await self._initialize_pipeline()
         input_task = asyncio.create_task(self._input_loop(pipeline, overlay))
         output_task = asyncio.create_task(self._output_loop(pipeline, overlay))
-        param_task = asyncio.create_task(self._param_update_loop(pipeline, overlay))
+        param_task = asyncio.create_task(self._param_update_loop(pipeline))
         self._set_pipeline_ready(True)
 
         async def wait_for_stop():
             while not self.is_done():
                 await asyncio.sleep(0.1)
 
-        tasks = [
-            input_task,
-            output_task,
-            param_task,
-            asyncio.create_task(wait_for_stop()),
-        ]
+        tasks = [input_task, output_task, param_task, asyncio.create_task(wait_for_stop())]
 
         try:
             await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
@@ -293,7 +276,7 @@ class PipelineProcess:
                 if isinstance(input, VideoFrame):
                     input.log_timestamps["pre_process_frame"] = time.time()
 
-                    if self._is_loading():
+                    if self._is_loading() and self._last_params.show_reloading_frame:
                         await self._render_loading_frame(overlay, input)
                     else:
                         await pipeline.put_video_frame(input, self.request_id)
@@ -340,9 +323,7 @@ class PipelineProcess:
             except Exception as e:
                 self._report_error("Error processing output frame", e)
 
-    async def _param_update_loop(
-        self, pipeline: Pipeline, overlay: LoadingOverlayRenderer
-    ):
+    async def _param_update_loop(self, pipeline: Pipeline):
         while not self.is_done():
             reload_task = None
             try:
@@ -357,10 +338,8 @@ class PipelineProcess:
                     f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}"
                 )
 
-                with log_timing(
-                    f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"
-                ):
-                    self._handle_base_params(params, overlay)
+                with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
+                    self._last_params = BaseParams(**params)
                     reload_task = await pipeline.update_params(**params)
             except Exception as e:
                 self._report_error("Error updating params", e)
@@ -417,13 +396,13 @@ class PipelineProcess:
         }
         self._try_queue_put(self.error_queue, error_event)
 
-    async def _cleanup_pipeline(self, pipeline, overlay: LoadingOverlayRenderer):
+    async def _cleanup_pipeline(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
+        overlay.end_reload()
         if pipeline is not None:
             try:
                 await pipeline.stop()
             except Exception as e:
                 logging.error(f"Error stopping pipeline: {e}")
-        overlay.end_reload()
 
     def _setup_logging(self):
         level = (
