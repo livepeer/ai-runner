@@ -8,11 +8,33 @@ import threading
 import time
 from typing import Optional, List
 
+from pydantic import BaseModel, Field, model_validator
 from .log import config_logging, log_timing
 from .process import ProcessGuardian
 from .streamer import PipelineStreamer
-from .streamer.protocol import TrickleProtocol, ZeroMQProtocol
+from .streamer.protocol import TrickleProtocol
 from .trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
+
+
+class StreamParams(BaseModel):
+    subscribe_url: str
+    publish_url: str
+    control_url: str = ""
+    events_url: str = ""
+    params: dict = Field(default_factory=dict)
+    request_id: str = ""
+    manifest_id: str = ""
+    stream_id: str = ""
+    width: int = DEFAULT_WIDTH
+    height: int = DEFAULT_HEIGHT
+
+    @model_validator(mode="after")
+    def ensure_dimensions(self):
+        p = dict(self.params or {})
+        p.setdefault("width", self.width)
+        p.setdefault("height", self.height)
+        self.params = p
+        return self
 
 
 class LiveInferApp:
@@ -33,14 +55,10 @@ class LiveInferApp:
         # Core components
         self._process: Optional[ProcessGuardian] = None
         self._streamer: Optional[PipelineStreamer] = None
-        # HTTP API is managed externally by CLI; no HTTP logic in this class
-        self._http_runner = None
-
         # Lifecycle and error signaling
         self._uncaught_event: Optional[asyncio.Event] = None
         self._signal_event: Optional[asyncio.Event] = None
         self._fatal_shutdown: bool = False
-        self._signal_shutdown: bool = False
         self._lifecycle_task: Optional[asyncio.Task] = None
 
         # Shutdown completion for synchronous wait
@@ -94,31 +112,8 @@ class LiveInferApp:
         # Async init on the loop
         self._run_sync(self._async_start(), timeout=30)
 
-    def start_stream(
-        self,
-        *,
-        subscribe_url: str,
-        publish_url: str,
-        control_url: str,
-        events_url: str,
-        params: dict,
-        request_id: str,
-        manifest_id: str,
-        stream_id: str,
-    ) -> None:
-        self._run_sync(
-            self._async_start_stream(
-                subscribe_url=subscribe_url,
-                publish_url=publish_url,
-                control_url=control_url,
-                events_url=events_url,
-                params=params,
-                request_id=request_id,
-                manifest_id=manifest_id,
-                stream_id=stream_id,
-            ),
-            timeout=30,
-        )
+    def start_stream(self, stream_params: StreamParams) -> None:
+        self._run_sync(self._async_start_stream(stream_params), timeout=30)
 
     def update_params(self, params: dict) -> None:
         self._run_sync(self._async_update_params(params), timeout=10)
@@ -179,18 +174,7 @@ class LiveInferApp:
             self._http_runner = None
             self._stopped.set()
 
-    async def _async_start_stream(
-        self,
-        *,
-        subscribe_url: str,
-        publish_url: str,
-        control_url: str,
-        events_url: str,
-        params: dict,
-        request_id: str,
-        manifest_id: str,
-        stream_id: str,
-    ):
+    async def _async_start_stream(self, sp: StreamParams):
         if not self._process:
             raise RuntimeError("Process not running")
 
@@ -209,44 +193,32 @@ class LiveInferApp:
         # Persist last params for post-crash cleanup parity
         try:
             with open(self._last_params_file, "w") as f:
-                json.dump(
-                    {
-                        "subscribe_url": subscribe_url,
-                        "publish_url": publish_url,
-                        "control_url": control_url,
-                        "events_url": events_url,
-                        "params": params or {},
-                        "request_id": request_id or "",
-                        "manifest_id": manifest_id or "",
-                        "stream_id": stream_id or "",
-                    },
-                    f,
-                )
+                json.dump(sp.model_dump(), f)
         except Exception as e:
             logging.error(f"Error saving last params to file: {e}")
 
         # Configure request-scoped logging fields
-        config_logging(request_id=request_id, manifest_id=manifest_id, stream_id=stream_id)
+        config_logging(request_id=sp.request_id, manifest_id=sp.manifest_id, stream_id=sp.stream_id)
 
         # Dimension defaults and ComfyUI override
-        width = params.get("width", DEFAULT_WIDTH)
-        height = params.get("height", DEFAULT_HEIGHT)
+        width = sp.params.get("width", DEFAULT_WIDTH)
+        height = sp.params.get("height", DEFAULT_HEIGHT)
         if self.pipeline == "comfyui":
             width = height = 512
-            params = params | {"width": width, "height": height}
+            sp.params = sp.params | {"width": width, "height": height}
             logging.warning("Using default dimensions for ComfyUI pipeline")
         else:
             logging.info(f"Using dimensions from params: {width}x{height}")
 
         # Protocol and streamer
         protocol = TrickleProtocol(
-            subscribe_url, publish_url, control_url, events_url, width, height
+            sp.subscribe_url, sp.publish_url, sp.control_url, sp.events_url, width, height
         )
         self._streamer = PipelineStreamer(
-            protocol, self._process, request_id, manifest_id, stream_id
+            protocol, self._process, sp.request_id, sp.manifest_id, sp.stream_id
         )
 
-        await self._streamer.start(params)
+        await self._streamer.start(sp.params)
         await protocol.emit_monitoring_event(
             {
                 "type": "runner_receive_stream_request",
@@ -292,50 +264,21 @@ class LiveInferApp:
 
     async def _lifecycle_supervisor(self):
         assert self._uncaught_event and self._signal_event
-
-        async def wait_uncaught():
-            await self._uncaught_event.wait()
-            logging.error("Uncaught exception event received, initiating graceful shutdown.")
-
-        async def wait_for_streamer():
-            if not self._streamer:
-                await asyncio.Future()  # never completes until replaced
-            else:
-                await self._streamer.wait()
-
         try:
-            tasks = [
-                asyncio.create_task(self._signal_event.wait()),
-                asyncio.create_task(wait_uncaught()),
-            ]
-
-            # Dynamically watch streamer if one is set later
-            # We poll and attach a watcher whenever a streamer exists
-            streamer_task: Optional[asyncio.Task] = None
-            while True:
-                if self._streamer and not streamer_task:
-                    streamer_task = asyncio.create_task(wait_for_streamer())
-                    tasks.append(streamer_task)
-
-                done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-                if done:
-                    break
-
-            # First completion triggers shutdown
+            await asyncio.wait(
+                [
+                    asyncio.create_task(self._signal_event.wait()),
+                    asyncio.create_task(self._uncaught_event.wait()),
+                ],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
         except Exception:
-            logging.error("Error in lifecycle supervisor", exc_info=True)
+            pass
         finally:
             try:
                 await self._async_stop()
             finally:
-                if self._fatal_shutdown:
-                    os._exit(1)
-                if self._signal_shutdown:
-                    os._exit(0)
-
-    async def _block_until_signal(self, sigs: List[signal.Signals]):
-        # Deprecated: signals are handled from main thread. Keep for reference.
-        await asyncio.Future()
+                os._exit(1)
 
     # ------------------------------ Handlers & utilities ------------------------------
     def _install_loop_exception_handler(self):
@@ -378,20 +321,14 @@ class LiveInferApp:
         if threading.current_thread() is not threading.main_thread():
             logging.debug("Signal handlers not installed: not on main thread")
             return
-        # Wait until loop and events are ready
-        for _ in range(50):
-            if self._loop and self._signal_event:
-                break
-            time.sleep(0.02)
+        assert self._loop is not None and self._signal_event is not None
 
         def _signal_handler(sig, _):
-            logging.info(f"Received signal, initiating graceful shutdown. signal={sig}")
-            self._signal_shutdown = True
             if self._loop and self._signal_event:
                 try:
                     self._loop.call_soon_threadsafe(self._signal_event.set)
                 except Exception:
-                    os._exit(0)
+                    os._exit(1)
 
         try:
             signal.signal(signal.SIGINT, _signal_handler)
