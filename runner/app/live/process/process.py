@@ -355,9 +355,11 @@ class PipelineProcess:
                     await reload_task
                     self._set_pipeline_ready(True)
             except Exception as e:
+                # Reloading pipeline failed so we have to exit the process so it's restarted from scratch.
                 self._report_error("Error reloading pipeline", e)
                 self.done.set()
-                os._exit(1)  # shutdown the sub-process altogether
+                # Schedule a delayed exit to make sure the process doesn't hang
+                threading.Thread(target=lambda: (time.sleep(3), os._exit(1)), daemon=True).start()
             finally:
                 # Pre-warm the loading overlay, so it's shown with the new resolution on the next reload.
                 try:
