@@ -201,7 +201,7 @@ class LiveInferApp:
             try:
                 logging.info("Stopping previous streamer")
                 self._streamer.trigger_stop_stream()
-                await self._streamer.wait(timeout=10)
+                await self._streamer.wait(timeout=3)
             except asyncio.TimeoutError:
                 logging.error("Timeout stopping previous streamer")
                 raise RuntimeError("Timeout stopping previous streamer")
