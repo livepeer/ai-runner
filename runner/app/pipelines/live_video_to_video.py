@@ -9,7 +9,7 @@ import psutil
 from app.pipelines.base import Pipeline, HealthCheck
 from app.pipelines.utils import get_model_dir, get_torch_device
 from app.utils.errors import InferenceError
-from app.live.live_infer_app import LiveInferApp
+from app.live.live_infer_app import LiveInferApp, StreamParams
 
 proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntary_ctxt_switches", "nonvoluntary_ctxt_switches", "CoreDumping"]
 
@@ -28,13 +28,18 @@ class LiveVideoToVideoPipeline(Pipeline):
             initial_params = {}
 
         self.app = LiveInferApp(pipeline=self.model_id, initial_params=initial_params)
-        self.app.start()
+        # Run async app.start() in a dedicated loop thread for sync callers
+        self.loop = asyncio.new_event_loop()
+        self.loop_thread = threading.Thread(target=self.loop.run_forever, name="LiveInferAppLoop", daemon=False)
+        self.loop_thread.start()
+        fut = asyncio.run_coroutine_threadsafe(self.app.start(), self.loop)
+        fut.result(timeout=30)
 
     def __call__(  # type: ignore
         self, *, subscribe_url: str, publish_url: str, control_url: str, events_url: str, params: dict, request_id: str, manifest_id: str, stream_id: str, **kwargs
     ):
         try:
-            self.app.start_stream(
+            sp = StreamParams(
                 subscribe_url=subscribe_url,
                 publish_url=publish_url,
                 control_url=control_url,
@@ -44,6 +49,8 @@ class LiveVideoToVideoPipeline(Pipeline):
                 manifest_id=manifest_id or "",
                 stream_id=stream_id or "",
             )
+            fut = asyncio.run_coroutine_threadsafe(self.app.start_stream(sp), self.loop)
+            fut.result(timeout=30)
             logging.info("Stream started successfully")
             return {}
         except Exception as e:
@@ -52,7 +59,8 @@ class LiveVideoToVideoPipeline(Pipeline):
 
     def get_health(self) -> HealthCheck:
         try:
-            status = self.app.get_status()
+            fut = asyncio.run_coroutine_threadsafe(self.app.get_status(), self.loop)
+            status = fut.result(timeout=5)
 
             # Re-declare just the field we need without importing live models
             class PipelineStatus(BaseModel):
