@@ -100,9 +100,8 @@ class InferAPI:
                 stream_id=params.stream_id,
             )
 
-            # Delegate to LiveInferApp synchronously on its loop
-            await asyncio.to_thread(
-                self.live_infer_app.start_stream,
+            # Delegate to LiveInferApp
+            await asyncio.to_thread(self.live_infer_app.start_stream, StreamParams(
                 subscribe_url=params.subscribe_url,
                 publish_url=params.publish_url,
                 control_url=params.control_url,
@@ -111,7 +110,7 @@ class InferAPI:
                 request_id=params.request_id,
                 manifest_id=params.manifest_id,
                 stream_id=params.stream_id,
-            )
+            ))
             return web.Response(text="Stream started successfully")
         except Exception as e:
             logging.error(f"Error starting stream: {e}")
