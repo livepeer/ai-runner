@@ -5,6 +5,8 @@ import os
 import tempfile
 import time
 from typing import Optional
+import signal
+import threading
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -146,4 +148,62 @@ class LiveInferApp:
             await protocol.stop()
         except Exception:
             logging.exception("Error cleaning up last stream trickle channels")
+
+    def setup_fatal_signal_handlers(self, loop: Optional[asyncio.AbstractEventLoop] = None):
+        """
+        Opt-in installation of simple fatal handlers:
+        - Loop exception handler schedules app.stop()
+        - threading.excepthook schedules app.stop()
+        - SIGINT/SIGTERM schedule app.stop() (only from main thread)
+        No additional state is tracked here.
+        """
+        target_loop = loop or asyncio.get_running_loop()
+
+        def schedule_stop():
+            try:
+                target_loop.create_task(self.stop())
+            except RuntimeError:
+                # Loop may be closing; best-effort
+                pass
+
+        def loop_exception_handler(_loop, context):
+            logging.error(
+                "Unhandled exception in asyncio task",
+                exc_info=context.get("exception"),
+            )
+            schedule_stop()
+
+        target_loop.set_exception_handler(loop_exception_handler)
+
+        original_hook = threading.excepthook
+
+        def thread_hook(args):
+            logging.error(
+                "Unhandled exception in thread",
+                exc_info=args.exc_value,
+            )
+            try:
+                target_loop.call_soon_threadsafe(schedule_stop)
+            except Exception:
+                pass
+            original_hook(args)
+
+        threading.excepthook = thread_hook
+
+        if threading.current_thread() is not threading.main_thread():
+            logging.debug("Skipping signal handlers: not on main thread")
+            return
+
+        def _signal_handler(sig, _):
+            logging.info(f"Received signal {sig}, scheduling graceful stop")
+            try:
+                target_loop.call_soon_threadsafe(schedule_stop)
+            except Exception:
+                pass
+
+        try:
+            signal.signal(signal.SIGINT, _signal_handler)
+            signal.signal(signal.SIGTERM, _signal_handler)
+        except Exception:
+            logging.exception("Failed to install signal handlers")
 

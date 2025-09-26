@@ -19,55 +19,12 @@ from typing import Annotated, Dict, Optional, cast
 from aiohttp import web
 from pydantic import BaseModel, Field
 
-from .live_infer_app import LiveInferApp
+from .live_infer_app import LiveInferApp, StreamParams
 from .log import config_logging
 
 
-class StartStreamParams(BaseModel):
-    subscribe_url: Annotated[
-        str,
-        Field(
-            ...,
-            description="Source URL of the incoming stream to subscribe to.",
-        ),
-    ]
-    publish_url: Annotated[
-        str,
-        Field(
-            ...,
-            description="Destination URL of the outgoing stream to publish.",
-        ),
-    ]
-    control_url: Annotated[
-        str,
-        Field(
-            default="",
-            description="URL for subscribing via Trickle protocol for updates in the live video-to-video generation params.",
-        ),
-    ]
-    events_url: Annotated[
-        str,
-        Field(
-            default="",
-            description="URL for publishing events via Trickle protocol for pipeline status and logs.",
-        ),
-    ]
-    params: Annotated[
-        Dict,
-        Field(default={}, description="Initial parameters for the pipeline."),
-    ]
-    request_id: Annotated[
-        str,
-        Field(default="", description="Unique identifier for the request."),
-    ]
-    manifest_id: Annotated[
-        str,
-        Field(default="", description="Orchestrator identifier for the request."),
-    ]
-    stream_id: Annotated[
-        str,
-        Field(default="", description="Unique identifier for the stream."),
-    ]
+class StartStreamParams(StreamParams):
+    pass
 
 
 class InferAPI:
@@ -101,16 +58,7 @@ class InferAPI:
             )
 
             # Delegate to LiveInferApp
-            await asyncio.to_thread(self.live_infer_app.start_stream, StreamParams(
-                subscribe_url=params.subscribe_url,
-                publish_url=params.publish_url,
-                control_url=params.control_url,
-                events_url=params.events_url,
-                params=params.params,
-                request_id=params.request_id,
-                manifest_id=params.manifest_id,
-                stream_id=params.stream_id,
-            ))
+            await asyncio.to_thread(self.live_infer_app.start_stream, params)
             return web.Response(text="Stream started successfully")
         except Exception as e:
             logging.error(f"Error starting stream: {e}")
