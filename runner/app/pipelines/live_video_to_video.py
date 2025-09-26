@@ -23,9 +23,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         self.model_id = model_id
         self.model_dir = get_model_dir()
         self.torch_device = get_torch_device()
-        self.infer_script_path = (
-            Path(__file__).parent.parent / "live" / "infer.py"
-        )
+        self.infer_module = "app.live.infer"
         self.restart_count = 0
         self.start_process()
 
@@ -107,7 +105,7 @@ class LiveVideoToVideoPipeline(Pipeline):
 
     def start_process(self):
         logging.info("Starting pipeline process")
-        cmd = [sys.executable, str(self.infer_script_path)]
+        cmd = [sys.executable, "-u", "-m", self.infer_module]
         cmd.extend(["--pipeline", self.model_id]) # we use the model_id as the pipeline name for now
         cmd.extend(["--http-port", "8888"])
         initial_params = os.environ.get("INFERPY_INITIAL_PARAMS")
