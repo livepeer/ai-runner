@@ -478,9 +478,14 @@ class LoadingOverlayRenderer:
     async def prewarm(self, width: int, height: int) -> None:
         """
         Precompute spinner/text resources off the main thread to avoid first-frame stutters.
+        Only prewarms if the resolution has changed.
         """
         w = int(width)
         h = int(height)
+
+        # Only prewarm if resolution changed
+        if self._cached_size == (w, h):
+            return
 
         def _prewarm_sync() -> None:
             try:

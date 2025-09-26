@@ -249,7 +249,7 @@ class PipelineProcess:
         pipeline = await self._initialize_pipeline()
         input_task = asyncio.create_task(self._input_loop(pipeline, overlay))
         output_task = asyncio.create_task(self._output_loop(pipeline, overlay))
-        param_task = asyncio.create_task(self._param_update_loop(pipeline))
+        param_task = asyncio.create_task(self._param_update_loop(pipeline, overlay))
         self._set_pipeline_ready(True)
 
         async def wait_for_stop():
@@ -324,7 +324,7 @@ class PipelineProcess:
             except Exception as e:
                 self._report_error("Error processing output frame", e)
 
-    async def _param_update_loop(self, pipeline: Pipeline):
+    async def _param_update_loop(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
         while not self.is_done():
             reload_task = None
             try:
@@ -340,16 +340,16 @@ class PipelineProcess:
                 )
 
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
-                    self._last_params = BaseParams(**params)
                     reload_task = await pipeline.update_params(**params)
+                    self._last_params = BaseParams(**params)
             except Exception as e:
                 self._report_error("Error updating params", e)
-
-            if reload_task is None:
-                # This means update_params was already able to update the pipeline dynamically
                 continue
 
             try:
+                if reload_task is None:
+                    # This means update_params was already able to update the pipeline dynamically
+                    continue
                 with log_timing("PipelineProcess: Reloading pipeline"):
                     self._set_pipeline_ready(False)
                     await reload_task
@@ -358,6 +358,12 @@ class PipelineProcess:
                 self._report_error("Error reloading pipeline", e)
                 self.done.set()
                 os._exit(1)  # shutdown the sub-process altogether
+            finally:
+                # Pre-warm the loading overlay, so it's shown with the new resolution on the next reload.
+                try:
+                    await overlay.prewarm(self._last_params.width, self._last_params.height)
+                except Exception:
+                    logging.warning("Failed to prewarm loading overlay caches", exc_info=True)
 
     async def _get_latest_params(self, timeout: float) -> dict | None:
         """
