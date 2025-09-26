@@ -16,31 +16,11 @@ from .trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 
 class LiveInferApp:
-    """
-    Inline-only runtime that encapsulates the former infer.py process behavior.
-
-    Responsibilities:
-    - Own a private asyncio loop running in a background thread
-    - Install loop exception handler, threading excepthook, and (optionally) signal handlers
-    - Manage ProcessGuardian and PipelineStreamer lifecycles
-    - Provide synchronous APIs that delegate work to the loop and block with timeouts
-    - Optionally run a thin aiohttp HTTP server that delegates to this instance
-
-    Notes:
-    - Catastrophic/uncaught errors inside loop tasks or thread exceptions will terminate
-      the entire process via os._exit(1).
-    - Signal handlers are only installed when called from the main thread.
-    - This class replaces the separate infer.py subprocess; no CLI/wrapper is provided.
-
-    Acceptance tests (manual):
-    - From a pipeline using LiveInferApp, call start_stream and verify output frames and that
-      logs include request_id/manifest_id/stream_id.
-    - Verify that a runner_receive_stream_request event is emitted on the Trickle events queue.
-    - Call update_params while streaming and observe parameter application without deadlocks.
-    - Force an unhandled exception in a background task and observe process exit code 1.
-    - Send SIGINT/SIGTERM to the process and observe graceful shutdown and exit code 0.
-    - Verify trickle cleanup executes on app.start() (no orphaned channels).
-    """
+	"""
+	Inline runtime for live inference with a private asyncio loop and synchronous API.
+	Manages `ProcessGuardian` and `PipelineStreamer` lifecycles and preserves shutdown ordering/timeouts.
+	Handles exceptions and signals; catastrophic errors terminate the process. Cleans up orphaned Trickle channels on startup.
+	"""
 
     def __init__(self, *, pipeline: str, initial_params: Optional[dict] = None):
         self.pipeline = pipeline
@@ -67,7 +47,7 @@ class LiveInferApp:
         self._stopped = threading.Event()
         self._loop_ready = threading.Event()
 
-        # Last params file path (shared behavior with previous API cleanup)
+        # File used to cleanup leftover trickle channels from a previous crash
         self._last_params_file = os.path.join(
             tempfile.gettempdir(), "ai_runner_last_params.json"
         )
