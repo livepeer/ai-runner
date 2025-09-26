@@ -1,8 +1,6 @@
 import asyncio
 import logging
 import json
-import os
-import sys
 from typing import cast
 
 from aiohttp import web
@@ -121,15 +119,6 @@ class InferAPI:
         app.router.add_post("/api/params", handle_params_update)
         app.router.add_get("/api/status", handle_get_status)
         return app
-
-async def start_http_server(port: int, infer_api: InferAPI):
-    app = infer_api.build_app()
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    logging.info(f"HTTP server started on port {port}")
-    return runner
 
 
 async def main():
