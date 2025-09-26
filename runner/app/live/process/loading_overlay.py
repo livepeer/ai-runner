@@ -392,7 +392,7 @@ class LoadingOverlayRenderer:
         # Determine spinner index for this frame (build spinner frames synchronously if missing)
         if not self._spinner_frames:
             self._ensure_spinner_frames(w, h)
-        angle = (time.time() * 180.0) % 360.0
+        angle = (-time.time() * 180.0) % 360.0
         k = int((angle / 360.0) * self._spinner_num_frames) % self._spinner_num_frames
         # Compute spinner ROI if unknown
         if self._spinner_frames:
