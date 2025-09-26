@@ -10,7 +10,7 @@ from io import BytesIO
 import aiohttp
 
 from .interface import Pipeline
-from trickle import VideoFrame, VideoOutput
+from ..trickle import VideoFrame, VideoOutput
 
 from .streamdiffusion_params import StreamDiffusionParams, IPAdapterConfig, get_model_type, IPADAPTER_SUPPORTED_TYPES
 

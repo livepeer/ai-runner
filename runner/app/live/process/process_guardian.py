@@ -4,7 +4,7 @@ import time
 from typing import Optional
 import abc
 
-from trickle import InputFrame, OutputFrame
+from ..trickle import InputFrame, OutputFrame
 from .process import PipelineProcess
 from .status import PipelineState, PipelineStatus, InferenceStatus, InputStatus
 

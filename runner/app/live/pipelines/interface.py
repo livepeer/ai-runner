@@ -1,7 +1,7 @@
 from asyncio import Task
 from abc import ABC, abstractmethod
 from pydantic import BaseModel, Field
-from trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
+from ..trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 
 class BaseParams(BaseModel):

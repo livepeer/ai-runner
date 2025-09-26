@@ -6,7 +6,7 @@ from typing import AsyncGenerator, Optional
 
 from PIL import Image
 
-from trickle import media, TricklePublisher, TrickleSubscriber, InputFrame, OutputFrame, AudioFrame, AudioOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
+from ...trickle import media, TricklePublisher, TrickleSubscriber, InputFrame, OutputFrame, AudioFrame, AudioOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 from .protocol import StreamProtocol
 from .last_value_cache import LastValueCache

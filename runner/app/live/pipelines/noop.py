@@ -2,7 +2,7 @@ import logging
 import asyncio
 
 from .interface import Pipeline
-from trickle import VideoFrame, VideoOutput
+from ..trickle import VideoFrame, VideoOutput
 
 class Noop(Pipeline):
   def __init__(self):

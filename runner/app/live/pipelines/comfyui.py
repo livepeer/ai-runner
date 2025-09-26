@@ -8,7 +8,7 @@ import pathlib
 
 from .interface import Pipeline, BaseParams
 from comfystream.client import ComfyStreamClient
-from trickle import VideoFrame, VideoOutput
+from ..trickle import VideoFrame, VideoOutput
 
 import logging
 

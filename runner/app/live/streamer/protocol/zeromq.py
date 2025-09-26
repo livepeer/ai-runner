@@ -9,7 +9,7 @@ from PIL import Image
 import numpy as np
 import torch
 
-from trickle import InputFrame, VideoOutput
+from ...trickle import InputFrame, VideoOutput
 from .protocol import StreamProtocol
 
 TIME_BASE = Fraction(1, 90000)

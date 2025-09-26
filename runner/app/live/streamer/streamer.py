@@ -5,9 +5,9 @@ import time
 from typing import AsyncGenerator, Awaitable
 from asyncio import Lock
 
-from trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
-from process import ProcessGuardian, StreamerCallbacks
-from process.status import timestamp_to_ms
+from ..trickle import AudioFrame, VideoFrame, OutputFrame, AudioOutput, VideoOutput
+from ..process import ProcessGuardian, StreamerCallbacks
+from ..process.status import timestamp_to_ms
 
 from .protocol.protocol import StreamProtocol
 

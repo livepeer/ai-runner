@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from typing import AsyncGenerator
 from PIL import Image
 
-from trickle import InputFrame, OutputFrame
+from ...trickle import InputFrame, OutputFrame
 
 class StreamProtocol(ABC):
     @abstractmethod
