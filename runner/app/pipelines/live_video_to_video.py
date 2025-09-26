@@ -10,6 +10,7 @@ from app.pipelines.base import Pipeline, HealthCheck
 from app.pipelines.utils import get_model_dir, get_torch_device
 from app.utils.errors import InferenceError
 from app.live.live_infer_app import LiveInferApp, StreamParams
+import asyncio
 
 proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntary_ctxt_switches", "nonvoluntary_ctxt_switches", "CoreDumping"]
 
@@ -27,12 +28,12 @@ class LiveVideoToVideoPipeline(Pipeline):
             logging.error(f"Error parsing INFERPY_INITIAL_PARAMS: {e}")
             initial_params = {}
 
-        self.app = LiveInferApp(pipeline=self.model_id, initial_params=initial_params)
+        self.__app = LiveInferApp(pipeline=self.model_id, initial_params=initial_params)
         # Run async app.start() in a dedicated loop thread for sync callers
         self.loop = asyncio.new_event_loop()
         self.loop_thread = threading.Thread(target=self.loop.run_forever, name="LiveInferAppLoop", daemon=False)
         self.loop_thread.start()
-        fut = asyncio.run_coroutine_threadsafe(self.app.start(), self.loop)
+        fut = asyncio.run_coroutine_threadsafe(self.__app.start(), self.loop)
         fut.result(timeout=30)
 
     def __call__(  # type: ignore
@@ -49,7 +50,7 @@ class LiveVideoToVideoPipeline(Pipeline):
                 manifest_id=manifest_id or "",
                 stream_id=stream_id or "",
             )
-            fut = asyncio.run_coroutine_threadsafe(self.app.start_stream(sp), self.loop)
+            fut = asyncio.run_coroutine_threadsafe(self.__app.start_stream(sp), self.loop)
             fut.result(timeout=30)
             logging.info("Stream started successfully")
             return {}
@@ -59,8 +60,16 @@ class LiveVideoToVideoPipeline(Pipeline):
 
     def get_health(self) -> HealthCheck:
         try:
-            fut = asyncio.run_coroutine_threadsafe(self.app.get_status(), self.loop)
+            fut = asyncio.run_coroutine_threadsafe(self.__app.get_status(), self.loop)
             status = fut.result(timeout=5)
+
+    def in_loop(self, fn):
+        """
+        Execute a function against the internal LiveInferApp on the app loop.
+        Example: self.in_loop(lambda app: app.update_params({...}))
+        """
+        fut = asyncio.run_coroutine_threadsafe(fn(self.__app), self.loop)
+        return fut.result()
 
             # Re-declare just the field we need without importing live models
             class PipelineStatus(BaseModel):
