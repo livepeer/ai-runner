@@ -1,3 +1,181 @@
+"""
+Old-school CLI and thin HTTP facade for running the inline LiveInferApp.
+
+This module exposes:
+- InferAPI: aiohttp handlers that delegate to LiveInferApp methods
+- CLI entrypoint: starts LiveInferApp and serves the HTTP API
+
+Note: The main pipeline integrates LiveInferApp inline and does not use this CLI.
+This exists for parity/testing and should remain a thin delegation layer only.
+"""
+
+import asyncio
+import json
+import logging
+import os
+import sys
+from typing import Annotated, Dict, Optional, cast
+
+from aiohttp import web
+from pydantic import BaseModel, Field
+
+from .live_infer_app import LiveInferApp
+from .log import config_logging
+
+
+class StartStreamParams(BaseModel):
+    subscribe_url: Annotated[
+        str,
+        Field(
+            ...,
+            description="Source URL of the incoming stream to subscribe to.",
+        ),
+    ]
+    publish_url: Annotated[
+        str,
+        Field(
+            ...,
+            description="Destination URL of the outgoing stream to publish.",
+        ),
+    ]
+    control_url: Annotated[
+        str,
+        Field(
+            default="",
+            description="URL for subscribing via Trickle protocol for updates in the live video-to-video generation params.",
+        ),
+    ]
+    events_url: Annotated[
+        str,
+        Field(
+            default="",
+            description="URL for publishing events via Trickle protocol for pipeline status and logs.",
+        ),
+    ]
+    params: Annotated[
+        Dict,
+        Field(default={}, description="Initial parameters for the pipeline."),
+    ]
+    request_id: Annotated[
+        str,
+        Field(default="", description="Unique identifier for the request."),
+    ]
+    manifest_id: Annotated[
+        str,
+        Field(default="", description="Orchestrator identifier for the request."),
+    ]
+    stream_id: Annotated[
+        str,
+        Field(default="", description="Unique identifier for the stream."),
+    ]
+
+
+class InferAPI:
+    def __init__(self, live_infer_app: LiveInferApp):
+        self.live_infer_app = live_infer_app
+        self.app = web.Application()
+        self.runner: Optional[web.AppRunner] = None
+        self.site: Optional[web.TCPSite] = None
+
+        # Routes
+        self.app.router.add_post("/api/live-video-to-video", self.handle_start_stream)
+        self.app.router.add_post("/api/params", self.handle_params_update)
+        self.app.router.add_get("/api/status", self.handle_get_status)
+
+    async def _parse_request_data(self, request: web.Request) -> Dict:
+        if request.content_type.startswith("application/json"):
+            return await request.json()
+        else:
+            raise ValueError(f"Unknown content type: {request.content_type}")
+
+    async def handle_start_stream(self, request: web.Request):
+        try:
+            params_data = await self._parse_request_data(request)
+            params = StartStreamParams(**params_data)
+
+            # Configure request-scoped logging fields
+            config_logging(
+                request_id=params.request_id,
+                manifest_id=params.manifest_id,
+                stream_id=params.stream_id,
+            )
+
+            # Delegate to LiveInferApp synchronously on its loop
+            await asyncio.to_thread(
+                self.live_infer_app.start_stream,
+                subscribe_url=params.subscribe_url,
+                publish_url=params.publish_url,
+                control_url=params.control_url,
+                events_url=params.events_url,
+                params=params.params,
+                request_id=params.request_id,
+                manifest_id=params.manifest_id,
+                stream_id=params.stream_id,
+            )
+            return web.Response(text="Stream started successfully")
+        except Exception as e:
+            logging.error(f"Error starting stream: {e}")
+            return web.Response(text=f"Error starting stream: {str(e)}", status=400)
+
+    async def handle_params_update(self, request: web.Request):
+        try:
+            params = await self._parse_request_data(request)
+
+            await asyncio.to_thread(self.live_infer_app.update_params, params)
+            return web.Response(text="Params updated successfully")
+        except Exception as e:
+            logging.error(f"Error updating params: {e}")
+            return web.Response(text=f"Error updating params: {str(e)}", status=400)
+
+    async def handle_get_status(self, request: web.Request):
+        status = await asyncio.to_thread(self.live_infer_app.get_status)
+        return web.json_response(status.model_dump())
+
+    @classmethod
+    async def serve(cls, port: int, live_infer_app: LiveInferApp):
+        api = cls(live_infer_app)
+        api.runner = web.AppRunner(api.app)
+        await api.runner.setup()
+        api.site = web.TCPSite(api.runner, "0.0.0.0", port)
+        await api.site.start()
+        logging.info(f"HTTP server started on port {port}")
+        return api
+
+    async def shutdown(self):
+        if self.runner:
+            await self.runner.cleanup()
+            self.runner = None
+            self.site = None
+
+
+async def main():
+    port = int(os.environ.get("INFER_HTTP_PORT", "8888"))
+    pipeline = os.environ.get("PIPELINE", "comfyui")
+    initial_params_env = os.environ.get("INFERPY_INITIAL_PARAMS", "{}")
+    try:
+        initial_params = json.loads(initial_params_env) if initial_params_env else {}
+    except Exception as e:
+        logging.error(f"Error parsing INFERPY_INITIAL_PARAMS: {e}")
+        sys.exit(1)
+
+    live_app = LiveInferApp(pipeline=pipeline, initial_params=initial_params)
+    live_app.start()
+
+    api = await InferAPI.serve(port, live_app)
+
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await api.shutdown()
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+        os._exit(0)
+    except Exception:
+        logging.exception("Fatal error in InferAPI main")
+        os._exit(1)
 import argparse
 import asyncio
 import json
