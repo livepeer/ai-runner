@@ -108,13 +108,20 @@ async def handle_get_status(request: web.Request):
     return web.json_response(status.model_dump())
 
 
-async def start_http_server(port: int, live_infer_app: LiveInferApp):
-    app = web.Application()
-    app["live_infer_app"] = live_infer_app
-    app.router.add_post("/api/live-video-to-video", handle_start_stream)
-    app.router.add_post("/api/params", handle_params_update)
-    app.router.add_get("/api/status", handle_get_status)
+class InferAPI:
+    def __init__(self, live_infer_app: LiveInferApp):
+        self.live_infer_app = live_infer_app
 
+    def build_app(self) -> web.Application:
+        app = web.Application()
+        app["live_infer_app"] = self.live_infer_app
+        app.router.add_post("/api/live-video-to-video", handle_start_stream)
+        app.router.add_post("/api/params", handle_params_update)
+        app.router.add_get("/api/status", handle_get_status)
+        return app
+
+async def start_http_server(port: int, infer_api: InferAPI):
+    app = infer_api.build_app()
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
