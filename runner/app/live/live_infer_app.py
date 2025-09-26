@@ -53,7 +53,8 @@ class LiveInferApp:
         # Core components
         self._process: Optional[ProcessGuardian] = None
         self._streamer: Optional[PipelineStreamer] = None
-        self._http_runner = None  # aiohttp.web.AppRunner
+        # HTTP API is managed externally by CLI; no HTTP logic in this class
+        self._http_runner = None
 
         # Lifecycle and error signaling
         self._uncaught_event: Optional[asyncio.Event] = None
@@ -64,6 +65,7 @@ class LiveInferApp:
 
         # Shutdown completion for synchronous wait
         self._stopped = threading.Event()
+        self._loop_ready = threading.Event()
 
         # Last params file path (shared behavior with previous API cleanup)
         self._last_params_file = os.path.join(
@@ -87,14 +89,19 @@ class LiveInferApp:
             self._install_loop_exception_handler()
             self._uncaught_event = asyncio.Event()
             self._signal_event = asyncio.Event()
+            self._loop_ready.set()
             try:
                 loop.run_forever()
             finally:
                 loop.run_until_complete(loop.shutdown_asyncgens())
                 loop.close()
 
-        self._thread = threading.Thread(target=_run_loop, name="LiveInferAppLoop", daemon=True)
+        self._thread = threading.Thread(target=_run_loop, name="LiveInferAppLoop", daemon=False)
         self._thread.start()
+
+        # Ensure loop is ready before scheduling work onto it
+        if not self._loop_ready.wait(timeout=5):
+            raise RuntimeError("Failed to initialize LiveInferApp loop")
 
         # Install global handlers (must run on caller thread)
         self._install_thread_exception_hook()
@@ -147,13 +154,6 @@ class LiveInferApp:
 
     def wait(self, timeout: float | None = None) -> None:
         self._stopped.wait(timeout=timeout)
-
-    # Optional HTTP facade (not used by pipeline)
-    def start_http_server(self, port: int) -> None:
-        self._run_sync(self._async_start_http_server(port), timeout=10)
-
-    def stop_http_server(self) -> None:
-        self._run_sync(self._async_stop_http_server(), timeout=10)
 
     # ------------------------------ Internal async impl ------------------------------
     async def _async_start(self):
@@ -284,19 +284,6 @@ class LiveInferApp:
         if not self._process:
             raise RuntimeError("Process not running")
         return self._process.get_status()
-
-    async def _async_start_http_server(self, port: int):
-        from .api.api import start_http_server  # Local import to avoid cycle at import time
-
-        if self._http_runner is not None:
-            return
-        self._http_runner = await start_http_server(port, self)
-
-    async def _async_stop_http_server(self):
-        if not self._http_runner:
-            return
-        await self._http_runner.cleanup()
-        self._http_runner = None
 
     async def _cleanup_last_stream(self):
         # Best-effort cleanup of orphaned trickle channels
