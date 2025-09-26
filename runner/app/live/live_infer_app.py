@@ -52,8 +52,10 @@ class LiveInferApp:
         self._last_params_file = os.path.join(
             tempfile.gettempdir(), "ai_runner_last_params.json"
         )
+        self._stopped = asyncio.Event()
 
     async def start(self):
+        self._stopped.clear()
         await self._cleanup_last_stream()
         self._process = ProcessGuardian(self.pipeline, self.initial_params)
         with log_timing("starting ProcessGuardian"):
@@ -70,16 +72,23 @@ class LiveInferApp:
         if self._process:
             stop_coros.append(self._process.stop())
 
-        if not stop_coros:
-            return
-        results = await asyncio.wait_for(asyncio.gather(*stop_coros, return_exceptions=True), timeout=10)
-        exceptions = [r for r in results if isinstance(r, Exception)]
-        if exceptions:
-            raise ExceptionGroup("Error stopping components", exceptions)
-        self._streamer = None
-        self._process = None
+        try:
+            if not stop_coros:
+                return
+            results = await asyncio.wait_for(asyncio.gather(*stop_coros, return_exceptions=True), timeout=10)
+            exceptions = [r for r in results if isinstance(r, Exception)]
+            if exceptions:
+                raise ExceptionGroup("Error stopping components", exceptions)
+        finally:
+            self._streamer = None
+            self._process = None
+            self._stopped.set()
 
-    async def start_stream(self, sp: StreamParams):
+    async def wait_for_stop(self):
+        await self._stopped.wait()
+
+    async def start_stream(self, params: StreamParams):
+        config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
         if not self._process:
             raise RuntimeError("Process not running")
 
@@ -94,27 +103,27 @@ class LiveInferApp:
 
         try:
             with open(self._last_params_file, "w") as f:
-                json.dump(sp.model_dump(), f)
+                json.dump(params.model_dump(), f)
         except Exception:
             logging.exception("Error saving last params to file")
 
-        config_logging(request_id=sp.request_id, manifest_id=sp.manifest_id, stream_id=sp.stream_id)
+        config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
-        width = sp.params.get("width", DEFAULT_WIDTH)
-        height = sp.params.get("height", DEFAULT_HEIGHT)
+        width = params.params.get("width", DEFAULT_WIDTH)
+        height = params.params.get("height", DEFAULT_HEIGHT)
         if self.pipeline == "comfyui":
             width = height = 512
-            sp.params = sp.params | {"width": width, "height": height}
+            params.params = params.params | {"width": width, "height": height}
             logging.warning("Using default dimensions for ComfyUI pipeline")
 
         protocol = TrickleProtocol(
-            sp.subscribe_url, sp.publish_url, sp.control_url, sp.events_url, width, height
+            params.subscribe_url, params.publish_url, params.control_url, params.events_url, width, height
         )
         self._streamer = PipelineStreamer(
-            protocol, self._process, sp.request_id, sp.manifest_id, sp.stream_id
+            protocol, self._process, params.request_id, params.manifest_id, params.stream_id
         )
 
-        await self._streamer.start(sp.params)
+        await self._streamer.start(params.params)
         await protocol.emit_monitoring_event(
             {"type": "runner_receive_stream_request", "timestamp": stream_request_timestamp},
             queue_event_type="stream_trace",
@@ -157,47 +166,46 @@ class LiveInferApp:
         - SIGINT/SIGTERM schedule app.stop() (only from main thread)
         No additional state is tracked here.
         """
+        if threading.current_thread() is not threading.main_thread():
+            raise RuntimeError("Fatal signal handlers must be installed on main thread")
+
         target_loop = loop or asyncio.get_running_loop()
 
-        def schedule_stop():
+        async def do_stop():
             try:
-                target_loop.create_task(self.stop())
-            except RuntimeError:
-                # Loop may be closing; best-effort
-                pass
+                await self.stop()
+            except Exception:
+                logging.exception("Error stopping app, crashing process", exc_info=True)
+                os._exit(1)
 
-        def loop_exception_handler(_loop, context):
+        def _loop_exception_handler(_loop, context):
             logging.error(
-                "Unhandled exception in asyncio task",
+                "Terminating process due to unhandled exception in asyncio task",
                 exc_info=context.get("exception"),
             )
-            schedule_stop()
+            asyncio.create_task(do_stop())
 
-        target_loop.set_exception_handler(loop_exception_handler)
+        target_loop.set_exception_handler(_loop_exception_handler)
 
         original_hook = threading.excepthook
 
-        def thread_hook(args):
+        def _thread_hook(args):
             logging.error(
-                "Unhandled exception in thread",
+                "Terminating process due to unhandled exception in thread",
                 exc_info=args.exc_value,
             )
             try:
-                target_loop.call_soon_threadsafe(schedule_stop)
+                target_loop.call_soon_threadsafe(do_stop)
             except Exception:
                 pass
             original_hook(args)
 
-        threading.excepthook = thread_hook
-
-        if threading.current_thread() is not threading.main_thread():
-            logging.debug("Skipping signal handlers: not on main thread")
-            return
+        threading.excepthook = _thread_hook
 
         def _signal_handler(sig, _):
             logging.info(f"Received signal {sig}, scheduling graceful stop")
             try:
-                target_loop.call_soon_threadsafe(schedule_stop)
+                target_loop.call_soon_threadsafe(do_stop)
             except Exception:
                 pass
 
