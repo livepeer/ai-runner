@@ -186,36 +186,30 @@ class LiveInferApp:
                 logging.exception("Error stopping app, crashing process", exc_info=True)
                 os._exit(1)
 
+        def trigger_stop():
+            try:
+                asyncio.run_coroutine_threadsafe(do_stop(), target_loop)
+            except Exception:
+                # loop might be already shutting down, ignore
+                pass
+
         def _loop_exception_handler(_loop, context):
-            logging.error(
-                "Terminating process due to unhandled exception in asyncio task",
-                exc_info=context.get("exception"),
-            )
-            asyncio.create_task(do_stop())
+            logging.error("Terminating process due to unhandled exception in asyncio task", exc_info=context.get("exception"))
+            trigger_stop()
 
         target_loop.set_exception_handler(_loop_exception_handler)
 
         original_hook = threading.excepthook
-
         def _thread_hook(args):
-            logging.error(
-                "Terminating process due to unhandled exception in thread",
-                exc_info=args.exc_value,
-            )
-            try:
-                target_loop.call_soon_threadsafe(do_stop)
-            except Exception:
-                pass
+            logging.error("Terminating process due to unhandled exception in thread", exc_info=args.exc_value)
+            trigger_stop()
             original_hook(args)
 
         threading.excepthook = _thread_hook
 
         def _signal_handler(sig, _):
             logging.info(f"Received signal {sig}, scheduling graceful stop")
-            try:
-                target_loop.call_soon_threadsafe(do_stop)
-            except Exception:
-                pass
+            trigger_stop()
 
         try:
             signal.signal(signal.SIGINT, _signal_handler)
@@ -263,7 +257,7 @@ class SyncLiveInferApp:
         self.stopped = True
 
     def setup_fatal_signal_handlers(self):
-        self.__app.setup_fatal_signal_handlers()
+        self.__app.setup_fatal_signal_handlers(self.loop)
 
     def start(self):
         if not self.stopped:
