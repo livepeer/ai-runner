@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import tempfile
 import time
 from typing import Optional, TypeVar, Callable, Coroutine, Any
 import signal
@@ -71,20 +70,24 @@ class LiveInferApp:
     Callers should await methods from their own event loop.
     """
 
-    def __init__(self, *, pipeline: str, initial_params: Optional[dict] = None):
+    def __init__(
+        self, *, pipeline: str, initial_params: dict, model_dir: Optional[str] = None
+    ):
+        if model_dir is None:
+            model_dir = os.environ.get("MODEL_DIR", "./models")
+
         self.pipeline = pipeline
-        self.initial_params = initial_params or {}
-        self._process: Optional[ProcessGuardian] = None
+        self.initial_params = initial_params
+        self.model_dir = model_dir
+
+        self._process = ProcessGuardian(self.pipeline, self.initial_params, self.model_dir)
         self._streamer: Optional[PipelineStreamer] = None
-        self._last_params_file = os.path.join(
-            tempfile.gettempdir(), "ai_runner_last_params.json"
-        )
+        self._last_params_file = os.path.join(self.model_dir, "ai-runner-aux-data", "last-params.json")
         self._stopped = asyncio.Event()
 
     async def start(self):
         self._stopped.clear()
         await self._cleanup_last_stream()
-        self._process = ProcessGuardian(self.pipeline, self.initial_params)
         with log_timing("starting ProcessGuardian"):
             await self._process.start()
 
@@ -108,7 +111,6 @@ class LiveInferApp:
                 raise ExceptionGroup("Error stopping components", exceptions)
         finally:
             self._streamer = None
-            self._process = None
             self._stopped.set()
 
     async def wait_for_stop(self):
@@ -128,6 +130,7 @@ class LiveInferApp:
                 raise RuntimeError("Timeout stopping previous streamer")
 
         try:
+            os.makedirs(os.path.dirname(self._last_params_file), exist_ok=True)
             with open(self._last_params_file, "w") as f:
                 json.dump(params.model_dump(), f)
         except Exception:
@@ -252,8 +255,8 @@ class SyncLiveInferApp:
     outside of an asyncio loop. It allows calling async methods from the main thread.
     """
 
-    def __init__(self, model_id: str, initial_params: dict):
-        self.__app = LiveInferApp(pipeline=model_id, initial_params=initial_params)
+    def __init__(self, model_id: str, initial_params: dict, model_dir: Optional[str] = None):
+        self.__app = LiveInferApp(pipeline=model_id, initial_params=initial_params, model_dir=model_dir)
 
         self.loop = asyncio.new_event_loop()
         self.loop_thread = threading.Thread(target=self.loop.run_forever, name="LiveInferAppLoop", daemon=False)
