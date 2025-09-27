@@ -25,14 +25,14 @@ class LiveVideoToVideoPipeline(Pipeline):
         self.app.start()
 
     def __call__(  # type: ignore
-        self, *, subscribe_url: str, publish_url: str, control_url: str, events_url: str, stream_params: dict, request_id: str, manifest_id: str, stream_id: str, **kwargs
+        self, *, subscribe_url: str, publish_url: str, control_url: str, events_url: str, params: dict, request_id: str, manifest_id: str, stream_id: str, **kwargs
     ):
         self.app.start_stream(StreamParams(
             subscribe_url=subscribe_url,
             publish_url=publish_url,
             control_url=control_url,
             events_url=events_url,
-            params=stream_params,
+            params=params,
             request_id=request_id or "",
             manifest_id=manifest_id or "",
             stream_id=stream_id or "",
@@ -42,6 +42,7 @@ class LiveVideoToVideoPipeline(Pipeline):
 
     def get_health(self) -> HealthCheck:
         state = self.app.get_status().state
+        # TODO: Merge the pipeline healthcheck with the live pipeline states to avoid this mapping
         return HealthCheck(
             status=(
                 "LOADING" if state == "LOADING"
