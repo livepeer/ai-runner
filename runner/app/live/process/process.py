@@ -29,16 +29,15 @@ from .loading_overlay import LoadingOverlayRenderer
 
 class PipelineProcess:
     @staticmethod
-    def start(pipeline_name: str, params: dict | None = None):
-        instance = PipelineProcess(pipeline_name)
-        if params is not None:
-            instance.update_params(params)
-        instance.process.start()
-        instance.start_time = time.time()
-        return instance
+    def spawn(pipeline_name: str, params: dict, model_dir: str):
+        process = PipelineProcess(pipeline_name, model_dir)
+        process.update_params(params)
+        process.start()
+        return process
 
-    def __init__(self, pipeline_name: str):
+    def __init__(self, pipeline_name: str, model_dir: str):
         self.pipeline_name = pipeline_name
+        self.model_dir = model_dir
         self.ctx = mp.get_context("spawn")
 
         self.input_queue = self.ctx.Queue(maxsize=1)
@@ -56,6 +55,11 @@ class PipelineProcess:
 
         # Using underscored names to emphasize state used only from the child process.
         self._last_params = BaseParams()
+
+    def start(self):
+        os.environ.update({"HUGGINGFACE_HUB_CACHE": self.model_dir, "DIFFUSERS_CACHE": self.model_dir})
+        self.process.start()
+        self.start_time = time.time()
 
     def is_alive(self):
         return self.process.is_alive()
