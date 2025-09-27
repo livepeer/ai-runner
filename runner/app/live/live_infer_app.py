@@ -4,38 +4,65 @@ import logging
 import os
 import tempfile
 import time
-from typing import Optional
+from typing import Optional, TypeVar, Callable, Coroutine, Any
 import signal
 import threading
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
+from typing import Annotated, Dict
 
 from .log import config_logging, log_timing
 from .process import ProcessGuardian
+from .pipelines.interface import BaseParams
 from .streamer import PipelineStreamer
 from .streamer.protocol import TrickleProtocol
-from .trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 
 class StreamParams(BaseModel):
-    subscribe_url: str
-    publish_url: str
-    control_url: str = ""
-    events_url: str = ""
-    params: dict = Field(default_factory=dict)
-    request_id: str = ""
-    manifest_id: str = ""
-    stream_id: str = ""
-    width: int = DEFAULT_WIDTH
-    height: int = DEFAULT_HEIGHT
-
-    @model_validator(mode="after")
-    def ensure_dimensions(self):
-        p = dict(self.params or {})
-        p.setdefault("width", self.width)
-        p.setdefault("height", self.height)
-        self.params = p
-        return self
+    subscribe_url: Annotated[
+        str,
+        Field(
+            ...,
+            description="Source URL of the incoming stream to subscribe to.",
+        ),
+    ]
+    publish_url: Annotated[
+        str,
+        Field(
+            ...,
+            description="Destination URL of the outgoing stream to publish.",
+        ),
+    ]
+    control_url: Annotated[
+        str,
+        Field(
+            default="",
+            description="URL for subscribing via Trickle protocol for updates in the live video-to-video generation params.",
+        ),
+    ]
+    events_url: Annotated[
+        str,
+        Field(
+            default="",
+            description="URL for publishing events via Trickle protocol for pipeline status and logs.",
+        ),
+    ]
+    params: Annotated[
+        Dict,
+        Field(default={}, description="Initial parameters for the pipeline."),
+    ]
+    request_id: Annotated[
+        str,
+        Field(default="", description="Unique identifier for the request."),
+    ]
+    manifest_id: Annotated[
+        str,
+        Field(default="", description="Orchestrator identifier for the request."),
+    ]
+    stream_id: Annotated[
+        str,
+        Field(default="", description="Unique identifier for the stream."),
+    ]
 
 
 class LiveInferApp:
@@ -88,7 +115,6 @@ class LiveInferApp:
         await self._stopped.wait()
 
     async def start_stream(self, params: StreamParams):
-        config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
         if not self._process:
             raise RuntimeError("Process not running")
 
@@ -105,25 +131,26 @@ class LiveInferApp:
             with open(self._last_params_file, "w") as f:
                 json.dump(params.model_dump(), f)
         except Exception:
-            logging.exception("Error saving last params to file")
+            logging.exception(f"Error saving last params to file={self._last_params_file} params={params}")
 
         config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
-        width = params.params.get("width", DEFAULT_WIDTH)
-        height = params.params.get("height", DEFAULT_HEIGHT)
+        raw_pipe_params = params.params
+        pipe_params = BaseParams(**raw_pipe_params)
         if self.pipeline == "comfyui":
-            width = height = 512
-            params.params = params.params | {"width": width, "height": height}
             logging.warning("Using default dimensions for ComfyUI pipeline")
+            params = params.model_copy()
+            params.params = raw_pipe_params | {"width": 512, "height": 512}
+            pipe_params = BaseParams(**raw_pipe_params)
 
         protocol = TrickleProtocol(
-            params.subscribe_url, params.publish_url, params.control_url, params.events_url, width, height
+            params.subscribe_url, params.publish_url, params.control_url, params.events_url, pipe_params.width, pipe_params.height
         )
         self._streamer = PipelineStreamer(
             protocol, self._process, params.request_id, params.manifest_id, params.stream_id
         )
 
-        await self._streamer.start(params.params)
+        await self._streamer.start(raw_pipe_params)
         await protocol.emit_monitoring_event(
             {"type": "runner_receive_stream_request", "timestamp": stream_request_timestamp},
             queue_event_type="stream_trace",
@@ -139,32 +166,10 @@ class LiveInferApp:
             raise RuntimeError("Process not running")
         return self._process.get_status()
 
-    async def _cleanup_last_stream(self):
-        if not os.path.exists(self._last_params_file):
-            return
-        try:
-            with open(self._last_params_file, "r") as f:
-                params = json.load(f)
-            os.remove(self._last_params_file)
-
-            protocol = TrickleProtocol(
-                params.get("subscribe_url", ""),
-                params.get("publish_url", ""),
-                params.get("control_url", ""),
-                params.get("events_url", ""),
-            )
-            await protocol.start()
-            await protocol.stop()
-        except Exception:
-            logging.exception("Error cleaning up last stream trickle channels")
-
     def setup_fatal_signal_handlers(self, loop: Optional[asyncio.AbstractEventLoop] = None):
         """
-        Opt-in installation of simple fatal handlers:
-        - Loop exception handler schedules app.stop()
-        - threading.excepthook schedules app.stop()
-        - SIGINT/SIGTERM schedule app.stop() (only from main thread)
-        No additional state is tracked here.
+        Opt-in installation of simple fatal handlers (uncaught exceptions and signals).
+        When any such events are detected, we schedule a graceful stop of the app.
         """
         if threading.current_thread() is not threading.main_thread():
             raise RuntimeError("Fatal signal handlers must be installed on main thread")
@@ -215,3 +220,71 @@ class LiveInferApp:
         except Exception:
             logging.exception("Failed to install signal handlers")
 
+    async def _cleanup_last_stream(self):
+        """
+        Cleans up the last stream trickle channels. Uses a temporary file to store the last stream params every time a
+        stream is started. So even if the app restarts, it can be found and gracefully stopped.
+        """
+        if not os.path.exists(self._last_params_file):
+            return
+        try:
+            with open(self._last_params_file, "r") as f:
+                params = json.load(f)
+            os.remove(self._last_params_file)
+
+            protocol = TrickleProtocol(
+                params.get("subscribe_url", ""),
+                params.get("publish_url", ""),
+                params.get("control_url", ""),
+                params.get("events_url", ""),
+            )
+            # Simply start and stop the protocol to clean up the trickle channels
+            await protocol.start()
+            await protocol.stop()
+        except Exception:
+            logging.exception("Error cleaning up last stream trickle channels")
+
+T = TypeVar("T")
+
+class SyncLiveInferApp:
+    """
+    Sync wrapper for LiveInferApp. This class runs the LiveInferApp in a dedicated asyncio loop thread for using it
+    outside of an asyncio loop. It allows calling async methods from the main thread.
+    """
+
+    def __init__(self, model_id: str, initial_params: dict):
+        self.__app = LiveInferApp(pipeline=model_id, initial_params=initial_params)
+
+        self.loop = asyncio.new_event_loop()
+        self.loop_thread = threading.Thread(target=self.loop.run_forever, name="LiveInferAppLoop", daemon=False)
+        self.stopped = True
+
+    def setup_fatal_signal_handlers(self):
+        self.__app.setup_fatal_signal_handlers()
+
+    def start(self):
+        if not self.stopped:
+            raise RuntimeError("Already started")
+        self.stopped = False
+
+        self.loop_thread.start()
+        self._run(lambda app: app.start())
+
+    def start_stream(self, stream_params: StreamParams):
+        return self._run(lambda app: app.start_stream(stream_params))
+
+    def get_status(self):
+        return self._run(lambda app: app.get_status())
+
+    def stop(self):
+        if self.stopped:
+            raise RuntimeError("Already stopped")
+        self.stopped = True
+
+        self._run(lambda app: app.stop())
+        self.loop.stop()
+        self.loop_thread.join()
+
+    def _run(self, fn: Callable[[LiveInferApp], Coroutine[Any, Any, T]]) -> T:
+        future = asyncio.run_coroutine_threadsafe(fn(self.__app), self.loop)
+        return future.result()
