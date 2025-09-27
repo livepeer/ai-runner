@@ -20,7 +20,7 @@ def health(pipeline: Pipeline = Depends(get_pipeline)) -> HealthCheck | JSONResp
     try:
         return pipeline.get_health()
     except Exception as e:
-        logger.error(f"Error retrieving pipeline status: {e}")
+        logger.error("[HEALTHCHECK] Error retrieving pipeline status", exc_info=True)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=http_error("Failed to retrieve pipeline status."),
