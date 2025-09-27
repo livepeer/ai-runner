@@ -570,6 +570,11 @@ def _start_parent_watchdog(done: mp.Event):
             f"Skipping Unix-only parent watchdog due to unsupported platform={sys.platform}"
         )
         return
+    if os.getppid() == 1:
+        # This is the case when the parent process is the init process (e.g. docker).
+        # It is fine since docker will kill the whole container when the parent process dies.
+        logging.info("Skipping parent watchdog due to parent process being 1")
+        return
 
     def _watch_parent():
         try:
