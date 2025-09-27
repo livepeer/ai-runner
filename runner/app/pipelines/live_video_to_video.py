@@ -8,7 +8,7 @@ from typing import Callable, Coroutine, Any, TypeVar
 from app.pipelines.base import Pipeline, HealthCheck
 from app.pipelines.utils import get_model_dir, get_torch_device
 from app.utils.errors import InferenceError
-from app.live import LiveInferApp, StreamParams, PipelineStatus
+from app.live import StreamParams, SyncLiveInferApp
 
 
 class LiveVideoToVideoPipeline(Pipeline):
@@ -25,6 +25,8 @@ class LiveVideoToVideoPipeline(Pipeline):
             initial_params = {}
 
         self.app = SyncLiveInferApp(self.model_id, initial_params)
+        self.app.setup_fatal_signal_handlers()
+        self.app.start()
 
     def __call__(  # type: ignore
         self, *, subscribe_url: str, publish_url: str, control_url: str, events_url: str, stream_params: dict, request_id: str, manifest_id: str, stream_id: str, **kwargs
@@ -66,40 +68,3 @@ class LiveVideoToVideoPipeline(Pipeline):
         return f"LiveVideoToVideoPipeline model_id={self.model_id}"
 
 
-T = TypeVar("T")
-
-class SyncLiveInferApp:
-    """
-    Sync wrapper for LiveInferApp. This class runs the LiveInferApp in a dedicated asyncio loop thread for using it
-    outside of an asyncio loop. It allows calling async methods from the main thread.
-    """
-
-    def __init__(self, model_id: str, initial_params: dict):
-        self.__app = LiveInferApp(pipeline=model_id, initial_params=initial_params)
-
-        self.loop = asyncio.new_event_loop()
-        self.loop_thread = threading.Thread(target=self.loop.run_forever, name="LiveInferAppLoop", daemon=False)
-        self.loop_thread.start()
-        self.stopped = False
-
-        # Start the app in the dedicated loop thread
-        self._run(lambda app: app.start())
-
-    def start_stream(self, stream_params: StreamParams):
-        return self._run(lambda app: app.start_stream(stream_params))
-
-    def get_status(self) -> PipelineStatus:
-        return self._run(lambda app: app.get_status())
-
-    def stop(self):
-        if self.stopped:
-            raise RuntimeError("Already stopped")
-        self.stopped = True
-
-        self._run(lambda app: app.stop())
-        self.loop.stop()
-        self.loop_thread.join()
-
-    def _run(self, fn: Callable[[LiveInferApp], Coroutine[Any, Any, T]]) -> T:
-        future = asyncio.run_coroutine_threadsafe(fn(self.__app), self.loop)
-        return future.result()
