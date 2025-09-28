@@ -96,16 +96,18 @@ class PipelineStreamer(StreamerCallbacks):
         self.main_tasks = []
         self.auxiliary_tasks = []
         self.tasks_supervisor_task = None
+        logging.info(f"PipelineStreamer stopped request_id={self.request_id} manifest_id={self.manifest_id} stream_id={self.stream_id}")
 
     def is_stream_running(self) -> bool:
         return self.tasks_supervisor_task is not None
 
     async def wait(self, *, timeout: float = 0):
         """Wait for the streamer to stop with an optional timeout. This is a blocking call."""
-        if not self.tasks_supervisor_task:
-            raise RuntimeError("Streamer not started")
+        task = self.tasks_supervisor_task
+        if not task:
+            return
 
-        awaitable: Awaitable = asyncio.shield(self.tasks_supervisor_task)
+        awaitable: Awaitable = asyncio.shield(task)
         if timeout > 0:
             awaitable = asyncio.wait_for(awaitable, timeout)
         return await awaitable
