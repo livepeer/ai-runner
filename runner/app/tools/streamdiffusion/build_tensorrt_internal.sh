@@ -104,7 +104,11 @@ fi
 
 # Build script module path (execute via python -m)
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-BUILD_SCRIPT_MODULE="runner.app.tools.streamdiffusion.build_tensorrt"
+BUILD_SCRIPT_MODULE="app.tools.streamdiffusion.build_tensorrt"
+
+# Ensure Python can find the top-level 'app' package regardless of cwd
+APP_WORKSPACE="$(readlink -f "$SCRIPT_DIR/../../..")"
+export PYTHONPATH="$APP_WORKSPACE:${PYTHONPATH:-}"
 
 # Create output directory
 echo "Creating output directory: $OUTPUT_DIR"
