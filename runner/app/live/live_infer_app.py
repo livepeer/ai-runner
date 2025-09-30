@@ -138,22 +138,20 @@ class LiveInferApp:
 
         config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
-        raw_pipe_params = params.params
-        pipe_params = BaseParams(**raw_pipe_params)
         if self.pipeline == "comfyui":
             logging.warning("Using default dimensions for ComfyUI pipeline")
             params = params.model_copy()
-            params.params = raw_pipe_params | {"width": 512, "height": 512}
-            pipe_params = BaseParams(**raw_pipe_params)
+            params.params = params.params | {"width": 512, "height": 512}
 
+        proto_params = BaseParams(**params.params)
         protocol = TrickleProtocol(
-            params.subscribe_url, params.publish_url, params.control_url, params.events_url, pipe_params.width, pipe_params.height
+            params.subscribe_url, params.publish_url, params.control_url, params.events_url, proto_params.width, proto_params.height
         )
         self._streamer = PipelineStreamer(
             protocol, self._process, params.request_id, params.manifest_id, params.stream_id
         )
 
-        await self._streamer.start(raw_pipe_params)
+        await self._streamer.start(params.params)
         await protocol.emit_monitoring_event(
             {"type": "runner_receive_stream_request", "timestamp": stream_request_timestamp},
             queue_event_type="stream_trace",
