@@ -102,14 +102,9 @@ if [ ! -f "$CONDA_PYTHON" ]; then
     exit 1
 fi
 
-# Check if the build script exists
+# Build script module path (execute via python -m)
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-BUILD_SCRIPT="$SCRIPT_DIR/build_tensorrt.py"
-if [ ! -f "$BUILD_SCRIPT" ]; then
-    echo "ERROR: Build script not found at $BUILD_SCRIPT"
-    echo "Make sure the StreamDiffusion build script is available in the same directory as this script."
-    exit 1
-fi
+BUILD_SCRIPT_MODULE="runner.app.tools.streamdiffusion.build_tensorrt"
 
 # Create output directory
 echo "Creating output directory: $OUTPUT_DIR"
@@ -201,7 +196,7 @@ for model in $MODELS; do
                 --ipadapter-type "$ip_type"
             )
 
-            if $CONDA_PYTHON "$BUILD_SCRIPT" "${build_args[@]}"; then
+            if $CONDA_PYTHON -m "$BUILD_SCRIPT_MODULE" "${build_args[@]}"; then
                 echo "  ✓ Success"
             else
                 echo "  ✗ Failed"

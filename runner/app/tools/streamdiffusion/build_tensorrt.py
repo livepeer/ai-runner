@@ -1,13 +1,8 @@
 import argparse
 from typing import List
 
-# Make sure 'infer.py' root folder is in PYTHONPATH
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(__file__, "..", "..", "..", "live")))
-
-from pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig
-from pipelines.streamdiffusion import load_streamdiffusion_sync
+from ...live.pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig
+from ...live.pipelines.streamdiffusion import load_streamdiffusion_sync
 
 def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNetConfig]:
     """
