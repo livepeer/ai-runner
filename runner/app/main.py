@@ -6,7 +6,7 @@ from app.routes import health, hardware, version
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from app.utils.hardware import HardwareInfo
-from app.live.log import config_logging
+from app.utils.log import config_logging
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 
