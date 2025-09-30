@@ -249,11 +249,17 @@ class SyncLiveInferApp:
     outside of an asyncio loop. It allows calling async methods from the main thread.
     """
 
-    def __init__(self, model_id: str, initial_params: dict, model_dir: Optional[str] = None):
-        self.__app = LiveInferApp(pipeline=model_id, initial_params=initial_params, model_dir=model_dir)
+    def __init__(self, *, pipeline: str, initial_params: dict, model_dir: Optional[str] = None):
+        self.__app = LiveInferApp(pipeline=pipeline, initial_params=initial_params, model_dir=model_dir)
 
         self.loop = asyncio.new_event_loop()
-        self.loop_thread = threading.Thread(target=self.loop.run_forever, name="LiveInferAppLoop", daemon=False)
+        def run_loop():
+            try:
+                asyncio.set_event_loop(self.loop)
+                self.loop.run_forever()
+            finally:
+                self.loop.close()
+        self.loop_thread = threading.Thread(target=run_loop, name="LiveInferAppLoop", daemon=False)
         self.stopped = True
 
     def setup_fatal_signal_handlers(self):

@@ -20,7 +20,7 @@ class LiveVideoToVideoPipeline(Pipeline):
             logging.error(f"Error parsing INFERPY_INITIAL_PARAMS: {e}")
             initial_params = {}
 
-        self.app = SyncLiveInferApp(self.model_id, initial_params, str(self.model_dir))
+        self.app = SyncLiveInferApp(pipeline=self.model_id, initial_params=initial_params, model_dir=str(self.model_dir))
         self.app.setup_fatal_signal_handlers()
         self.app.start()
 
