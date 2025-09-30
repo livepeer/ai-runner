@@ -109,6 +109,7 @@ class TrickleProtocol(StreamProtocol):
     async def control_loop(self, done: asyncio.Event) -> AsyncGenerator[dict, None]:
         if not self.control_subscriber:
             logging.warning("No control-url provided, inference won't get updates from the control trickle subscription")
+            await done.wait()
             return
 
         logging.info("Starting Control subscriber at %s", self.control_url)
