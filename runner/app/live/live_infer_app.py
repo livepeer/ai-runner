@@ -86,6 +86,7 @@ class LiveInferApp:
         self._stopped = asyncio.Event()
 
     async def start(self):
+        config_logging(log_level=logging.DEBUG if os.getenv("VERBOSE_LOGGING")=="1" else logging.INFO)
         self._stopped.clear()
         await self._cleanup_last_stream()
         with log_timing("starting ProcessGuardian"):

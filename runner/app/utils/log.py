@@ -1,6 +1,4 @@
-import time
 import logging
-from contextlib import contextmanager
 
 
 logger: logging.Logger | None = None
@@ -9,22 +7,22 @@ handler: logging.Handler | None = None
 
 def config_logging(*, log_level: int = 0, request_id: str = "", manifest_id: str = "", stream_id: str = ""):
     global logger, handler
-    if logger and handler:
-        if log_level:
-            logger.setLevel(log_level)
-            handler.setLevel(log_level)
-        config_logging_fields(handler, request_id, manifest_id, stream_id)
-        return logger
 
-    handler = logging.StreamHandler()
+    if not logger:
+        logger = logging.getLogger()  # Root logger
+        for cur_handler in logger.handlers:
+            if isinstance(cur_handler, logging.StreamHandler):
+                handler = cur_handler
+                break
+    if not handler:
+        handler = logging.StreamHandler()
+        logger.addHandler(handler)
+
     if log_level:
+        logger.setLevel(log_level)
         handler.setLevel(log_level)
     config_logging_fields(handler, request_id, manifest_id, stream_id)
 
-    logger = logging.getLogger()  # Root logger
-    if log_level:
-        logger.setLevel(log_level)
-    logger.addHandler(handler)
     return logger
 
 

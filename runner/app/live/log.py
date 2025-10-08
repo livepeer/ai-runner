@@ -1,5 +1,5 @@
-import time
 import logging
+import time
 from contextlib import contextmanager
 
 
@@ -9,22 +9,22 @@ handler: logging.Handler | None = None
 
 def config_logging(*, log_level: int = 0, request_id: str = "", manifest_id: str = "", stream_id: str = ""):
     global logger, handler
-    if logger and handler:
-        if log_level:
-            logger.setLevel(log_level)
-            handler.setLevel(log_level)
-        config_logging_fields(handler, request_id, manifest_id, stream_id)
-        return logger
 
-    handler = logging.StreamHandler()
+    if not logger:
+        logger = logging.getLogger()  # Root logger
+        for cur_handler in logger.handlers:
+            if isinstance(cur_handler, logging.StreamHandler):
+                handler = cur_handler
+                break
+    if not handler:
+        handler = logging.StreamHandler()
+        logger.addHandler(handler)
+
     if log_level:
+        logger.setLevel(log_level)
         handler.setLevel(log_level)
     config_logging_fields(handler, request_id, manifest_id, stream_id)
 
-    logger = logging.getLogger()  # Root logger
-    if log_level:
-        logger.setLevel(log_level)
-    logger.addHandler(handler)
     return logger
 
 
@@ -39,7 +39,6 @@ def config_logging_fields(handler: logging.Handler, request_id: str, manifest_id
 
 @contextmanager
 def log_timing(operation_name: str):
-    global logger
     start_time = time.time()
     status = "failure"
     try:
@@ -47,4 +46,4 @@ def log_timing(operation_name: str):
         status = "success"
     finally:
         duration = time.time() - start_time
-        logger.info(f"operation={operation_name} status={status} duration_s={duration}s")
+        logging.info(f"operation={operation_name} status={status} duration_s={duration}s")
