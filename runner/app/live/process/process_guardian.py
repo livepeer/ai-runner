@@ -123,8 +123,8 @@ class ProcessGuardian:
         if not self.process:
             raise RuntimeError("Process not running")
 
-        self.process.update_params(params)
         self.status.update_params(params)
+        self.process.update_params(params)
 
         # The gateway is having trouble keeping up with a high frequency of events, while we still want to support high
         # frequency of parameter updates. So we're skipping the event for now.
@@ -302,8 +302,8 @@ class ProcessGuardian:
                 if state == self.status.state:
                     continue
 
-                if state == PipelineState.OFFLINE:
-                    # Revert to initial params when the stream stops
+                if state == PipelineState.OFFLINE and self.status.state != PipelineState.LOADING:
+                    logging.info(f"Reverting to initial params after stream shutdown. state={state}")
                     await self.update_params(self.initial_params)
 
                 if state != PipelineState.ERROR:
