@@ -1,6 +1,4 @@
 import logging
-import time
-from contextlib import contextmanager
 
 
 logger: logging.Logger | None = None
@@ -36,14 +34,3 @@ def config_logging_fields(handler: logging.Handler, request_id: str, manifest_id
     )
 
     handler.setFormatter(formatter)
-
-@contextmanager
-def log_timing(operation_name: str):
-    start_time = time.time()
-    status = "failure"
-    try:
-        yield
-        status = "success"
-    finally:
-        duration = time.time() - start_time
-        logging.info(f"operation={operation_name} status={status} duration_s={duration}s")

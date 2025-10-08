@@ -27,6 +27,7 @@ The AI runner, found in the [app](./runner/app) directory, consists of:
 
 - **Routes**: FastAPI routes in [app/routes](./runner/app/routes) that handle requests and delegate them to the appropriate pipeline.
 - **Pipelines**: Modules in [app/pipelines](./runner/app/pipelines) that manage model loading, request processing, and response generation for specific AI tasks.
+  - Live pipelines now use an inline-only `LiveInferApp` (`runner/app/live/live_infer_app.py`) rather than spawning a separate `infer.py` subprocess. The app owns a private asyncio loop, installs global handlers, manages `ProcessGuardian` and `PipelineStreamer`, and exposes synchronous methods for `start_stream`, `update_params`, and `get_status`. The HTTP layer is a thin facade that delegates to the app.
 
 It also includes utility scripts:
 

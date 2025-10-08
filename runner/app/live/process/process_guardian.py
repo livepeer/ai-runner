@@ -41,9 +41,11 @@ class ProcessGuardian:
         self,
         pipeline: str,
         params: dict,
+        model_dir: str,
     ):
         self.pipeline = pipeline
         self.initial_params = params
+        self.model_dir = model_dir
         self.streamer: StreamerCallbacks = _NoopStreamerCallbacks()
 
         self.process: Optional[PipelineProcess] = None
@@ -56,7 +58,7 @@ class ProcessGuardian:
         self.output_fps_counter = FPSCounter()
 
     async def start(self):
-        self.process = PipelineProcess.start(self.pipeline, self.initial_params)
+        self.process = PipelineProcess.spawn(self.pipeline, self.initial_params, self.model_dir)
         self.status.update_state(PipelineState.LOADING)
         self.monitor_task = asyncio.create_task(self._monitor_loop())
 
@@ -121,8 +123,8 @@ class ProcessGuardian:
         if not self.process:
             raise RuntimeError("Process not running")
 
-        self.process.update_params(params)
         self.status.update_params(params)
+        self.process.update_params(params)
 
         # The gateway is having trouble keeping up with a high frequency of events, while we still want to support high
         # frequency of parameter updates. So we're skipping the event for now.
@@ -237,7 +239,7 @@ class ProcessGuardian:
         # don't call the full start/stop methods since we only want to restart the process
         await self.process.stop()
 
-        self.process = PipelineProcess.start(self.pipeline, self.initial_params)
+        self.process = PipelineProcess.spawn(self.pipeline, self.initial_params, self.model_dir)
         self.status.update_state(PipelineState.LOADING)
         curr_status = self.status.inference_status
         self.status.inference_status = InferenceStatus(
@@ -300,9 +302,9 @@ class ProcessGuardian:
                 if state == self.status.state:
                     continue
 
-                if state == PipelineState.OFFLINE:
-                    # Revert to initial params when the stream stops
-                    self.process.update_params(self.initial_params)
+                if state == PipelineState.OFFLINE and self.status.state != PipelineState.LOADING:
+                    logging.info(f"Reverting to initial params after stream shutdown. state={state}")
+                    await self.update_params(self.initial_params)
 
                 if state != PipelineState.ERROR:
                     # avoid thrashing the state to ERROR if we're going to restart the process below

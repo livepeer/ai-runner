@@ -30,6 +30,9 @@ class TrickleSubscriber:
         for attempt in range(0, self.max_retries):
             logging.info(f"Trickle sub Preconnecting attempt: {attempt} URL: {url}")
             try:
+                if self.session is None:
+                    logging.error(f"Trickle sub session is None, exiting {url}")
+                    return None
 
                 resp = await self.session.get(url, headers={'Connection':'close'})
 
@@ -106,7 +109,7 @@ class TrickleSubscriber:
     async def _preconnect_next_segment(self):
         """Preconnect to the next segment in the background."""
         async with self.lock:
-            if self.pending_get is not None:
+            if self.pending_get is not None or self.session is None:
                 return
             next_conn = await self.preconnect()
             if next_conn:

@@ -55,7 +55,7 @@ async def subscribe(subscribe_url, out_pipe, monitoring_callback):
                         "timestamp": int(time.time() * 1000)
                     }, queue_event_type="stream_trace")
             except aiohttp.ClientError as e:
-                logging.info(f"Failed to read segment - {e}")
+                logging.info(f"Failed to read segment", exc_info=True)
                 break # end of stream?
             except Exception as e:
                 raise e
