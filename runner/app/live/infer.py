@@ -115,13 +115,13 @@ async def main(
         ]
         if streamer:
             streamer.trigger_stop_stream()
-            stop_coros.append(streamer.wait())
+            stop_coros.append(streamer.wait(timeout=5))
         if api:
             stop_coros.append(api.cleanup())
 
         try:
             stops = asyncio.gather(*stop_coros, return_exceptions=True)
-            results = await asyncio.wait_for(stops, timeout=10)
+            results = await asyncio.wait_for(stops, timeout=6)
             exceptions = [result for result in results if isinstance(result, Exception)]
             if exceptions:
                 raise ExceptionGroup("Error stopping components", exceptions)
