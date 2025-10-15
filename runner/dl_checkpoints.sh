@@ -468,6 +468,10 @@ for arg in "$@"; do
     display_help
     exit 0
     ;;
+  --select-gpu)
+    GPU_SELECT=1
+    shift
+    ;;
   *)
     shift
     ;;
@@ -485,7 +489,11 @@ if ! command -v huggingface-cli >/dev/null 2>&1; then
   exit 1
 fi
 
-select_gpu && export docker_run_flags=(--runtime nvidia -e NVIDIA_VISIBLE_DEVICES="$NVIDIA_VISIBLE_DEVICES")
+if [ "$GPU_SELECT" == 1 ]; then
+  select_gpu && export docker_run_flags=(--runtime nvidia -e NVIDIA_VISIBLE_DEVICES="$NVIDIA_VISIBLE_DEVICES")
+else
+  export docker_run_flags=(--gpus all)
+fi
 
 if [ "$MODE" = "beta" ]; then
   download_beta_models
