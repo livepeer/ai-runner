@@ -225,7 +225,7 @@ class StreamDiffusion(Pipeline):
 
         If the pipe is not initialized, this just validates that the image in the URL is valid and return.
         """
-        image = await _load_image_from_url(style_image_url)
+        image = await _load_image_from_url_or_b64(style_image_url)
         if self.pipe is None:
             return
 
@@ -365,7 +365,7 @@ def load_streamdiffusion_sync(
     return pipe
 
 
-async def _load_image_from_url(url: str) -> Image.Image:
+async def _load_image_from_url_or_b64(url: str) -> Image.Image:
     """
     Load an image from a URL or base64 encoded string.
     
