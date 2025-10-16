@@ -1,6 +1,8 @@
 import os
 import logging
 import asyncio
+import base64
+import re
 from typing import Dict, List, Optional, Any, cast
 
 import torch
@@ -364,12 +366,58 @@ def load_streamdiffusion_sync(
 
 
 async def _load_image_from_url(url: str) -> Image.Image:
-    if not (url.startswith('http://') or url.startswith('https://')):
-        raise ValueError(f"Invalid image URL: {url}")
-
-    timeout = aiohttp.ClientTimeout(total=5)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.get(url) as resp:
-            resp.raise_for_status()
-            data = await resp.read()
-    return Image.open(BytesIO(data)).convert('RGB')
+    """
+    Load an image from a URL or base64 encoded string.
+    
+    Supports:
+    - HTTP/HTTPS URLs: http://example.com/image.png
+    - Data URIs: data:image/png;base64,iVBORw0KG...
+    - Raw base64 strings: iVBORw0KG...
+    """
+    if not url or not isinstance(url, str):
+        raise ValueError("Image URL or base64 string cannot be empty")
+            
+    # Handle HTTP/HTTPS URLs
+    if url.startswith('http://') or url.startswith('https://'):
+        try:
+            timeout = aiohttp.ClientTimeout(total=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(url) as resp:
+                    resp.raise_for_status()
+                    data = await resp.read()
+        except aiohttp.ClientError as e:
+            raise ValueError(f"Failed to fetch image from URL: {e}") from e
+        except asyncio.TimeoutError as e:
+            raise ValueError("Request timeout while fetching image from URL") from e
+    
+    # Handle data URI format: data:image/png;base64,<base64_data>
+    elif url.startswith('data:'):
+        match = re.match(r'^data:image/[a-zA-Z+]+;base64,(.+)$', url)
+        if not match:
+            raise ValueError(
+                "Invalid data URI format. Expected format: data:image/<type>;base64,<base64_data>"
+            )
+        base64_data = match.group(1)
+        try:
+            data = base64.b64decode(base64_data, validate=True)
+        except Exception as e:
+            raise ValueError(f"Invalid base64 encoding in data URI: {e}") from e
+    
+    # Handle raw base64 string
+    else:
+        # Check if it looks like base64 (alphanumeric + / + = padding)
+        if not re.match(r'^[A-Za-z0-9+/]+=*$', url):
+            raise ValueError(
+                "Invalid format. Must be a valid HTTP/HTTPS URL, data URI, or base64 string"
+            )
+        try:
+            data = base64.b64decode(url, validate=True)
+        except Exception as e:
+            raise ValueError(f"Invalid base64 encoding: {e}") from e
+    
+    # Attempt to decode the image data
+    try:
+        image = Image.open(BytesIO(data))
+        return image.convert('RGB')
+    except Exception as e:
+        raise ValueError(f"Failed to decode image data: {e}") from e
