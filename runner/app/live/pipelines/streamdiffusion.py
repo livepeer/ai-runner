@@ -367,8 +367,13 @@ async def _load_image_from_url(url: str) -> Image.Image:
     if not (url.startswith('http://') or url.startswith('https://')):
         raise ValueError(f"Invalid image URL: {url}")
 
+    # Set user-agent to prevent 403 errors from servers like Wikipedia
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (compatible; AI-Runner/1.0; +https://github.com/livepeer/ai-runner)',
+    }
+
     timeout = aiohttp.ClientTimeout(total=5)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
         async with session.get(url) as resp:
             resp.raise_for_status()
             data = await resp.read()
