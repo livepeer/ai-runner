@@ -159,9 +159,20 @@ total_builds=0
 
 # Calculate total number of builds
 for model in $MODELS; do
+    # Check if this is an SDXL model
+    is_sdxl=false
+    if [[ "$model" =~ [Xx][Ll] ]] || [[ "$model" =~ [Ss][Dd][Xx][Ll] ]]; then
+        is_sdxl=true
+    fi
+    
     for dim in $DIMENSIONS; do
         for ip_type in "${IPADAPTER_TYPES_ARR[@]}"; do
-            total_builds=$((total_builds + 1))
+            # If SDXL with controlnets, we need 2 builds (base + controlnets)
+            if [ "$is_sdxl" = true ] && [ -n "$CONTROLNETS" ]; then
+                total_builds=$((total_builds + 2))
+            else
+                total_builds=$((total_builds + 1))
+            fi
         done
     done
 done
@@ -172,42 +183,64 @@ echo
 current_build=0
 
 for model in $MODELS; do
+    # Check if this is an SDXL model
+    is_sdxl=false
+    if [[ "$model" =~ [Xx][Ll] ]] || [[ "$model" =~ [Ss][Dd][Xx][Ll] ]]; then
+        is_sdxl=true
+        echo "Detected SDXL model: $model"
+        if [ -n "$CONTROLNETS" ]; then
+            echo "Will build base model first, then with ControlNets"
+        fi
+        echo
+    fi
+    
     for dim in $DIMENSIONS; do
         # Parse dimensions
         width=${dim%x*}
         height=${dim#*x}
 
         for ip_type in "${IPADAPTER_TYPES_ARR[@]}"; do
-            current_build=$((current_build + 1))
-
-            echo "[$current_build/$total_builds] Building TensorRT engine for:"
-            echo "  Model: $model"
-            echo "  Opt Timesteps: $OPT_TIMESTEPS"
-            echo "  Min Timesteps: $MIN_TIMESTEPS"
-            echo "  Max Timesteps: $MAX_TIMESTEPS"
-            echo "  Dimensions: ${width}x${height}"
-            echo "  IPAdapter Type: ${ip_type:-None}"
-
-            build_args=(
-                --model-id "$model"
-                --opt-timesteps "$OPT_TIMESTEPS"
-                --min-timesteps "$MIN_TIMESTEPS"
-                --max-timesteps "$MAX_TIMESTEPS"
-                --width "$width"
-                --height "$height"
-                --engine-dir "$OUTPUT_DIR"
-                --controlnets "$CONTROLNETS"
-                --ipadapter-type "$ip_type"
-            )
-
-            if $CONDA_PYTHON -m "$BUILD_SCRIPT_MODULE" "${build_args[@]}"; then
-                echo "  ✓ Success"
-            else
-                echo "  ✗ Failed"
-                echo "Aborting build process due to failure."
-                exit 1
+            # Determine controlnet configurations to build
+            controlnet_configs=("$CONTROLNETS")
+            
+            # If SDXL with controlnets, build base first, then with controlnets
+            if [ "$is_sdxl" = true ] && [ -n "$CONTROLNETS" ]; then
+                controlnet_configs=("" "$CONTROLNETS")
             fi
-            echo
+            
+            for controlnets_arg in "${controlnet_configs[@]}"; do
+                current_build=$((current_build + 1))
+
+                echo "[$current_build/$total_builds] Building TensorRT engine for:"
+                echo "  Model: $model"
+                echo "  Opt Timesteps: $OPT_TIMESTEPS"
+                echo "  Min Timesteps: $MIN_TIMESTEPS"
+                echo "  Max Timesteps: $MAX_TIMESTEPS"
+                echo "  Dimensions: ${width}x${height}"
+                echo "  IPAdapter Type: ${ip_type:-None}"
+                echo "  ControlNets: ${controlnets_arg:-None}"
+
+                build_args=(
+                    --model-id "$model"
+                    --opt-timesteps "$OPT_TIMESTEPS"
+                    --min-timesteps "$MIN_TIMESTEPS"
+                    --max-timesteps "$MAX_TIMESTEPS"
+                    --width "$width"
+                    --height "$height"
+                    --engine-dir "$OUTPUT_DIR"
+                    --controlnets "$controlnets_arg"
+                    --ipadapter-type "$ip_type"
+                )
+
+                if $CONDA_PYTHON -m "$BUILD_SCRIPT_MODULE" "${build_args[@]}"; then
+                    echo "  ✓ Success"
+                else
+                    echo "  ✗ Failed"
+                    echo "Aborting build process due to failure."
+                    exit 1
+                fi
+                echo
+            done
         done
     done
 done
