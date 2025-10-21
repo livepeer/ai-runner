@@ -131,7 +131,7 @@ function download_beta_models() {
 
   # Download custom pipeline models.
   huggingface-cli download facebook/sam2-hiera-large --include "*.pt" "*.yaml" --cache-dir models
-  huggingface-cli download parler-tts/parler-tts-large-v1 --include "*.safetensors" "*.json" "*.model" --cache-dir models
+  huggingface-cli download ResembleAI/chatterbox --include "*.pt" "*.json" "*.model" --cache-dir models
 
   printf "\nDownloading token-gated models...\n"
 

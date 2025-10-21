@@ -15,3 +15,14 @@ class InferenceError(Exception):
             message = f"{message}: {original_exception}"
         super().__init__(message)
         self.original_exception = original_exception
+
+
+
+class ModelOOMError(InferenceError):
+    """Exception raised when the model runs out of memory."""
+    pass
+
+
+class GenerationError(InferenceError):
+    """Exception raised for general errors in the generation process."""
+    pass

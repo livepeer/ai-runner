@@ -466,7 +466,7 @@ paths:
       - generate
       summary: Text To Speech
       description: Generate a text-to-speech audio file based on the provided text
-        input and speaker description.
+        input.Optionally include base64-encoded audio for voice cloning.
       operationId: genTextToSpeech
       requestBody:
         content:
@@ -1214,19 +1214,22 @@ components:
         model_id:
           type: string
           title: Model Id
-          description: Hugging Face model ID used for text to speech generation.
+          description: Optional Hugging Face model ID for text-to-speech generation.
+            If omitted, the pipelines configured model is used.
           default: ''
         text:
           type: string
           title: Text
           description: Text input for speech generation.
-          default: ''
-        description:
+          default: Hi, there my name is AI.
+        audio_prompt_base64:
           type: string
-          title: Description
-          description: Description of speaker to steer text to speech generation.
-          default: A male speaker delivers a slightly expressive and animated speech
-            with a moderate speed and pitch.
+          format: binary
+          title: Audio Prompt Base64
+          description: Optional base64-encoded audio data for voice cloning reference.
+            Provide as base64-encoded string; it will be decoded server-side. Must
+            be a valid audio file format like WAV or MP3.
+          default: ''
       type: object
       title: TextToSpeechParams
       required:
