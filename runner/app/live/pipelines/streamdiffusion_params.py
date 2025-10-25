@@ -17,11 +17,13 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
         "thibaud/controlnet-sd21-color-diffusers",
         "thibaud/controlnet-sd21-ade20k-diffusers",
         "thibaud/controlnet-sd21-normalbae-diffusers",
+        "varb15/TemporalNet2-stable-diffusion-2-1",
     ],
     "sd15": [
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
+        "CiaraRowles/TemporalNet2",
     ],
     "sdxl": [
         "xinsir/controlnet-depth-sdxl-1.0",
@@ -61,9 +63,11 @@ class ControlNetConfig(BaseModel):
         "thibaud/controlnet-sd21-color-diffusers",
         "thibaud/controlnet-sd21-ade20k-diffusers",
         "thibaud/controlnet-sd21-normalbae-diffusers",
+        "varb15/TemporalNet2-stable-diffusion-2-1",
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
+        "CiaraRowles/TemporalNet2",
         "xinsir/controlnet-depth-sdxl-1.0",
         "xinsir/controlnet-canny-sdxl-1.0",
         "xinsir/controlnet-tile-sdxl-1.0",
@@ -80,7 +84,7 @@ class ControlNetConfig(BaseModel):
     """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
 
     preprocessor: Literal[
-        "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation"
+        "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation", "temporal_net_tensorrt"
     ] = "passthrough"
     """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
 
@@ -140,6 +144,15 @@ _DEFAULT_CONTROLNETS = [
         model_id="thibaud/controlnet-sd21-color-diffusers",
         conditioning_scale=0.2,
         preprocessor="passthrough",
+        preprocessor_params={},
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="varb15/TemporalNet2-stable-diffusion-2-1",
+        conditioning_scale=0.0,
+        preprocessor="temporal_net_tensorrt",
         preprocessor_params={},
         enabled=True,
         control_guidance_start=0.0,

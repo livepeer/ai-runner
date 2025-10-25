@@ -39,6 +39,7 @@ MODELS_DIR=${HUGGINGFACE_HUB_CACHE:-./models}
 OUTPUT_DIR="./engines"
 BUILD_DEPTH_ANYTHING=false
 BUILD_POSE=false
+BUILD_RAFT=false
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -81,6 +82,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build-pose)
             BUILD_POSE=true
+            shift
+            ;;
+        --build-raft)
+            BUILD_RAFT=true
             shift
             ;;
         --help)
@@ -152,6 +157,11 @@ if [ "$BUILD_POSE" = true ]; then
     echo "YoloNas Pose: Enabled"
 else
     echo "YoloNas Pose: Disabled"
+fi
+if [ "$BUILD_RAFT" = true ]; then
+    echo "RAFT: Enabled"
+else
+    echo "RAFT: Disabled"
 fi
 echo
 
@@ -330,12 +340,20 @@ function build_pose_engine() {
     echo
 }
 
+function build_raft_engine() {
+    echo "Building RAFT TensorRT engine..."
+}
+
 if [ "$BUILD_DEPTH_ANYTHING" = true ]; then
     build_depth_anything_engine || exit 1
 fi
 
 if [ "$BUILD_POSE" = true ]; then
     build_pose_engine || exit 1
+fi
+
+if [ "$BUILD_RAFT" = true ]; then
+    build_raft_engine || exit 1
 fi
 
 # Summary

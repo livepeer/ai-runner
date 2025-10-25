@@ -49,6 +49,17 @@
       "enabled": true,
       "control_guidance_start": 0.0,
       "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "varb15/TemporalNet2-stable-diffusion-2-1",
+      "conditioning_scale": 0.0,
+      "conditioning_channels": 6,
+      "preprocessor": "temporal_net_tensorrt",
+      "preprocessor_params": {
+        "image_resolution": 512,
+        "flow_strength": 0.4
+      },
+      "enabled": true
     }
   ],
   "ip_adapter": { "scale": 0.5, "enabled": true },
