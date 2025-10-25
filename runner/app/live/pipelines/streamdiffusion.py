@@ -267,6 +267,10 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             preprocessor_params.update({
                 "engine_path": engine_path,
             })
+        elif cn_config.preprocessor == "temporal_net_tensorrt":
+            preprocessor_params.update({
+                "engine_path": "./engines/temporal_net/raft.engine",
+            })
 
         controlnet_config = {
             'model_id': cn_config.model_id,
