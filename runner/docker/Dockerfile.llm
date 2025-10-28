@@ -1,7 +1,7 @@
 # Based on https://github.com/huggingface/api-inference-community/blob/main/docker_images/diffusers/Dockerfile
 
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu20.04
-LABEL maintainer="Yondon Fu <yondon@livepeer.org>"
+FROM nvidia/cuda:12.9.1-cudnn-devel-ubuntu22.04
+
 
 # Add any system dependency here
 # RUN apt-get update -y && apt-get install libXXX -y
@@ -30,8 +30,8 @@ RUN pyenv install $PYTHON_VERSION && \
 
 # Upgrade pip and install your desired packages
 ARG PIP_VERSION=24.2
-RUN pip install --no-cache-dir --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0 && \
-    pip install --no-cache-dir torch==2.4.0 torchvision torchaudio pip-tools
+RUN pip install --no-cache-dir --upgrade pip>=${PIP_VERSION} setuptools>=69.5.1 wheel>=0.43.0 && \
+    pip install --no-cache-dir torch>=2.4.0 torchvision torchaudio pip-tools
 
 ARG VERSION="undefined"
 ENV VERSION=${VERSION}
