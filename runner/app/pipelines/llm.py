@@ -118,6 +118,8 @@ class LLMPipeline(Pipeline):
             logger.info(f"Using pipeline parallel size: {pipeline_parallel_size}")
             logger.info(f"Total GPUs used: {total_gpus_needed}")
 
+        except AttributeError as ae:
+            logger.error(f"Cannot confirm tensor and pipeline parallelism. Confirm manually. ({ae})")
         except Exception as e:
             logger.error(f"Error in parallelism configuration: {e}")
             raise
