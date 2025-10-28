@@ -76,12 +76,6 @@ class LLMPipeline(Pipeline):
         tensor_parallel_size = int(os.getenv("TENSOR_PARALLEL_SIZE", "1"))
         pipeline_parallel_size = int(os.getenv("PIPELINE_PARALLEL_SIZE", "1"))
 
-        if max_num_batched_tokens < max_model_len:
-            max_num_batched_tokens = max_model_len
-            logger.info(
-                f"max_num_batched_tokens ({max_num_batched_tokens}) is smaller than max_model_len ({max_model_len}). This effectively limits the maximum sequence length to max_num_batched_tokens and makes vLLM reject longer sequences.")
-            logger.info(f"setting 'max_model_len' to equal 'max_num_batched_tokens'")
-
     # Load config to check model compatibility
         try:
             config = AutoConfig.from_pretrained(self.local_model_path)
