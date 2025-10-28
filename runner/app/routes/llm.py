@@ -32,6 +32,12 @@ RESPONSES = {
 )
 @router.post("/llm/", response_model=LLMResponse
 , responses=RESPONSES, include_in_schema=False)
+@router.post(
+    "/llm/chat/completions",
+    response_model=LLMResponse,
+    responses=RESPONSES,
+    include_in_schema=False,
+)
 async def llm(
     request: LLMRequest,
     pipeline: Pipeline = Depends(get_pipeline),
