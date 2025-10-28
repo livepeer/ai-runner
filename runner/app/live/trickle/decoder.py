@@ -10,6 +10,7 @@ import torch
 from .frame import InputFrame
 
 MAX_FRAMERATE=24
+DECODE_ERROR_BUDGET=10  # Decode errors allowed before aborting
 
 def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_height):
     """
@@ -44,6 +45,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
             "layout": audio_stream.layout.name,
             "time_base": audio_stream.time_base,
             "bit_rate": audio_stream.codec_context.bit_rate,
+            "stream_index": audio_stream.index,
         }
 
     # Prepare video-related metadata (if video is present)
@@ -62,6 +64,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
             "format": str(video_stream.codec_context.format),
             "target_width": target_width,
             "target_height": target_height,
+            "stream_index": video_stream.index,
         }
 
     if video_metadata is None and audio_metadata is None:
@@ -73,6 +76,12 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
     logging.info(f"Metadata: {metadata}")
     put_metadata(metadata)
 
+    max_stream_idx = max(stream.index for stream in container.streams)
+    if max_stream_idx > 100:
+        raise ValueError(f"Invalid stream index {max_stream_idx}")
+    stream_errors = [0] * (max_stream_idx + 1)
+
+
     reformatter = VideoReformatter()
     frame_interval = 1.0 / MAX_FRAMERATE
     next_pts_time = 0.0
@@ -83,7 +92,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
 
             if audio_stream and packet.stream == audio_stream:
                 # Decode audio frames
-                for aframe in packet.decode():
+                for aframe in decode_frames(packet, stream_errors):
                     aframe = cast(av.AudioFrame, aframe)
                     if aframe.pts is None:
                         continue
@@ -95,7 +104,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
 
             elif video_stream and packet.stream == video_stream:
                 # Decode video frames
-                for frame in packet.decode():
+                for frame in decode_frames(packet, stream_errors):
                     frame = cast(av.VideoFrame, frame)
                     if frame.pts is None:
                         continue
@@ -156,3 +165,31 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
         container.close()
 
     logging.info("Decoder stopped")
+
+def decode_frames(pkt, errors: list[int, int]):
+    """
+    Yields decoded frames while tracking an error budget per-stream.
+    Terminate the job if the error budget is exceeded.
+    """
+    track = pkt.stream.type
+    stream_index = pkt.stream_index
+    if stream_index is -1 or None:
+        raise RuntimeError(f"Packet with an invalid stream index track={track}")
+    error_count = errors[stream_index]
+
+    try:
+        for frame in pkt.decode():
+            if error_count > 0:
+                error_count -= 1
+            yield frame
+    except av.InvalidDataError as err:
+        error_count += 1
+        logging.info(
+            f"Invalid packet pts={pkt.pts} track={track} stream={stream_index}: errors={error_count}/{DECODE_ERROR_BUDGET}"
+        )
+        if error_count > DECODE_ERROR_BUDGET:
+            raise RuntimeError(
+                f"Too many decode errors for track={track} stream={stream_index}"
+            ) from err
+
+    errors[stream_index] = error_count
