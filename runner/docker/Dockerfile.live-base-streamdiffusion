@@ -29,7 +29,7 @@ RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
 
 # Install StreamDiffusion lib into the comfystream environment
 # TODO: Update to merged hash after https://github.com/livepeer/StreamDiffusion/pull/146 is merged
-ARG STREAMDIFFUSION_VERSION=39e818a3e56c586e94dfd7b417ddf122f62783ed
+ARG STREAMDIFFUSION_VERSION=ee3c45a1ce5eb7354c49018ed7d0b0dfeaf0a600
 RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt,controlnet,ipadapter]
 
 # Install TensorRT bindings and libraries into the comfystream environment
