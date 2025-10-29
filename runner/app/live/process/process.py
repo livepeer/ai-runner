@@ -71,7 +71,7 @@ class PipelineProcess:
             is_terminating = True
             self.process.terminate()
 
-            if await self._wait_stop(5):
+            if await self._wait_stop(3):
                 is_terminating = False
 
         logging.info("Closing process queues")
@@ -88,7 +88,7 @@ class PipelineProcess:
         if is_terminating and self.is_alive():
             logging.error("Failed to terminate process, killing")
             self.process.kill()
-            if not await self._wait_stop(3):
+            if not await self._wait_stop(2):
                 logging.error(
                     f"Failed to kill process self_pid={os.getpid()} child_pid={self.process.pid} is_alive={self.process.is_alive()}"
                 )

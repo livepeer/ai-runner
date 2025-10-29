@@ -10,6 +10,77 @@ AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-r
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 PIPELINE=${PIPELINE:-all}
 
+# Select a single NVIDIA GPU interactively and export NVIDIA_VISIBLE_DEVICES.
+# Usage:
+#   select_gpu && your_command_needing_cuda
+#   # or later in the shell: echo "$NVIDIA_VISIBLE_DEVICES"
+select_gpu() {
+  # Ensure nvidia-smi is available
+  if ! command -v nvidia-smi >/dev/null 2>&1; then
+    echo "Error: nvidia-smi not found. Install NVIDIA drivers / CUDA toolkit." >&2
+    return 2
+  fi
+
+  # Fetch GPU info (index, name, total/free memory, utilization)
+  local IFS=$'\n'
+  local rows=()
+  mapfile -t rows < <(nvidia-smi \
+    --query-gpu=index,name,memory.total,memory.free,utilization.gpu \
+    --format=csv,noheader,nounits 2>/dev/null)
+
+  if ((${#rows[@]} == 0)); then
+    echo "No NVIDIA GPUs detected." >&2
+    return 3
+  fi
+
+  # Pretty-print a table
+  echo "Available NVIDIA GPUs:"
+  printf "  %-4s %-38s %10s %10s %8s\n" "IDX" "NAME" "VRAM(MB)" "FREE(MB)" "UTIL(%%)"
+  local idx name tot free util
+  for line in "${rows[@]}"; do
+    IFS=',' read -r idx name tot free util <<<"$line"
+    # trim spaces
+    idx=${idx//[[:space:]]/}
+    name=${name## }
+    tot=${tot//[[:space:]]/}
+    free=${free//[[:space:]]/}
+    util=${util//[[:space:]]/}
+    printf "  %-4s %-38s %10s %10s %8s\n" "$idx" "$name" "$tot" "$free" "$util"
+  done
+
+  # Prompt until a valid index is chosen
+  local choice found=0 sel_name
+  while :; do
+    read -r -p "Select GPU index [0-$((${#rows[@]} - 1))] (or 'q' to cancel): " choice
+    case "$choice" in
+    q | Q)
+      echo "Canceled."
+      return 1
+      ;;
+    *[!0-9]* | "") echo "Please enter a valid numeric index." ;;
+    *)
+      found=0
+      for line in "${rows[@]}"; do
+        IFS=',' read -r idx name _ <<<"$line"
+        idx=${idx//[[:space:]]/}
+        if [[ "$idx" == "$choice" ]]; then
+          sel_name=${name## }
+          found=1
+          break
+        fi
+      done
+      if ((found)); then
+        export NVIDIA_VISIBLE_DEVICES="$choice"
+        echo "Using GPU $choice ($sel_name). Exported NVIDIA_VISIBLE_DEVICES=$NVIDIA_VISIBLE_DEVICES"
+        return 0
+      else
+        echo "GPU index '$choice' not found."
+      fi
+      ;;
+    esac
+  done
+}
+
 # Checks HF_TOKEN and huggingface-cli login status and throw warning if not authenticated.
 check_hf_auth() {
   if [ -z "$HF_TOKEN" ] && [ "$(huggingface-cli whoami)" = "Not logged in" ]; then
@@ -178,7 +249,7 @@ function download_comfyui_live_models() {
   fi
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
-  docker run --rm -v ./models:/models --gpus all -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream && \
                  $CONDA_PYTHON src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
                  chown -R $(id -u):$(id -g) /models" ||
@@ -231,7 +302,7 @@ function build_streamdiffusion_tensorrt() {
   docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
 
   # SD2.1 (turbo) models
-  docker run --rm -v ./models:/models --gpus all \
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
     -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
@@ -249,7 +320,7 @@ function build_streamdiffusion_tensorrt() {
       exit 1
     )
   # SD1.5 models
-  docker run --rm -v ./models:/models --gpus all \
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
     -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
@@ -268,7 +339,7 @@ function build_streamdiffusion_tensorrt() {
       exit 1
     )
   # SDXL models
-  docker run --rm -v ./models:/models --gpus all \
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
     -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
     --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
     bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
@@ -293,7 +364,7 @@ function build_comfyui_tensorrt() {
   printf "\nBuilding ComfyUI TensorRT models...\n"
 
   # Depth-Anything-Tensorrt
-  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
                 $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
                 $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
@@ -304,7 +375,7 @@ function build_comfyui_tensorrt() {
     )
 
   # Dreamshaper-8-Dmd-1kstep
-  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
                 $CONDA_PYTHON ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
@@ -316,7 +387,7 @@ function build_comfyui_tensorrt() {
     )
 
   # Dreamshaper-8-Dmd-1kstep static dynamic 488x704
-  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
                 $CONDA_PYTHON ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
@@ -335,7 +406,7 @@ function build_comfyui_tensorrt() {
 
   # FasterLivePortrait
   FASTERLIVEPORTRAIT_DIR="/workspace/ComfyUI/models/liveportrait_onnx"
-  docker run --rm -v ./models:/models --gpus all -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "conda run -n comfystream --no-capture-output /workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
              $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR && \
                 chown -R $(id -u):$(id -g) /models" ||
@@ -397,6 +468,10 @@ for arg in "$@"; do
     display_help
     exit 0
     ;;
+  --select-gpu)
+    GPU_SELECT=1
+    shift
+    ;;
   *)
     shift
     ;;
@@ -412,6 +487,12 @@ echo "Checking if 'huggingface-cli' is installed..."
 if ! command -v huggingface-cli >/dev/null 2>&1; then
   echo "WARN: The huggingface-cli is required to download models. Please install it using 'pip install huggingface_hub[cli,hf_transfer]'."
   exit 1
+fi
+
+if [ "$GPU_SELECT" == 1 ]; then
+  select_gpu && export docker_run_flags=(--runtime nvidia -e NVIDIA_VISIBLE_DEVICES="$NVIDIA_VISIBLE_DEVICES")
+else
+  export docker_run_flags=(--gpus all)
 fi
 
 if [ "$MODE" = "beta" ]; then

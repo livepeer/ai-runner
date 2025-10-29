@@ -88,6 +88,8 @@ def encode_av(
     dropped_video = 0
     dropped_audio = 0
     audio_buffer = deque()
+    last_audio_ts = None
+    last_video_ts = None
 
     while True:
         avframe = input_queue()
@@ -131,6 +133,10 @@ def encode_av(
                     first_video_ts = current
             encoded_packets = output_video_stream.encode(frame)
             for ep in encoded_packets:
+                if last_video_ts and frame.pts <= last_video_ts:
+                    logging.info(f"Timestamps out of order; dropping video last={last_video_ts} current={frame.pts}")
+                    continue
+                last_video_ts = frame.pts
                 output_container.mux(ep)
             continue
 
@@ -196,6 +202,10 @@ def encode_av(
                 frame.time_base = output_audio_stream.codec_context.time_base
                 encoded_packets = output_audio_stream.encode(frame)
                 for ep in encoded_packets:
+                    if last_audio_ts and frame.pts <= last_audio_ts:
+                        logging.info(f"Timestamps out of order; dropping audio last={last_audio_ts} current={frame.pts}")
+                        continue
+                    last_audio_ts = frame.pts
                     output_container.mux(ep)
             if av_broken:
                 # too far out of sync, so stop encoding
