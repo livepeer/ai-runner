@@ -173,7 +173,7 @@ def decode_frames(pkt, errors: list[int, int]):
     """
     track = pkt.stream.type
     stream_index = pkt.stream_index
-    if stream_index is -1 or None:
+    if stream_index == -1 or stream_index is None:
         raise RuntimeError(f"Packet with an invalid stream index track={track}")
     error_count = errors[stream_index]
 
