@@ -326,7 +326,7 @@ def load_streamdiffusion_sync(
         lora_dict=params.lora_dict,
         mode="img2img",
         output_type="pt",
-        lcm_lora_id=params.lcm_lora_id,
+        # lcm_lora_id=params.lcm_lora_id,
         frame_buffer_size=1,
         width=params.width,
         height=params.height,
@@ -368,7 +368,7 @@ def load_streamdiffusion_sync(
 async def _load_image_from_url_or_b64(url: str) -> Image.Image:
     """
     Load an image from a URL or base64 encoded string.
-    
+
     Supports:
     - HTTP/HTTPS URLs: http://example.com/image.png
     - Data URIs: data:image/png;base64,iVBORw0KG...
@@ -376,7 +376,7 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
     """
     if not url or not isinstance(url, str):
         raise ValueError("Image URL or base64 string cannot be empty")
-            
+
     # Handle HTTP/HTTPS URLs
     if url.startswith('http://') or url.startswith('https://'):
         # Set user-agent to prevent 403 errors from servers like Wikipedia
@@ -393,7 +393,7 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
             raise ValueError(f"Failed to fetch image from URL: {e}") from e
         except asyncio.TimeoutError as e:
             raise ValueError("Request timeout while fetching image from URL") from e
-    
+
     # Handle data URI format: data:image/png;base64,<base64_data>
     elif url.startswith('data:'):
         match = re.match(r'^data:image/[a-zA-Z+]+;base64,(.+)$', url)
@@ -406,7 +406,7 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
             data = base64.b64decode(base64_data, validate=True)
         except Exception as e:
             raise ValueError(f"Invalid base64 encoding in data URI: {e}") from e
-    
+
     # Handle raw base64 string
     else:
         # Check if it looks like base64 (alphanumeric + / + = padding)
@@ -418,7 +418,7 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
             data = base64.b64decode(url, validate=True)
         except Exception as e:
             raise ValueError(f"Invalid base64 encoding: {e}") from e
-    
+
     # Attempt to decode the image data
     try:
         image = Image.open(BytesIO(data))
