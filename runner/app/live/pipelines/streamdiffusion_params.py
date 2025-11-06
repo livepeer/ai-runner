@@ -30,6 +30,11 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
     ],
 }
 
+LCM_LORAS_BY_TYPE: Dict[ModelType, str] = {
+    "sdxl": "latent-consistency/lcm-lora-sdxl",
+    "sd15": "latent-consistency/lcm-lora-sdv1-5",
+}
+
 MODEL_ID_TO_TYPE: Dict[str, ModelType] = {
     "stabilityai/sd-turbo": "sd21",
     "stabilityai/sdxl-turbo": "sdxl",

@@ -14,7 +14,7 @@ import aiohttp
 from .interface import Pipeline
 from ..trickle import VideoFrame, VideoOutput
 
-from .streamdiffusion_params import StreamDiffusionParams, IPAdapterConfig, get_model_type, IPADAPTER_SUPPORTED_TYPES
+from .streamdiffusion_params import StreamDiffusionParams, IPAdapterConfig, get_model_type, IPADAPTER_SUPPORTED_TYPES, LCM_LORAS_BY_TYPE
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -311,6 +311,22 @@ def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[s
     return ip_cfg.model_dump()
 
 
+def _prepare_lora_dict(params: StreamDiffusionParams) -> Optional[Dict[str, float]]:
+    """Prepare LoRA dictionary with LCM LoRA logic applied externally."""
+
+    is_turbo = "turbo" in params.model_id
+    if not params.use_lcm_lora or is_turbo:
+        return params.lora_dict
+
+    lora_dict = params.lora_dict.copy() if params.lora_dict else {}
+    model_type = get_model_type(params.model_id)
+    lcm_lora = LCM_LORAS_BY_TYPE[model_type]
+    if lcm_lora and lcm_lora not in lora_dict:
+        lora_dict[lcm_lora] = 1.0
+
+    return lora_dict
+
+
 def load_streamdiffusion_sync(
     params: StreamDiffusionParams,
     min_batch_size=1,
@@ -323,17 +339,15 @@ def load_streamdiffusion_sync(
         t_index_list=params.t_index_list,
         min_batch_size=min_batch_size,
         max_batch_size=max_batch_size,
-        lora_dict=params.lora_dict,
+        lora_dict=_prepare_lora_dict(params),
         mode="img2img",
         output_type="pt",
-        # lcm_lora_id=params.lcm_lora_id,
         frame_buffer_size=1,
         width=params.width,
         height=params.height,
         warmup=10,
         acceleration=params.acceleration,
         do_add_noise=params.do_add_noise,
-        use_lcm_lora=params.use_lcm_lora,
         enable_similar_image_filter=params.enable_similar_image_filter,
         similar_image_filter_threshold=params.similar_image_filter_threshold,
         similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
