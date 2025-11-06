@@ -1,6 +1,6 @@
 from typing import Dict, List, Literal, Optional, Any, Tuple
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, Field
 
 from .interface import BaseParams
 
@@ -88,9 +88,12 @@ class ControlNetConfig(BaseModel):
     conditioning_scale: float = 1.0
     """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
 
-    # TODO: better docs and use Field to require > 0
-    conditioning_channels: int = 3
-    """Number of channels in the controlnet's conditioning input tensor."""
+    conditioning_channels: int | None = Field(
+        default=None, # model-specific default derived when constructing params
+        description="Number of channels in the controlnet's conditioning input tensor. Defaults to 6 for TemporalNets and 3 for others.",
+        ge=1,
+        le=6
+    )
 
     preprocessor: Literal[
         "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation", "temporal_net_tensorrt"
@@ -161,7 +164,6 @@ _DEFAULT_CONTROLNETS = [
     ControlNetConfig(
         model_id="varb15/TemporalNet2-stable-diffusion-2-1",
         conditioning_scale=0.0,
-        conditioning_channels=6,
         preprocessor="temporal_net_tensorrt",
         preprocessor_params={
             "image_resolution": 512,

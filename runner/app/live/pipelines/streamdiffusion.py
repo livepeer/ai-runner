@@ -253,6 +253,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         preprocessor_params = (cn_config.preprocessor_params or {}).copy()
 
         # Inject preprocessor-specific parameters
+        default_cond_chans = 3
         if cn_config.preprocessor == "depth_tensorrt":
             preprocessor_params.update({
                 "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
@@ -268,6 +269,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
                 "engine_path": engine_path,
             })
         elif cn_config.preprocessor == "temporal_net_tensorrt":
+            default_cond_chans = 6
             preprocessor_params.update({
                 "engine_path": "./engines/temporal_net/raft.engine",
             })
@@ -276,6 +278,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             'model_id': cn_config.model_id,
             'preprocessor': cn_config.preprocessor,
             'conditioning_scale': cn_config.conditioning_scale,
+            'conditioning_channels': cn_config.conditioning_channels or default_cond_chans,
             'enabled': cn_config.enabled,
             'preprocessor_params': preprocessor_params,
             'control_guidance_start': cn_config.control_guidance_start,
