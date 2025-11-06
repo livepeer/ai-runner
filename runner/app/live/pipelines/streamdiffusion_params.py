@@ -1,6 +1,14 @@
-from typing import Dict, List, Literal, Optional, Any, Tuple
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Type
 
-from pydantic import BaseModel, model_validator, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .streamdiffusion_processors_params import (
+    BaseProcessorParams,
+    ControlNetPreprocessorLiteral,
+    ImageProcessorLiteral,
+    LatentProcessorLiteral,
+    preprocessors,
+)
 
 from .interface import BaseParams
 
@@ -51,6 +59,170 @@ def get_model_type(model_id: str) -> ModelType:
     return MODEL_ID_TO_TYPE[model_id]
 
 
+ProcessorRegistry = Dict[str, Type[BaseProcessorParams]]
+
+
+class ProcessorInvocation(BaseModel):
+    """Represents a single processor invocation with enable/order metadata."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    order: Optional[int] = None
+    params: BaseProcessorParams
+
+    def to_wrapper_entry(self, name: str) -> Dict[str, Any]:
+        entry: Dict[str, Any] = {"type": name, "enabled": self.enabled}
+        if self.order is not None:
+            entry["order"] = self.order
+        params_payload = self.params.model_dump(exclude_none=True)
+        if params_payload:
+            entry["params"] = params_payload
+        return entry
+
+
+def _coerce_processor_params(
+    name: str,
+    value: Any,
+    registry: ProcessorRegistry,
+) -> BaseProcessorParams:
+    config_cls = registry.get(name)
+    if config_cls is None:
+        raise ValueError(f"Unsupported processor '{name}'")
+
+    if value is None:
+        return config_cls()
+    if isinstance(value, config_cls):
+        return value
+    if isinstance(value, BaseProcessorParams):
+        return config_cls(**value.model_dump(exclude_none=True))
+    if isinstance(value, dict):
+        return config_cls(**value)
+
+    raise TypeError(
+        f"Processor '{name}' parameters must be a dict or {config_cls.__name__}, "
+        f"got {type(value).__name__}"
+    )
+
+
+def _normalize_processor_map(
+    raw_value: Any,
+    registry: ProcessorRegistry,
+    domain: str,
+) -> Dict[str, ProcessorInvocation]:
+    if raw_value is None:
+        return {}
+
+    if isinstance(raw_value, ProcessorHookConfig):
+        # Already normalized - just reuse the backing dictionary.
+        return dict(raw_value.processors)
+
+    items: List[Tuple[str, Any]]
+
+    if isinstance(raw_value, dict):
+        items = list(raw_value.items())
+    elif isinstance(raw_value, list):
+        items = []
+        for entry in raw_value:
+            if not isinstance(entry, dict):
+                raise TypeError(
+                    f"{domain.capitalize()} processors must be supplied as dictionaries; "
+                    f"received {type(entry).__name__}"
+                )
+            if "type" not in entry:
+                raise ValueError(f"{domain.capitalize()} processor entries must include a 'type'")
+            entry_copy = dict(entry)
+            proc_type = entry_copy.pop("type")
+            items.append((proc_type, entry_copy))
+    else:
+        raise TypeError(
+            f"{domain.capitalize()} processors must be defined via a mapping or list, "
+            f"received {type(raw_value).__name__}"
+        )
+
+    normalized: Dict[str, ProcessorInvocation] = {}
+    for name, payload in items:
+        if name in normalized:
+            raise ValueError(f"Duplicate {domain} processor '{name}'")
+
+        if isinstance(payload, ProcessorInvocation):
+            normalized[name] = payload
+            continue
+
+        if payload is None:
+            payload_dict: Dict[str, Any] = {}
+        elif isinstance(payload, dict):
+            payload_dict = dict(payload)
+        else:
+            # Treat bare params as shorthand for {"params": <value>}
+            payload_dict = {"params": payload}
+
+        enabled = payload_dict.pop("enabled", True)
+        order = payload_dict.pop("order", None)
+        params_data = payload_dict.pop("params", None)
+
+        if payload_dict:
+            unexpected = ", ".join(sorted(payload_dict.keys()))
+            raise ValueError(f"Unexpected fields for {domain} '{name}': {unexpected}")
+
+        params = _coerce_processor_params(name, params_data, registry)
+        normalized[name] = ProcessorInvocation(enabled=enabled, order=order, params=params)
+
+    return normalized
+
+
+class ProcessorHookConfig(BaseModel):
+    """Typed map of processor name -> invocation metadata."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    processors: Dict[str, ProcessorInvocation] = Field(default_factory=dict)
+
+    registry: ClassVar[ProcessorRegistry] = {}
+    domain: ClassVar[str] = "processor"
+
+    @field_validator("processors", mode="before")
+    @classmethod
+    def _validate_processors(cls, value: Any) -> Dict[str, ProcessorInvocation]:
+        return _normalize_processor_map(value, cls.registry, cls.domain)
+
+    def to_wrapper_payload(self) -> Dict[str, Any]:
+        ordered = list(enumerate(self.processors.items()))
+        ordered.sort(
+            key=lambda item: (
+                item[1][1].order if item[1][1].order is not None else item[0],
+                item[1][0],
+            )
+        )
+
+        payload = {
+            "enabled": self.enabled,
+            "processors": [
+                invocation.to_wrapper_entry(name) for _, (name, invocation) in ordered
+            ],
+        }
+        return payload
+
+    def iter_requires_pipeline(self) -> List[str]:
+        return [
+            name
+            for name in self.processors
+            if self.registry[name].requires_pipeline_ref
+        ]
+
+
+class ImageProcessorHookConfig(ProcessorHookConfig):
+    processors: Dict[ImageProcessorLiteral, ProcessorInvocation] = Field(default_factory=dict)
+    registry: ClassVar[ProcessorRegistry] = preprocessors.IMAGE_REGISTRY
+    domain: ClassVar[str] = "image processor"
+
+
+class LatentProcessorHookConfig(ProcessorHookConfig):
+    processors: Dict[LatentProcessorLiteral, ProcessorInvocation] = Field(default_factory=dict)
+    registry: ClassVar[ProcessorRegistry] = preprocessors.LATENT_REGISTRY
+    domain: ClassVar[str] = "latent processor"
+
 class ControlNetConfig(BaseModel):
     """
     ControlNet configuration model for guided image generation.
@@ -97,13 +269,12 @@ class ControlNetConfig(BaseModel):
         le=6
     )
 
-    preprocessor: Literal[
-        "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation", "temporal_net_tensorrt"
-    ] = "passthrough"
+    preprocessor: ControlNetPreprocessorLiteral = "passthrough"
     """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
+    # IPAdapter embedding processors are intentionally excluded here—they are handled through the IPAdapter subsystem.
 
-    preprocessor_params: Dict[str, Any] = {}
-    """Additional parameters for the preprocessor. For example, canny edge detection uses 'low_threshold' and 'high_threshold' values."""
+    preprocessor_params: BaseProcessorParams | Dict[str, Any] | None = None
+    """Typed parameters for the configured preprocessor."""
 
     enabled: bool = True
     """Whether this ControlNet is active. Disabled ControlNets are not loaded."""
@@ -114,12 +285,19 @@ class ControlNetConfig(BaseModel):
     control_guidance_end: float = 1.0
     """Fraction of the denoising process (0.0-1.0) when ControlNet guidance ends. 1.0 means guidance continues until the end."""
 
+    @model_validator(mode="after")
+    def _coerce_preprocessor_params(self) -> "ControlNetConfig":
+        params = self.preprocessor_params
+        registry = preprocessors.CONTROLNET_REGISTRY
+        params = _coerce_processor_params(self.preprocessor, params, registry)
+        self.preprocessor_params = params
+        return self
+
 _DEFAULT_CONTROLNETS = [
     ControlNetConfig(
         model_id="thibaud/controlnet-sd21-openpose-diffusers",
         conditioning_scale=0.711,
         preprocessor="pose_tensorrt",
-        preprocessor_params={},
         enabled=True,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
@@ -128,7 +306,6 @@ _DEFAULT_CONTROLNETS = [
         model_id="thibaud/controlnet-sd21-hed-diffusers",
         conditioning_scale=0.2,
         preprocessor="soft_edge",
-        preprocessor_params={},
         enabled=True,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
@@ -137,10 +314,10 @@ _DEFAULT_CONTROLNETS = [
         model_id="thibaud/controlnet-sd21-canny-diffusers",
         conditioning_scale=0.2,
         preprocessor="canny",
-        preprocessor_params={
-            "low_threshold": 100,
-            "high_threshold": 200
-        },
+        preprocessor_params=preprocessors.Canny(
+            low_threshold=100,
+            high_threshold=200,
+        ),
         enabled=True,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
@@ -149,7 +326,6 @@ _DEFAULT_CONTROLNETS = [
         model_id="thibaud/controlnet-sd21-depth-diffusers",
         conditioning_scale=0.5,
         preprocessor="depth_tensorrt",
-        preprocessor_params={},
         enabled=True,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
@@ -158,7 +334,6 @@ _DEFAULT_CONTROLNETS = [
         model_id="thibaud/controlnet-sd21-color-diffusers",
         conditioning_scale=0.2,
         preprocessor="passthrough",
-        preprocessor_params={},
         enabled=True,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
@@ -167,9 +342,7 @@ _DEFAULT_CONTROLNETS = [
         model_id="daydreamlive/TemporalNet2-stable-diffusion-2-1",
         conditioning_scale=0.0,
         preprocessor="temporal_net_tensorrt",
-        preprocessor_params={
-            "flow_strength": 0.4,
-        },
+        preprocessor_params=preprocessors.TemporalNetTensorRT(flow_strength=0.4),
         enabled=True,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
@@ -314,12 +487,33 @@ class StreamDiffusionParams(BaseParams):
     controlnets: Optional[List[ControlNetConfig]] = _DEFAULT_CONTROLNETS
     """List of ControlNet configurations for guided generation. Each ControlNet provides different types of conditioning (pose, edges, depth, etc.)."""
 
+    # Pipeline hook settings
+    image_preprocessing: Optional[ImageProcessorHookConfig] = None
+    """Typed image-domain preprocessing chain applied before the main pipeline."""
+
+    image_postprocessing: Optional[ImageProcessorHookConfig] = None
+    """Typed image-domain postprocessing chain applied after pipeline outputs."""
+
+    latent_preprocessing: Optional[LatentProcessorHookConfig] = None
+    """Typed latent-domain preprocessing chain. Feedback processors may require additional normalization depending on hook placement."""
+
     # IPAdapter settings
     ip_adapter: Optional[IPAdapterConfig] = IPAdapterConfig(enabled=False)
     """IPAdapter configuration for style transfer."""
 
     ip_adapter_style_image_url: str = "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"
     """URL to fetch the style image for IPAdapter."""
+
+    def build_hook_payloads(self) -> Dict[str, Any]:
+        """Translate typed processor hooks into the wrapper's expected payload shape."""
+        payload: Dict[str, Any] = {}
+        if self.image_preprocessing:
+            payload["image_preprocessing_config"] = self.image_preprocessing.to_wrapper_payload()
+        if self.image_postprocessing:
+            payload["image_postprocessing_config"] = self.image_postprocessing.to_wrapper_payload()
+        if self.latent_preprocessing:
+            payload["latent_preprocessing_config"] = self.latent_preprocessing.to_wrapper_payload()
+        return payload
 
     @model_validator(mode="after")
     @staticmethod

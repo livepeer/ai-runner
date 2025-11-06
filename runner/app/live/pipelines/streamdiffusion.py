@@ -15,6 +15,13 @@ from .interface import Pipeline
 from ..trickle import VideoFrame, VideoOutput
 
 from .streamdiffusion_params import StreamDiffusionParams, IPAdapterConfig, get_model_type, IPADAPTER_SUPPORTED_TYPES, LCM_LORAS_BY_TYPE
+from .streamdiffusion_processors_params import BaseProcessorParams
+
+HOOK_WRAPPER_KEYS = {
+    "image_preprocessing": "image_preprocessing_config",
+    "image_postprocessing": "image_postprocessing_config",
+    "latent_preprocessing": "latent_preprocessing_config",
+}
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -153,7 +160,8 @@ class StreamDiffusion(Pipeline):
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
             'use_safety_checker', 'safety_checker_threshold', 'controlnets',
-            'ip_adapter', 'ip_adapter_style_image_url'
+            'ip_adapter', 'ip_adapter_style_image_url',
+            'image_preprocessing', 'image_postprocessing', 'latent_preprocessing',
         }
 
         update_kwargs = {}
@@ -174,6 +182,11 @@ class StreamDiffusion(Pipeline):
                 update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
             elif key == 'controlnets':
                 update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
+            elif key in HOOK_WRAPPER_KEYS:
+                hook = getattr(new_params, key)
+                update_kwargs[HOOK_WRAPPER_KEYS[key]] = (
+                    hook.to_wrapper_payload() if hook else {"enabled": False, "processors": []}
+                )
             elif key == 'ip_adapter':
                 # Check if only dynamic params have changed
                 only_dynamic_changes = curr_params.get('ip_adapter') or IPAdapterConfig().model_dump()
@@ -250,7 +263,16 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         if not cn_config.enabled:
             continue
 
-        preprocessor_params = (cn_config.preprocessor_params or {}).copy()
+        params_model = cn_config.preprocessor_params
+        if isinstance(params_model, BaseProcessorParams):
+            preprocessor_params = params_model.model_dump(exclude_none=True)
+        elif isinstance(params_model, dict):
+            preprocessor_params = dict(params_model)
+        else:
+            raise TypeError(
+                f"Unsupported preprocessor params type {type(params_model).__name__} "
+                f"for '{cn_config.preprocessor}'"
+            )
 
         # Inject preprocessor-specific parameters
         default_cond_chans = 3
@@ -348,7 +370,9 @@ def load_streamdiffusion_sync(
     engine_dir="engines",
     build_engines=False,
 ) -> StreamDiffusionWrapper:
-    pipe = StreamDiffusionWrapper(
+    hook_payloads = params.build_hook_payloads()
+    wrapper_cls = cast(Any, StreamDiffusionWrapper)
+    pipe = wrapper_cls(
         model_id_or_path=params.model_id,
         t_index_list=params.t_index_list,
         min_batch_size=min_batch_size,
@@ -374,6 +398,9 @@ def load_streamdiffusion_sync(
         use_ipadapter=get_model_type(params.model_id) in IPADAPTER_SUPPORTED_TYPES,
         ipadapter_config=_prepare_ipadapter_configs(params),
         engine_dir=engine_dir,
+        image_preprocessing_config=hook_payloads.get("image_preprocessing_config"),
+        image_postprocessing_config=hook_payloads.get("image_postprocessing_config"),
+        latent_preprocessing_config=hook_payloads.get("latent_preprocessing_config"),
         build_engines_if_missing=build_engines,
         compile_engines_only=build_engines,
         use_safety_checker=params.use_safety_checker,
