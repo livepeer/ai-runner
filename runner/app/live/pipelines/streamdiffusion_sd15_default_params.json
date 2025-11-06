@@ -51,7 +51,7 @@
       "control_guidance_end": 1.0
     },
     {
-      "model_id": "varb15/TemporalNet2-stable-diffusion-2-1",
+      "model_id": "daydreamlive/TemporalNet2-stable-diffusion-2-1",
       "conditioning_scale": 0.0,
       "preprocessor": "temporal_net_tensorrt",
       "preprocessor_params": {

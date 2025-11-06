@@ -17,7 +17,7 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
         "thibaud/controlnet-sd21-color-diffusers",
         "thibaud/controlnet-sd21-ade20k-diffusers",
         "thibaud/controlnet-sd21-normalbae-diffusers",
-        "varb15/TemporalNet2-stable-diffusion-2-1",
+        "daydreamlive/TemporalNet2-stable-diffusion-2-1",
     ],
     "sd15": [
         "lllyasviel/control_v11f1p_sd15_depth",
@@ -29,6 +29,7 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
         "xinsir/controlnet-depth-sdxl-1.0",
         "xinsir/controlnet-canny-sdxl-1.0",
         "xinsir/controlnet-tile-sdxl-1.0",
+        "daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0",
     ],
 }
 
@@ -68,7 +69,7 @@ class ControlNetConfig(BaseModel):
         "thibaud/controlnet-sd21-color-diffusers",
         "thibaud/controlnet-sd21-ade20k-diffusers",
         "thibaud/controlnet-sd21-normalbae-diffusers",
-        "varb15/TemporalNet2-stable-diffusion-2-1",
+        "daydreamlive/TemporalNet2-stable-diffusion-2-1",
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
@@ -76,6 +77,7 @@ class ControlNetConfig(BaseModel):
         "xinsir/controlnet-depth-sdxl-1.0",
         "xinsir/controlnet-canny-sdxl-1.0",
         "xinsir/controlnet-tile-sdxl-1.0",
+        "daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0",
     ]
     """ControlNet model identifier. Each model provides different types of conditioning:
     - openpose: Human pose estimation for figure control
@@ -162,7 +164,7 @@ _DEFAULT_CONTROLNETS = [
         control_guidance_end=1.0,
     ),
     ControlNetConfig(
-        model_id="varb15/TemporalNet2-stable-diffusion-2-1",
+        model_id="daydreamlive/TemporalNet2-stable-diffusion-2-1",
         conditioning_scale=0.0,
         preprocessor="temporal_net_tensorrt",
         preprocessor_params={
