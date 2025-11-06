@@ -346,7 +346,7 @@ function build_raft_engine() {
     engines_dir="$(readlink -f "$OUTPUT_DIR/temporal_net")"
     mkdir -p "$engines_dir"
 
-    python -m streamdiffusion.tools.compile_raft_tensorrt --resolution 512 --output_dir $engines_dir
+    python -m streamdiffusion.tools.compile_raft_tensorrt --min_resolution 384 --max_resolution 1024 --output_dir $engines_dir
 }
 
 if [ "$BUILD_DEPTH_ANYTHING" = true ]; then
