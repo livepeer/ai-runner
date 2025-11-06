@@ -88,6 +88,10 @@ class ControlNetConfig(BaseModel):
     conditioning_scale: float = 1.0
     """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
 
+    # TODO: better docs and use Field to require > 0
+    conditioning_channels: int = 3
+    """Number of channels in the controlnet's conditioning input tensor."""
+
     preprocessor: Literal[
         "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation", "temporal_net_tensorrt"
     ] = "passthrough"
@@ -157,8 +161,12 @@ _DEFAULT_CONTROLNETS = [
     ControlNetConfig(
         model_id="varb15/TemporalNet2-stable-diffusion-2-1",
         conditioning_scale=0.0,
+        conditioning_channels=6,
         preprocessor="temporal_net_tensorrt",
-        preprocessor_params={},
+        preprocessor_params={
+            "image_resolution": 512,
+            "flow_strength": 0.4,
+        },
         enabled=True,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
