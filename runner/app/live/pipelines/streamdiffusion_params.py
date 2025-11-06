@@ -318,7 +318,7 @@ class StreamDiffusionParams(BaseParams):
     ip_adapter: Optional[IPAdapterConfig] = IPAdapterConfig(enabled=False)
     """IPAdapter configuration for style transfer."""
 
-    ip_adapter_style_image_url: str = "https://ipfs.livepeer.com/ipfs/bafkreibnlg3nfizj6ixc2flljo3pewo2ycnxitczawu4d5vmxkejnjwxca"
+    ip_adapter_style_image_url: str = "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"
     """URL to fetch the style image for IPAdapter."""
 
     @model_validator(mode="after")

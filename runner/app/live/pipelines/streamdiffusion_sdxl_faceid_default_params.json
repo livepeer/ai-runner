@@ -58,5 +58,5 @@
     "scale": 1,
     "enabled": true
   },
-  "ip_adapter_style_image_url": "https://ipfs.livepeer.com/ipfs/bafkreifyvsoa6pbt5r5ahedl6ann4nsp7m2vezkjuwn7uvxuqbie2un4wi"
+  "ip_adapter_style_image_url": "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/faceid/mona_lisa.jpeg"
 }
