@@ -274,6 +274,13 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
                 "engine_path": "./engines/temporal_net/raft.engine",
             })
 
+        # Any preprocessors may make use of the image resolution params from the base preprocessor class.
+        if not any(k in preprocessor_params for k in ['image_resolution', 'image_width', 'image_height']):
+            if params.width == params.height:
+                preprocessor_params.update({'image_resolution': params.width})
+            else:
+                preprocessor_params.update({'image_width': params.width, 'image_height': params.height})
+
         controlnet_config = {
             'model_id': cn_config.model_id,
             'preprocessor': cn_config.preprocessor,

@@ -166,7 +166,6 @@ _DEFAULT_CONTROLNETS = [
         conditioning_scale=0.0,
         preprocessor="temporal_net_tensorrt",
         preprocessor_params={
-            "image_resolution": 512,
             "flow_strength": 0.4,
         },
         enabled=True,
