@@ -1,4 +1,4 @@
-from typing import Dict, List, Literal, Optional, Any, Tuple
+from typing import Dict, List, Literal, Optional, Any, Tuple, TypeVar, Generic
 
 from pydantic import BaseModel, model_validator, Field
 
@@ -50,6 +50,67 @@ def get_model_type(model_id: str) -> ModelType:
         raise ValueError(f"Invalid model_id: {model_id}")
     return MODEL_ID_TO_TYPE[model_id]
 
+ImageProcessorName = Literal[
+    "blur",
+    "canny",
+    "depth",
+    "depth_tensorrt",
+    "external",
+    "feedback",
+    "hed",
+    "lineart",
+    "mediapipe_pose",
+    "mediapipe_segmentation",
+    "openpose",
+    "passthrough",
+    "pose_tensorrt",
+    "realesrgan_trt",
+    "sharpen",
+    "soft_edge",
+    "standard_lineart",
+    "temporal_net_tensorrt",
+    "upscale",
+]
+
+LatentProcessorsName = Literal["latent_feedback"]
+
+ProcessorParams = Dict[str, Any]
+
+ProcessorTypeT = TypeVar("ProcessorTypeT")
+
+class SingleProcessorConfig(BaseModel, Generic[ProcessorTypeT]):
+    """
+    Generic preprocessor configuration model.
+
+    Type parameter ProcessorTypeT should be a Literal type defining the available processor types.
+    """
+    class Config:
+        extra = "forbid"
+
+    type: ProcessorTypeT
+    """Type of the preprocessor."""
+
+    enabled: bool = True
+    """Whether this preprocessor is active."""
+
+    # Library has an "order" field, but we simply populate it with the index of the processor in the list
+    # order: int
+
+    params: ProcessorParams = {}
+    """Parameters for the preprocessor."""
+
+class ProcessingConfig(BaseModel, Generic[ProcessorTypeT]):
+    """
+    Generic image and latent preprocessing configuration model.
+    """
+    class Config:
+        extra = "forbid"
+
+    enabled: bool = True
+    """Whether this preprocessing is active."""
+
+    processors: List[SingleProcessorConfig[ProcessorTypeT]] = []
+    """List of processors to apply."""
 
 class ControlNetConfig(BaseModel):
     """
@@ -97,12 +158,10 @@ class ControlNetConfig(BaseModel):
         le=6
     )
 
-    preprocessor: Literal[
-        "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation", "temporal_net_tensorrt"
-    ] = "passthrough"
+    preprocessor: ImageProcessorName = "passthrough"
     """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
 
-    preprocessor_params: Dict[str, Any] = {}
+    preprocessor_params: ProcessorParams = {}
     """Additional parameters for the preprocessor. For example, canny edge detection uses 'low_threshold' and 'high_threshold' values."""
 
     enabled: bool = True
@@ -320,6 +379,17 @@ class StreamDiffusionParams(BaseParams):
 
     ip_adapter_style_image_url: str = "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"
     """URL to fetch the style image for IPAdapter."""
+
+    # Processors
+
+    image_preprocessing: Optional[ProcessingConfig[ImageProcessorName]] = None
+    """List of image preprocessor configurations for image processing."""
+
+    image_postprocessing: Optional[ProcessingConfig[ImageProcessorName]] = None
+    """List of image postprocessor configurations for image processing."""
+
+    latent_preprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
+    """List of latent preprocessor configurations for latent processing."""
 
     @model_validator(mode="after")
     @staticmethod
