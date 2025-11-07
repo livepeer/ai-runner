@@ -350,7 +350,7 @@ def _prepare_lora_dict(params: StreamDiffusionParams) -> Optional[Dict[str, floa
 
     lora_dict = params.lora_dict.copy() if params.lora_dict else {}
     model_type = get_model_type(params.model_id)
-    lcm_lora = LCM_LORAS_BY_TYPE[model_type]
+    lcm_lora = LCM_LORAS_BY_TYPE.get(model_type)
     if lcm_lora and lcm_lora not in lora_dict:
         lora_dict[lcm_lora] = 1.0
 
