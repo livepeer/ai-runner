@@ -23,7 +23,7 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
-        "daydreamlive/TemporalNet2-stable-diffusion-1-5",
+        "daydreamlive/TemporalNet2-stable-diffusion-v1-5",
     ],
     "sdxl": [
         "xinsir/controlnet-depth-sdxl-1.0",
@@ -134,7 +134,7 @@ class ControlNetConfig(BaseModel):
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
-        "daydreamlive/TemporalNet2-stable-diffusion-1-5",
+        "daydreamlive/TemporalNet2-stable-diffusion-v1-5",
         "xinsir/controlnet-depth-sdxl-1.0",
         "xinsir/controlnet-canny-sdxl-1.0",
         "xinsir/controlnet-tile-sdxl-1.0",

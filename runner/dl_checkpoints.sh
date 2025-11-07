@@ -218,7 +218,7 @@ function download_streamdiffusion_live_models() {
   huggingface-cli download lllyasviel/control_v11f1p_sd15_depth --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download lllyasviel/control_v11f1e_sd15_tile --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download lllyasviel/control_v11p_sd15_canny --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download daydreamlive/TemporalNet2-stable-diffusion-1-5 --include "config.json" "diffusion_pytorch_model.safetensors" --cache-dir models
+  huggingface-cli download daydreamlive/TemporalNet2-stable-diffusion-v1-5 --include "config.json" "diffusion_pytorch_model.safetensors" --cache-dir models
   # SDXL controlnet models
   huggingface-cli download xinsir/controlnet-depth-sdxl-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download xinsir/controlnet-canny-sdxl-1.0 --include "diffusion_pytorch_model.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
@@ -332,7 +332,7 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny daydreamlive/TemporalNet2-stable-diffusion-1-5' \
+              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny daydreamlive/TemporalNet2-stable-diffusion-v1-5' \
               --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \

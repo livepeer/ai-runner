@@ -51,7 +51,7 @@
       "control_guidance_end": 1.0
     },
     {
-      "model_id": "daydreamlive/TemporalNet2-stable-diffusion-1-5",
+      "model_id": "daydreamlive/TemporalNet2-stable-diffusion-v1-5",
       "conditioning_scale": 0.0,
       "preprocessor": "temporal_net_tensorrt",
       "preprocessor_params": {
