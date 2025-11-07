@@ -14,7 +14,14 @@ import aiohttp
 from .interface import Pipeline
 from ..trickle import VideoFrame, VideoOutput
 
-from .streamdiffusion_params import StreamDiffusionParams, IPAdapterConfig, get_model_type, IPADAPTER_SUPPORTED_TYPES, LCM_LORAS_BY_TYPE
+from .streamdiffusion_params import (
+    StreamDiffusionParams,
+    IPAdapterConfig,
+    ProcessingConfig,
+    get_model_type,
+    IPADAPTER_SUPPORTED_TYPES,
+    LCM_LORAS_BY_TYPE
+)
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -153,7 +160,8 @@ class StreamDiffusion(Pipeline):
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
             'use_safety_checker', 'safety_checker_threshold', 'controlnets',
-            'ip_adapter', 'ip_adapter_style_image_url'
+            'ip_adapter', 'ip_adapter_style_image_url',
+            'image_preprocessing', 'image_postprocessing', 'latent_preprocessing',
         }
 
         update_kwargs = {}
@@ -187,6 +195,15 @@ class StreamDiffusion(Pipeline):
             elif key == 'ip_adapter_style_image_url':
                 # Do not set on update_kwargs, we'll update it separately.
                 changed_ipadapter = True
+            elif key == 'image_preprocessing':
+                config = _prepare_processing_config(new_params.image_preprocessing)
+                update_kwargs['image_preprocessing_config'] = config['processors'] if config else []
+            elif key == 'image_postprocessing':
+                config = _prepare_processing_config(new_params.image_postprocessing)
+                update_kwargs['image_postprocessing_config'] = config['processors'] if config else []
+            elif key == 'latent_preprocessing':
+                config = _prepare_processing_config(new_params.latent_preprocessing)
+                update_kwargs['latent_preprocessing_config'] = config['processors'] if config else []
             else:
                 update_kwargs[key] = new_value
 
@@ -340,6 +357,24 @@ def _prepare_lora_dict(params: StreamDiffusionParams) -> Optional[Dict[str, floa
 
     return lora_dict
 
+def _prepare_processing_config(cfg: Optional[ProcessingConfig[str]]) -> Dict[str, Any]:
+    """Prepare processing configuration for wrapper."""
+    if not cfg:
+        return {}
+
+    processors: List[Dict[str, Any]] = []
+    for idx, p in enumerate(cfg.processors):
+        processors.append({
+            "type": p.type,
+            "enabled": p.enabled,
+            "order": idx,
+            "params": p.params or {},
+        })
+
+    return {
+        "enabled": cfg.enabled,
+        "processors": processors,
+    }
 
 def load_streamdiffusion_sync(
     params: StreamDiffusionParams,
@@ -376,6 +411,10 @@ def load_streamdiffusion_sync(
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines,
         compile_engines_only=build_engines,
+        image_preprocessing_config=_prepare_processing_config(params.image_preprocessing),
+        image_postprocessing_config=_prepare_processing_config(params.image_postprocessing),
+        latent_preprocessing_config=_prepare_processing_config(params.latent_preprocessing),
+        latent_postprocessing_config=None,
         use_safety_checker=params.use_safety_checker,
         safety_checker_threshold=params.safety_checker_threshold,
     )
