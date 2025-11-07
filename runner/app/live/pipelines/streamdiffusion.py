@@ -160,8 +160,8 @@ class StreamDiffusion(Pipeline):
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
             'use_safety_checker', 'safety_checker_threshold', 'controlnets',
+            'image_preprocessing', 'image_postprocessing', 'latent_preprocessing', 'latent_postprocessing',
             'ip_adapter', 'ip_adapter_style_image_url',
-            'image_preprocessing', 'image_postprocessing', 'latent_preprocessing',
         }
 
         update_kwargs = {}
@@ -196,14 +196,13 @@ class StreamDiffusion(Pipeline):
                 # Do not set on update_kwargs, we'll update it separately.
                 changed_ipadapter = True
             elif key == 'image_preprocessing':
-                config = _prepare_processing_config(new_params.image_preprocessing)
-                update_kwargs['image_preprocessing_config'] = config['processors'] if config else []
+                update_kwargs['image_preprocessing_config'] = _prepare_processing_config(new_params.image_preprocessing)['processors']
             elif key == 'image_postprocessing':
-                config = _prepare_processing_config(new_params.image_postprocessing)
-                update_kwargs['image_postprocessing_config'] = config['processors'] if config else []
+                update_kwargs['image_postprocessing_config'] = _prepare_processing_config(new_params.image_postprocessing)['processors']
             elif key == 'latent_preprocessing':
-                config = _prepare_processing_config(new_params.latent_preprocessing)
-                update_kwargs['latent_preprocessing_config'] = config['processors'] if config else []
+                update_kwargs['latent_preprocessing_config'] = _prepare_processing_config(new_params.latent_preprocessing)['processors']
+            elif key == 'latent_postprocessing':
+                update_kwargs['latent_postprocessing_config'] = _prepare_processing_config(new_params.latent_postprocessing)['processors']
             else:
                 update_kwargs[key] = new_value
 
@@ -357,10 +356,14 @@ def _prepare_lora_dict(params: StreamDiffusionParams) -> Optional[Dict[str, floa
 
     return lora_dict
 
-def _prepare_processing_config(cfg: Optional[ProcessingConfig[str]]) -> Dict[str, Any]:
-    """Prepare processing configuration for wrapper."""
-    if not cfg:
-        return {}
+def _prepare_processing_config(cfg: Optional[ProcessingConfig[Any]]) -> Dict[str, Any]:
+    """
+    Prepare processing configuration for wrapper in the raw JSON format expected by the library.
+    Always sends enabled=True to the library. When cfg.enabled=False, sends empty processors list.
+    Automatically sets the order of the processors based on the index of the processor in the list.
+    """
+    if not cfg or not cfg.enabled:
+        return {"enabled": True, "processors": []}
 
     processors: List[Dict[str, Any]] = []
     for idx, p in enumerate(cfg.processors):
@@ -372,7 +375,7 @@ def _prepare_processing_config(cfg: Optional[ProcessingConfig[str]]) -> Dict[str
         })
 
     return {
-        "enabled": cfg.enabled,
+        "enabled": True,
         "processors": processors,
     }
 
@@ -414,7 +417,7 @@ def load_streamdiffusion_sync(
         image_preprocessing_config=_prepare_processing_config(params.image_preprocessing),
         image_postprocessing_config=_prepare_processing_config(params.image_postprocessing),
         latent_preprocessing_config=_prepare_processing_config(params.latent_preprocessing),
-        latent_postprocessing_config=None,
+        latent_postprocessing_config=_prepare_processing_config(params.latent_postprocessing),
         use_safety_checker=params.use_safety_checker,
         safety_checker_threshold=params.safety_checker_threshold,
     )

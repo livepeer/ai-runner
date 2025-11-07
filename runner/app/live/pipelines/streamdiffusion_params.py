@@ -76,7 +76,7 @@ LatentProcessorsName = Literal["latent_feedback"]
 
 ProcessorParams = Dict[str, Any]
 
-ProcessorTypeT = TypeVar("ProcessorTypeT")
+ProcessorTypeT = TypeVar("ProcessorTypeT", bound=str)
 
 class SingleProcessorConfig(BaseModel, Generic[ProcessorTypeT]):
     """
@@ -390,6 +390,9 @@ class StreamDiffusionParams(BaseParams):
 
     latent_preprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
     """List of latent preprocessor configurations for latent processing."""
+
+    latent_postprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
+    """List of latent postprocessor configurations for latent processing."""
 
     @model_validator(mode="after")
     @staticmethod
