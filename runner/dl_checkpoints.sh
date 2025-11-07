@@ -316,6 +316,7 @@ function build_streamdiffusion_tensorrt() {
               --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers thibaud/controlnet-sd21-ade20k-diffusers thibaud/controlnet-sd21-normalbae-diffusers' \
               --build-depth-anything \
               --build-pose \
+              --build-raft \
               && \
             chown -R $(id -u):$(id -g) /models" ||
     (
@@ -335,6 +336,7 @@ function build_streamdiffusion_tensorrt() {
               --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \
+              --build-raft \
               && \
             chown -R $(id -u):$(id -g) /models" ||
     (
@@ -355,6 +357,7 @@ function build_streamdiffusion_tensorrt() {
               --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \
+              --build-raft \
               && \
             chown -R $(id -u):$(id -g) /models" ||
     (
