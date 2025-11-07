@@ -313,7 +313,7 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers thibaud/controlnet-sd21-ade20k-diffusers thibaud/controlnet-sd21-normalbae-diffusers' \
+              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers thibaud/controlnet-sd21-ade20k-diffusers thibaud/controlnet-sd21-normalbae-diffusers daydreamlive/TemporalNet2-stable-diffusion-2-1' \
               --build-depth-anything \
               --build-pose \
               --build-raft \
@@ -332,7 +332,7 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny' \
+              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny CiaraRowles/TemporalNet2' \
               --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \
@@ -353,7 +353,7 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '1' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'xinsir/controlnet-depth-sdxl-1.0 xinsir/controlnet-canny-sdxl-1.0 xinsir/controlnet-tile-sdxl-1.0' \
+              --controlnets 'xinsir/controlnet-depth-sdxl-1.0 xinsir/controlnet-canny-sdxl-1.0 xinsir/controlnet-tile-sdxl-1.0 daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0' \
               --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \
