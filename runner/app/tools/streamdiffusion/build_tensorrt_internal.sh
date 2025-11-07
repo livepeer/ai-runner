@@ -165,6 +165,20 @@ else
 fi
 echo
 
+# We need to build the RAFT engine beforehand because it's required by the TemporalNet ControlNet compilation.
+function build_raft_engine() {
+    echo "Building RAFT TensorRT engine..."
+
+    engines_dir="$(readlink -f "$OUTPUT_DIR/temporal_net")"
+    mkdir -p "$engines_dir"
+
+    $CONDA_PYTHON -m streamdiffusion.tools.compile_raft_tensorrt --min_resolution 384 --max_resolution 1024 --output_dir $engines_dir
+}
+
+if [ "$BUILD_RAFT" = true ]; then
+    build_raft_engine || exit 1
+fi
+
 total_builds=0
 
 # Calculate total number of builds
@@ -340,25 +354,12 @@ function build_pose_engine() {
     echo
 }
 
-function build_raft_engine() {
-    echo "Building RAFT TensorRT engine..."
-
-    engines_dir="$(readlink -f "$OUTPUT_DIR/temporal_net")"
-    mkdir -p "$engines_dir"
-
-    $CONDA_PYTHON -m streamdiffusion.tools.compile_raft_tensorrt --min_resolution 384 --max_resolution 1024 --output_dir $engines_dir
-}
-
 if [ "$BUILD_DEPTH_ANYTHING" = true ]; then
     build_depth_anything_engine || exit 1
 fi
 
 if [ "$BUILD_POSE" = true ]; then
     build_pose_engine || exit 1
-fi
-
-if [ "$BUILD_RAFT" = true ]; then
-    build_raft_engine || exit 1
 fi
 
 # Summary
