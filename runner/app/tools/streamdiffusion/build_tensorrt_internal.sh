@@ -350,7 +350,7 @@ function build_raft_engine() {
         echo "RAFT TensorRT engine already exists at $engines_dir/raft.engine. Skipping build."
         return 0
     fi
-    python -m streamdiffusion.tools.compile_raft_tensorrt --min_resolution 384 --max_resolution 1024 --output_dir $engines_dir
+    $CONDA_PYTHON -m streamdiffusion.tools.compile_raft_tensorrt --min_resolution 384 --max_resolution 1024 --output_dir $engines_dir
 }
 
 if [ "$BUILD_DEPTH_ANYTHING" = true ]; then
