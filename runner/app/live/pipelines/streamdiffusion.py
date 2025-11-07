@@ -400,6 +400,7 @@ def load_streamdiffusion_sync(
         warmup=10,
         acceleration=params.acceleration,
         do_add_noise=params.do_add_noise,
+        skip_diffusion=params.skip_diffusion,
         enable_similar_image_filter=params.enable_similar_image_filter,
         similar_image_filter_threshold=params.similar_image_filter_threshold,
         similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,

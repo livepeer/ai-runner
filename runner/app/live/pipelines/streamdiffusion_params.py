@@ -350,6 +350,9 @@ class StreamDiffusionParams(BaseParams):
     do_add_noise: bool = True
     """Whether to add noise to input frames before processing. Enabling this slightly re-noises each frame to improve temporal stability, reduce ghosting/texture sticking, and prevent drift; disabling can yield sharper, lower-latency results but may increase flicker and artifact accumulation over time."""
 
+    skip_diffusion: bool = False
+    """Whether to skip diffusion and apply only preprocessing/postprocessing hooks. When True, bypasses VAE encoding, diffusion, and VAE decoding, but still applies image preprocessing and postprocessing hooks for consistent processing."""
+
     seed: int | List[Tuple[int, float]] = 789
     """Random seed for generation. Can be a single integer or weighted list of (seed, weight) tuples."""
 
