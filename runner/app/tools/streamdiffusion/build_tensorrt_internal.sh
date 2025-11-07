@@ -346,10 +346,6 @@ function build_raft_engine() {
     engines_dir="$(readlink -f "$OUTPUT_DIR/temporal_net")"
     mkdir -p "$engines_dir"
 
-    if [ -f "$engines_dir/raft.engine" ]; then
-        echo "RAFT TensorRT engine already exists at $engines_dir/raft.engine. Skipping build."
-        return 0
-    fi
     $CONDA_PYTHON -m streamdiffusion.tools.compile_raft_tensorrt --min_resolution 384 --max_resolution 1024 --output_dir $engines_dir
 }
 
