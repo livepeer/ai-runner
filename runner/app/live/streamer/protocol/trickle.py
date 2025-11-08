@@ -12,7 +12,7 @@ from .protocol import StreamProtocol
 from .last_value_cache import LastValueCache
 
 class TrickleProtocol(StreamProtocol):
-    def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None, width: Optional[int] = DEFAULT_WIDTH, height: Optional[int] = DEFAULT_HEIGHT):
+    def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None, input_width: Optional[int] = DEFAULT_WIDTH, input_height: Optional[int] = DEFAULT_HEIGHT, output_width: Optional[int] = None, output_height: Optional[int] = None):
         self.subscribe_url = subscribe_url
         self.publish_url = publish_url
         self.control_url = control_url
@@ -23,18 +23,20 @@ class TrickleProtocol(StreamProtocol):
         self.events_publisher = None
         self.subscribe_task = None
         self.publish_task = None
-        self.width = width
-        self.height = height
+        self.input_width = input_width
+        self.input_height = input_height
+        self.output_width = output_width if output_width is not None else input_width
+        self.output_height = output_height if output_height is not None else input_height
 
     async def start(self):
         self.subscribe_queue = queue.Queue[InputFrame]()
         self.publish_queue = queue.Queue[OutputFrame]()
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
-            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, self.width, self.height)
+            media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, self.input_width, self.input_height)
         )
         self.publish_task = asyncio.create_task(
-            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event)
+            media.run_publish(self.publish_url, self.publish_queue.get, metadata_cache.get, self.emit_monitoring_event, self.output_width, self.output_height)
         )
         if self.control_url and self.control_url.strip() != "":
             self.control_subscriber = TrickleSubscriber(self.control_url)

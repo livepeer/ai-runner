@@ -124,23 +124,36 @@ async def handle_start_stream(request: web.Request):
         config_logging(request_id=params.request_id, manifest_id=params.manifest_id, stream_id=params.stream_id)
 
         # Try to get dimensions from workflow first
-        width = params.params.get("width", DEFAULT_WIDTH)
-        height = params.params.get("height", DEFAULT_HEIGHT)
+        input_width = params.params.get("width", DEFAULT_WIDTH)
+        input_height = params.params.get("height", DEFAULT_HEIGHT)
+        output_width, output_height = input_width, input_height
         if process.pipeline == "comfyui":
             # TODO: Remove this once ComfyUI pipeline supports different resolutions without a restart
-            width = height = 512
-            params.params = params.params | {"width": width, "height": height}
+            input_width = input_height = 512
+            params.params = params.params | {"width": input_width, "height": input_height}
             logging.warning("Using default dimensions for ComfyUI pipeline")
         else:
-            logging.info(f"Using dimensions from params: {width}x{height}")
+            logging.info(f"Using dimensions from params: {output_width}x{output_height}")
+
+        if process.pipeline == "streamdiffusion":
+            post_proc = params.params.get("image_postprocessing", {})
+            upscale_count = 0
+            for proc in post_proc.get("processors", []):
+                if proc.get("type") == "upscale":
+                    output_width, output_height = 2 * output_width, 2 * output_height
+                    upscale_count += 1
+            if upscale_count > 0:
+                logging.info(f"Applied {upscale_count} upscale(s), output dimensions: {output_width}x{output_height}")
 
         protocol = TrickleProtocol(
             params.subscribe_url,
             params.publish_url,
             params.control_url,
             params.events_url,
-            width,
-            height,
+            input_width,
+            input_height,
+            output_width,
+            output_height,
         )
         streamer = PipelineStreamer(
             protocol,
