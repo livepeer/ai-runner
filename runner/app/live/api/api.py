@@ -140,7 +140,10 @@ async def handle_start_stream(request: web.Request):
             upscale_count = 0
             for proc in post_proc.get("processors", []):
                 if proc.get("type") == "upscale":
-                    output_width, output_height = 2 * output_width, 2 * output_height
+                    proc_params = proc.get("params", {})
+                    scale_factor = proc_params.get("scale_factor", 2.0)
+                    output_width = int(output_width * scale_factor)
+                    output_height = int(output_height * scale_factor)
                     upscale_count += 1
             if upscale_count > 0:
                 logging.info(f"Applied {upscale_count} upscale(s), output dimensions: {output_width}x{output_height}")
