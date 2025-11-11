@@ -317,8 +317,12 @@ class StreamDiffusionParams(BaseParams):
     delta: float = 0.7
     """Delta sets per-frame denoising progress: lower delta means steadier, less flicker but slower/softer; higher delta means faster, sharper but more flicker/artifacts (often reduce CFG)."""
 
-    num_inference_steps: int = 50
-    """Builds the full denoising schedule (the "grid" of possible refinement steps). Changing it changes what each step number (t_index_list value) means. Keep it fixed for a session and only adjust if you're deliberately redefining the schedule; if you do, proportionally remap your t_index_list. Typical range 10–200 with default being 50."""
+    num_inference_steps: int = Field(
+        default=50,
+        ge=1,
+        le=100,
+        description='Builds the full denoising schedule (the "grid" of possible refinement steps). Changing it changes what each step number (t_index_list value) means. Keep it fixed for a session and only adjust if you\'re deliberately redefining the schedule; if you do, proportionally remap your t_index_list. Range: 1–100 with default being 50.'
+    )
 
     t_index_list: List[int] = [12, 20, 32]
     """The ordered list of step indices from the num_inference_steps schedule to execute per frame. Each index is one model pass, so latency scales with the list length. Higher indices (e.g., 40–49 on a 50-step grid) mainly polish and preserve structure (lower flicker), while lower indices (<20) rewrite structure (more flicker, creative). Values must be non-decreasing, and each between 0 and num_inference_steps."""
