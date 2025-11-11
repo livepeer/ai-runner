@@ -15,6 +15,7 @@ from ..process import ProcessGuardian
 from ..streamer import PipelineStreamer
 from ..streamer.protocol import TrickleProtocol
 from ..trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
+from ..pipelines.loader import parse_pipeline_params
 
 MAX_FILE_AGE = 86400  # 1 day
 
@@ -126,27 +127,15 @@ async def handle_start_stream(request: web.Request):
         # Try to get dimensions from workflow first
         input_width = params.params.get("width", DEFAULT_WIDTH)
         input_height = params.params.get("height", DEFAULT_HEIGHT)
-        output_width, output_height = input_width, input_height
         if process.pipeline == "comfyui":
             # TODO: Remove this once ComfyUI pipeline supports different resolutions without a restart
-            input_width = input_height = 512
+            input_width, input_height = DEFAULT_WIDTH, DEFAULT_HEIGHT
             params.params = params.params | {"width": input_width, "height": input_height}
-            logging.warning("Using default dimensions for ComfyUI pipeline")
-        else:
-            logging.info(f"Using dimensions from params: {output_width}x{output_height}")
+            logging.warning("Using default input dimensions for ComfyUI pipeline")
 
-        if process.pipeline == "streamdiffusion":
-            post_proc = params.params.get("image_postprocessing", {})
-            upscale_count = 0
-            for proc in post_proc.get("processors", []):
-                if proc.get("type") == "upscale":
-                    proc_params = proc.get("params", {})
-                    scale_factor = proc_params.get("scale_factor", 2.0)
-                    output_width = int(output_width * scale_factor)
-                    output_height = int(output_height * scale_factor)
-                    upscale_count += 1
-            if upscale_count > 0:
-                logging.info(f"Applied {upscale_count} upscale(s), output dimensions: {output_width}x{output_height}")
+        parsed_params = parse_pipeline_params(process.pipeline, params.params)
+        output_width, output_height = parsed_params.get_output_resolution()
+        logging.info(f"Pipeline resolutions: input={input_width}x{input_height} output={output_width}x{output_height}")
 
         protocol = TrickleProtocol(
             params.subscribe_url,

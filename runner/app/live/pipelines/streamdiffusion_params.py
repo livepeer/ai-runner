@@ -397,6 +397,22 @@ class StreamDiffusionParams(BaseParams):
     latent_postprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
     """List of latent postprocessor configurations for latent processing."""
 
+    def get_output_resolution(self) -> tuple[int, int]:
+        """
+        Get the output resolution as a (width, height) tuple, accounting for upscale processors
+        in image_postprocessing.
+        """
+        output_width, output_height = self.width, self.height
+
+        if self.image_postprocessing and self.image_postprocessing.enabled:
+            for proc in self.image_postprocessing.processors:
+                if proc.enabled and proc.type in ["upscale", "realesrgan_trt"]:
+                    scale_factor = 2.0 if proc.type == "realesrgan_trt" else proc.params.get("scale_factor", 2.0)
+                    output_width = int(output_width * scale_factor)
+                    output_height = int(output_height * scale_factor)
+
+        return (output_width, output_height)
+
     @model_validator(mode="after")
     @staticmethod
     def check_t_index_list(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
