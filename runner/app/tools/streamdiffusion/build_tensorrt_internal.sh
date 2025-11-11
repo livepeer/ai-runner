@@ -170,6 +170,14 @@ function build_raft_engine() {
     echo "Building RAFT TensorRT engine..."
 
     engines_dir="$(readlink -f "$OUTPUT_DIR/temporal_net")"
+    engine_file="$engines_dir/raft_small_min_384x384_max_1024x1024.engine"
+
+    if [ -f "$engine_file" ]; then
+        echo "Engine already exists at: $engine_file"
+        echo "Skipping build."
+        return 0
+    fi
+
     mkdir -p "$engines_dir"
 
     $CONDA_PYTHON -m streamdiffusion.tools.compile_raft_tensorrt --min_resolution 384x384 --max_resolution 1024x1024 --output_dir $engines_dir
