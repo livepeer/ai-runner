@@ -1,7 +1,7 @@
 import argparse
 from typing import List
 
-from ...live.pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig
+from ...live.pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig, ProcessingConfig, SingleProcessorConfig
 from ...live.pipelines.streamdiffusion import load_streamdiffusion_sync
 
 def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNetConfig]:
@@ -120,6 +120,11 @@ def main():
             controlnets=controlnets,
             use_safety_checker=True,
             ip_adapter=IPAdapterConfig(type=args.ipadapter_type) if args.ipadapter_type else None,
+            image_postprocessing=ProcessingConfig(
+                processors=[
+                    SingleProcessorConfig(type="realesrgan_trt"),
+                ],
+            ),
         ),
         min_batch_size=args.min_timesteps,
         max_batch_size=args.max_timesteps,

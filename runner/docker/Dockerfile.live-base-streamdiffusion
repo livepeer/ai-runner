@@ -44,3 +44,5 @@ ENV HF_HUB_OFFLINE=1
 # Create symlink for where StreamDiffusion builds TensorRT engines at runtime
 RUN ln -s /models/StreamDiffusion--engines ./engines
 RUN mkdir -p /root && ln -s /models/insightface /root/.insightface
+# this one is used only for realesrgan_trt which has ./models hardcoded
+RUN ln -s /models/StreamDiffusion--engines/cwd_models ./models
