@@ -23,6 +23,7 @@ from .streamdiffusion_params import (
     LCM_LORAS_BY_TYPE
 )
 
+
 class StreamDiffusion(Pipeline):
     def __init__(self):
         super().__init__()
@@ -79,14 +80,15 @@ class StreamDiffusion(Pipeline):
         if isinstance(out_tensor, list):
             out_tensor = out_tensor[0]
 
+        # Workaround as the some post-processors produce tensors without the batch dimension
         if out_tensor.dim() == 3:
-            # Workaround as the NSFW fallback image is coming without the batch dimension
             out_tensor = out_tensor.unsqueeze(0)
-            return out_tensor
 
-        # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
-        out_bhwc = out_tensor.permute(0, 2, 3, 1)
-        return out_bhwc
+        # Encoder expects (B, H, W, C) format, so convert from (B, C, H, W) if needed.
+        if _is_bchw_format(out_tensor):
+            out_tensor = out_tensor.permute(0, 2, 3, 1)
+
+        return out_tensor
 
     async def get_processed_video_frame(self) -> VideoOutput:
         return await self.frame_queue.get()
@@ -496,3 +498,16 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
         return image.convert('RGB')
     except Exception as e:
         raise ValueError(f"Failed to decode image data: {e}") from e
+
+def _is_bchw_format(tensor: torch.Tensor) -> bool:
+    """
+    Detect if a 4D tensor is in (B, C, H, W) format vs (B, H, W, C).
+
+    Simple heuristic: if dim 1 is small (channels, typically 3-4) and dim -1 is large (spatial),
+    it's (B, C, H, W). If it's the other way around, it's (B, H, W, C).
+    """
+    if tensor.dim() != 4:
+        return False
+    dim1_size = tensor.shape[1]
+    dim_last_size = tensor.shape[-1]
+    return dim1_size <= 4 and dim_last_size > 4
