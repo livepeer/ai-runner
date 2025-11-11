@@ -81,7 +81,7 @@ select_gpu() {
   done
 }
 
-# Check HF_TOKEN and HuggingFace CLI login status, throw warning if not authenticated.
+# Check HF_TOKEN and Hugging Face CLI login status, throw warning if not authenticated.
 check_hf_auth() {
   if [ -z "$HF_TOKEN" ] && [ "$(hf auth whoami)" = "Not logged in" ]; then
     printf "WARN: Not logged in and HF_TOKEN not set. Log in with 'hf auth login' or set HF_TOKEN to download token-gated models.\n"
@@ -106,7 +106,7 @@ function display_help() {
   echo "  AI_RUNNER_COMFYUI_IMAGE  ComfyUI Docker image (default: livepeer/ai-runner:live-app-comfyui)"
   echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion Docker image (default: livepeer/ai-runner:live-app-streamdiffusion)"
   echo "  PIPELINE  When using --live or --tensorrt, specify which pipeline to use: 'streamdiffusion', 'comfyui', or 'all' (default)"
-  echo "  HF_TOKEN  HuggingFace token for downloading token-gated models"
+  echo "  HF_TOKEN  Hugging Face token for downloading token-gated models"
   echo "  DEBUG  Enable debug mode with set -x"
 }
 
@@ -437,7 +437,7 @@ function download_batch_models() {
 # See: https://huggingface.co/docs/huggingface_hub/v0.22.1/package_reference/environment_variables#hfhubenablehftransfer.
 export HF_HUB_ENABLE_HF_TRANSFER=1
 
-# Use HF_TOKEN if set, otherwise use HuggingFace CLI's login.
+# Use HF_TOKEN if set, otherwise use Hugging Face CLI's login.
 [ -n "$HF_TOKEN" ] && TOKEN_FLAG="--token=${HF_TOKEN}" || TOKEN_FLAG=""
 
 # Parse command-line arguments.
@@ -482,9 +482,9 @@ echo "Starting livepeer AI subnet model downloader..."
 echo "Creating 'models' directory in the current working directory..."
 mkdir -p models/checkpoints models/StreamDiffusion--engines models/insightface models/ComfyUI--{models,output}
 
-echo "Checking if 'hf' HuggingFace CLI is installed..."
+echo "Checking if 'hf' Hugging Face CLI is installed..."
 if ! command -v hf >/dev/null 2>&1; then
-  echo "WARN: The HuggingFace CLI is required to download models. Please install it using 'pip install huggingface_hub'."
+  echo "WARN: The Hugging Face CLI is required to download models. Please install it using 'pip install huggingface_hub'."
   exit 1
 fi
 
