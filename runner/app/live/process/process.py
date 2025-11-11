@@ -14,6 +14,7 @@ from typing import Any
 import torch
 
 from ..pipelines import load_pipeline, Pipeline, BaseParams
+from ..pipelines.loader import parse_pipeline_params
 from ..log import config_logging, config_logging_fields, log_timing
 from ..trickle import (
     InputFrame,
@@ -56,6 +57,7 @@ class PipelineProcess:
 
         # Using underscored names to emphasize state used only from the child process.
         self._last_params = BaseParams()
+        self._last_params_request_id = ""
 
     def is_alive(self):
         return self.process.is_alive()
@@ -223,7 +225,8 @@ class PipelineProcess:
                 params = {}
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
-                self._last_params = BaseParams(**params)
+                self._last_params = parse_pipeline_params(self.pipeline_name, params)
+                self._last_params_request_id = self.request_id
                 pipeline = load_pipeline(self.pipeline_name)
                 await pipeline.initialize(**params)
                 return pipeline
@@ -236,7 +239,8 @@ class PipelineProcess:
                 with log_timing(
                     f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"
                 ):
-                    self._last_params = BaseParams()
+                    self._last_params = parse_pipeline_params(self.pipeline_name, {})
+                    self._last_params_request_id = self.request_id
                     pipeline = load_pipeline(self.pipeline_name)
                     await pipeline.initialize()
                     return pipeline
@@ -293,7 +297,7 @@ class PipelineProcess:
         if not overlay.is_active():
             overlay.begin_reload()
 
-        w, h = self._last_params.width, self._last_params.height
+        w, h = self._last_params.get_output_resolution()
         loading_tensor = await overlay.render(w, h)
         if torch.cuda.is_available() and not loading_tensor.is_cuda:
             loading_tensor = loading_tensor.cuda()
@@ -339,9 +343,21 @@ class PipelineProcess:
                     f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}"
                 )
 
+                # Check resolution change within the same request_id
+                new_params = parse_pipeline_params(self.pipeline_name, params)
+                if self._last_params_request_id == self.request_id:
+                    new_resolution = new_params.get_output_resolution()
+                    current_resolution = self._last_params.get_output_resolution()
+                    if current_resolution != new_resolution:
+                        raise ValueError(
+                            f"Cannot change output resolution mid-stream (Current resolution: {current_resolution} requested resolution: {new_resolution}). "
+                            f"Output resolution (e.g. upscalers) can only be configured when starting a new stream."
+                        )
+
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
                     reload_task = await pipeline.update_params(**params)
-                    self._last_params = BaseParams(**params)
+                    self._last_params = new_params
+                    self._last_params_request_id = self.request_id
             except Exception as e:
                 self._report_error("Error updating params", e)
                 continue
@@ -363,7 +379,8 @@ class PipelineProcess:
             finally:
                 # Pre-warm the loading overlay, so it's shown with the new resolution on the next reload.
                 try:
-                    await overlay.prewarm(self._last_params.width, self._last_params.height)
+                    w, h = self._last_params.get_output_resolution()
+                    await overlay.prewarm(w, h)
                 except Exception:
                     logging.warning("Failed to prewarm loading overlay caches", exc_info=True)
 
