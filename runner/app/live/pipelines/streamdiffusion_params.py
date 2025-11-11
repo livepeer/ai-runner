@@ -464,4 +464,15 @@ class StreamDiffusionParams(BaseParams):
         if invalid_cns:
             raise ValueError(f"Invalid ControlNets for model {model.model_id}: {invalid_cns}")
 
+        # SDXL models can only have up to 3 enabled controlnets due to VRAM limitations on 4090s
+        if model_type == "sdxl":
+            enabled_cns = [
+                cn for cn in model.controlnets
+                if cn.enabled and cn.conditioning_scale > 0
+            ]
+            if len(enabled_cns) > 3:
+                raise ValueError(
+                    f"SDXL models support a maximum of 3 enabled ControlNets, found {len(enabled_cns)}."
+                )
+
         return model
