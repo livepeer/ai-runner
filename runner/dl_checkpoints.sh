@@ -84,7 +84,7 @@ select_gpu() {
 # Check HF_TOKEN and HuggingFace CLI login status, throw warning if not authenticated.
 check_hf_auth() {
   if [ -z "$HF_TOKEN" ] && [ "$(hf auth whoami)" = "Not logged in" ]; then
-    printf "WARN: Not logged in and HF_TOKEN not set. Log in with 'hf auth login login' or set HF_TOKEN to download token-gated models.\n"
+    printf "WARN: Not logged in and HF_TOKEN not set. Log in with 'hf auth login' or set HF_TOKEN to download token-gated models.\n"
     exit 1
   fi
 }
