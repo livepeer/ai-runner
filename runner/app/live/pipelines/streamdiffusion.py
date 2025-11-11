@@ -287,7 +287,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         elif cn_config.preprocessor == "temporal_net_tensorrt":
             default_cond_chans = 6
             preprocessor_params.update({
-                "engine_path": "./engines/temporal_net/raft_small_min_384_max_1024.engine",
+                "engine_path": "./engines/temporal_net/raft_small_min_384x384_max_1024x1024.engine",
             })
 
         # Any preprocessors may make use of the image resolution params from the base preprocessor class.
