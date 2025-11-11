@@ -486,7 +486,7 @@ done
 
 echo "Starting livepeer AI subnet model downloader..."
 echo "Creating 'models' directory in the current working directory..."
-mkdir -p models/checkpoints models/StreamDiffusion--engines models/insightface models/ComfyUI--{models,output}
+mkdir -p models/checkpoints models/StreamDiffusion--engines models/insightface models/StreamDiffusion--engines/cwd_models models/ComfyUI--{models,output}
 
 # Ensure 'huggingface-cli' is installed.
 echo "Checking if 'huggingface-cli' is installed..."
