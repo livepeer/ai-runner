@@ -433,9 +433,9 @@ function download_batch_models() {
   hf download facebook/sam2-hiera-large --include "*.pt" --include "*.yaml" --cache-dir models
 }
 
-# Enable HF transfer acceleration.
-# See: https://huggingface.co/docs/huggingface_hub/v0.22.1/package_reference/environment_variables#hfhubenablehftransfer.
-export HF_HUB_ENABLE_HF_TRANSFER=1
+# Enable XET High Performance.
+# See: https://huggingface.co/docs/huggingface_hub/main/en/package_reference/environment_variables#hfxethighperformance
+export HF_XET_HIGH_PERFORMANCE=1
 
 # Use HF_TOKEN if set, otherwise use Hugging Face CLI's login.
 [ -n "$HF_TOKEN" ] && TOKEN_FLAG="--token=${HF_TOKEN}" || TOKEN_FLAG=""
