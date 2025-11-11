@@ -1,8 +1,11 @@
 import argparse
 from typing import List
 
+from ...live.pipelines import streamdiffusion_params
 from ...live.pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig, ProcessingConfig, SingleProcessorConfig
 from ...live.pipelines.streamdiffusion import load_streamdiffusion_sync
+
+streamdiffusion_params._is_building_tensorrt_engines = True
 
 def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNetConfig]:
     """

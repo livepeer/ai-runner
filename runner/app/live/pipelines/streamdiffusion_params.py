@@ -6,6 +6,9 @@ from .interface import BaseParams
 
 ModelType = Literal["sd15", "sd21", "sdxl"]
 
+# Module-level flag to skip ControlNet limit check during TensorRT compilation
+_is_building_tensorrt_engines = False
+
 IPADAPTER_SUPPORTED_TYPES: List[ModelType] = ["sd15", "sdxl"]
 
 CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
@@ -465,7 +468,7 @@ class StreamDiffusionParams(BaseParams):
             raise ValueError(f"Invalid ControlNets for model {model.model_id}: {invalid_cns}")
 
         # SDXL models can only have up to 3 enabled controlnets due to VRAM limitations on 4090s
-        if model_type == "sdxl":
+        if model_type == "sdxl" and not _is_building_tensorrt_engines:
             enabled_cns = [
                 cn for cn in model.controlnets
                 if cn.enabled and cn.conditioning_scale > 0
