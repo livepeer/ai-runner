@@ -117,27 +117,27 @@ function download_beta_models() {
   printf "\nDownloading unrestricted models...\n"
 
   # Download text-to-image and image-to-image models.
-  hf download SG161222/RealVisXL_V4.0_Lightning --include "*.fp16.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  hf download SG161222/RealVisXL_V4.0_Lightning --include "*.fp16.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   hf download ByteDance/SDXL-Lightning --include "*unet.safetensors" --cache-dir models
-  hf download timbrooks/instruct-pix2pix --include "*.fp16.safetensors" "*.json" "*.txt" --cache-dir models
+  hf download timbrooks/instruct-pix2pix --include "*.fp16.safetensors" --include "*.json" --include "*.txt" --cache-dir models
 
   # Download upscale models
   hf download stabilityai/stable-diffusion-x4-upscaler --include "*.fp16.safetensors" --cache-dir models
 
   # Download audio-to-text models.
-  hf download openai/whisper-large-v3 --include "*.safetensors" "*.json" --cache-dir models
-  hf download distil-whisper/distil-large-v3 --include "*.safetensors" "*.json" --cache-dir models
-  hf download openai/whisper-medium --include "*.safetensors" "*.json" --cache-dir models
+  hf download openai/whisper-large-v3 --include "*.safetensors" --include "*.json" --cache-dir models
+  hf download distil-whisper/distil-large-v3 --include "*.safetensors" --include "*.json" --cache-dir models
+  hf download openai/whisper-medium --include "*.safetensors" --include "*.json" --cache-dir models
 
   # Download custom pipeline models.
-  hf download facebook/sam2-hiera-large --include "*.pt" "*.yaml" --cache-dir models
-  hf download parler-tts/parler-tts-large-v1 --include "*.safetensors" "*.json" "*.model" --cache-dir models
+  hf download facebook/sam2-hiera-large --include "*.pt" --include "*.yaml" --cache-dir models
+  hf download parler-tts/parler-tts-large-v1 --include "*.safetensors" --include "*.json" --include "*.model" --cache-dir models
 
   printf "\nDownloading token-gated models...\n"
 
   # Download image-to-video models (token-gated).
   check_hf_auth
-  hf download stabilityai/stable-video-diffusion-img2vid-xt-1-1 --include "*.fp16.safetensors" "*.json" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
+  hf download stabilityai/stable-video-diffusion-img2vid-xt-1-1 --include "*.fp16.safetensors" --include "*.json" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
 }
 
 # Download all models.
@@ -148,26 +148,26 @@ function download_all_models() {
 
   # Download text-to-image and image-to-image models.
   printf "\nDownloading unrestricted models...\n"
-  hf download stabilityai/sd-turbo --include "*.fp16.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download stabilityai/sdxl-turbo --include "*.fp16.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download runwayml/stable-diffusion-v1-5 --include "*.fp16.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download stabilityai/stable-diffusion-xl-base-1.0 --include "*.fp16.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download prompthero/openjourney-v4 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download SG161222/RealVisXL_V4.0 --include "*.fp16.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download stabilityai/stable-diffusion-3-medium-diffusers --include "*.fp16*.safetensors" "*.model" "*.json" "*.txt" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
-  hf download stabilityai/stable-diffusion-3.5-medium --include "transformer/*.safetensors" "*model.fp16*" "*.model" "*.json" "*.txt" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
-  hf download stabilityai/stable-diffusion-3.5-large --include "transformer/*.safetensors" "*model.fp16*" "*.model" "*.json" "*.txt" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
-  hf download SG161222/Realistic_Vision_V6.0_B1_noVAE --include "*.fp16.safetensors" "*.json" "*.txt" "*.bin" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download black-forest-labs/FLUX.1-schnell --include "*.safetensors" "*.json" "*.txt" "*.model" --exclude ".onnx" ".onnx_data" --cache-dir models
+  hf download stabilityai/sd-turbo --include "*.fp16.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download stabilityai/sdxl-turbo --include "*.fp16.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download runwayml/stable-diffusion-v1-5 --include "*.fp16.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download stabilityai/stable-diffusion-xl-base-1.0 --include "*.fp16.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download prompthero/openjourney-v4 --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download SG161222/RealVisXL_V4.0 --include "*.fp16.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download stabilityai/stable-diffusion-3-medium-diffusers --include "*.fp16*.safetensors" --include "*.model" --include "*.json" --include "*.txt" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
+  hf download stabilityai/stable-diffusion-3.5-medium --include "transformer/*.safetensors" --include "*model.fp16*" --include "*.model" --include "*.json" --include "*.txt" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
+  hf download stabilityai/stable-diffusion-3.5-large --include "transformer/*.safetensors" --include "*model.fp16*" --include "*.model" --include "*.json" --include "*.txt" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
+  hf download SG161222/Realistic_Vision_V6.0_B1_noVAE --include "*.fp16.safetensors" --include "*.json" --include "*.txt" --include "*.bin" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download black-forest-labs/FLUX.1-schnell --include "*.safetensors" --include "*.json" --include "*.txt" --include "*.model" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
 
   # Download image-to-video models.
-  hf download stabilityai/stable-video-diffusion-img2vid-xt --include "*.fp16.safetensors" "*.json" --cache-dir models
+  hf download stabilityai/stable-video-diffusion-img2vid-xt --include "*.fp16.safetensors" --include "*.json" --cache-dir models
 
   # Download image-to-text models.
-  hf download Salesforce/blip-image-captioning-large --include "*.safetensors" "*.json" --cache-dir models
+  hf download Salesforce/blip-image-captioning-large --include "*.safetensors" --include "*.json" --cache-dir models
 
   # Custom pipeline models.
-  hf download facebook/sam2-hiera-large --include "*.pt" "*.yaml" --cache-dir models
+  hf download facebook/sam2-hiera-large --include "*.pt" --include "*.yaml" --cache-dir models
 
   download_live_models
 }
@@ -200,38 +200,38 @@ function download_streamdiffusion_live_models() {
   printf "\nDownloading StreamDiffusion live models...\n"
 
   # U-net models
-  hf download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download stabilityai/sdxl-turbo --include "*.json" "*.txt" "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download prompthero/openjourney-v4 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download Lykon/dreamshaper-8 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  hf download stabilityai/sd-turbo --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download stabilityai/sdxl-turbo --include "*.json" --include "*.txt" --include "*/model.safetensors" --include "*/diffusion_pytorch_model.safetensors" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download prompthero/openjourney-v4 --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download Lykon/dreamshaper-8 --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
 
   # SD2.1 (turbo) ControlNet models
-  hf download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download thibaud/controlnet-sd21-hed-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download thibaud/controlnet-sd21-canny-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download thibaud/controlnet-sd21-depth-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download thibaud/controlnet-sd21-color-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download thibaud/controlnet-sd21-ade20k-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download thibaud/controlnet-sd21-normalbae-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  hf download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download thibaud/controlnet-sd21-hed-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download thibaud/controlnet-sd21-canny-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download thibaud/controlnet-sd21-depth-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download thibaud/controlnet-sd21-color-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download thibaud/controlnet-sd21-ade20k-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download thibaud/controlnet-sd21-normalbae-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   # SD1.5 controlnet models
-  hf download lllyasviel/control_v11f1p_sd15_depth --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download lllyasviel/control_v11f1e_sd15_tile --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download lllyasviel/control_v11p_sd15_canny --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  hf download lllyasviel/control_v11f1p_sd15_depth --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download lllyasviel/control_v11f1e_sd15_tile --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download lllyasviel/control_v11p_sd15_canny --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   # SDXL controlnet models
-  hf download xinsir/controlnet-depth-sdxl-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download xinsir/controlnet-canny-sdxl-1.0 --include "diffusion_pytorch_model.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  hf download xinsir/controlnet-tile-sdxl-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
+  hf download xinsir/controlnet-depth-sdxl-1.0 --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download xinsir/controlnet-canny-sdxl-1.0 --include "diffusion_pytorch_model.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download xinsir/controlnet-tile-sdxl-1.0 --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
 
   # IP-Adapter (only required files)
-  hf download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" "models/image_encoder/*" "sdxl_models/ip-adapter_sdxl.bin" "sdxl_models/image_encoder/*" --cache-dir models
-  hf download h94/IP-Adapter-FaceID --include "ip-adapter-faceid_sd15.bin" "ip-adapter-faceid_sdxl.bin" --cache-dir models
+  hf download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" --include "models/image_encoder/*" --include "sdxl_models/ip-adapter_sdxl.bin" --include "sdxl_models/image_encoder/*" --cache-dir models
+  hf download h94/IP-Adapter-FaceID --include "ip-adapter-faceid_sd15.bin" --include "ip-adapter-faceid_sdxl.bin" --cache-dir models
 
   # Pre-processor models
   hf download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
   hf download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
 
   # Post-processor models
-  hf download Freepik/nsfw_image_detector --include "*.safetensors" "*.json" "*.txt" --cache-dir models
+  hf download Freepik/nsfw_image_detector --include "*.safetensors" --include "*.json" --include "*.txt" --cache-dir models
 }
 
 function download_comfyui_live_models() {
@@ -421,16 +421,16 @@ function download_restricted_models() {
   printf "\nDownloading restricted models...\n"
 
   # Download text-to-image and image-to-image models.
-  hf download black-forest-labs/FLUX.1-dev --include "*.safetensors" "*.json" "*.txt" "*.model" --exclude ".onnx" ".onnx_data" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
+  hf download black-forest-labs/FLUX.1-dev --include "*.safetensors" --include "*.json" --include "*.txt" --include "*.model" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models ${TOKEN_FLAG:+"$TOKEN_FLAG"}
   # Download LLM models (Warning: large model size)
-  hf download meta-llama/Meta-Llama-3.1-8B-Instruct --include "*.json" "*.bin" "*.safetensors" "*.txt" --cache-dir models
+  hf download meta-llama/Meta-Llama-3.1-8B-Instruct --include "*.json" --include "*.bin" --include "*.safetensors" --include "*.txt" --cache-dir models
 
 }
 
 function download_batch_models() {
   printf "\nDownloading Batch models...\n"
 
-  hf download facebook/sam2-hiera-large --include "*.pt" "*.yaml" --cache-dir models
+  hf download facebook/sam2-hiera-large --include "*.pt" --include "*.yaml" --cache-dir models
 }
 
 # Enable HF transfer acceleration.
