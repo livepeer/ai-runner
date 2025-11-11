@@ -12,7 +12,7 @@ from .frame import InputFrame
 MAX_FRAMERATE=24
 DECODE_ERROR_BUDGET=10  # Decode errors allowed before aborting
 
-def decode_av(pipe_input, frame_callback, put_metadata, input_width, input_height):
+def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_height):
     """
     Reads from a pipe (or file-like object).
 
@@ -121,17 +121,17 @@ def decode_av(pipe_input, frame_callback, put_metadata, input_width, input_heigh
                         next_pts_time = next_pts_time + frame_interval
 
                     # Use efficient reformatter method while maintaining aspect ratio
-                    if (frame.width, frame.height) != (input_width, input_height):
-                        input_aspect_ratio = float(input_width) / float(input_height)
+                    if (frame.width, frame.height) != (target_width, target_height):
+                        input_aspect_ratio = float(target_width) / float(target_height)
                         frame_aspect_ratio = float(frame.width) / float(frame.height)
                         if input_aspect_ratio < frame_aspect_ratio:
                             # We will need to crop the width below, so resize to match the input_height
-                            h = input_height
-                            w = int((input_height * frame.width / frame.height) / 2) * 2  # force divisible by 2
+                            h = target_height
+                            w = int((target_height * frame.width / frame.height) / 2) * 2  # force divisible by 2
                         else:
                             # We will need to crop the height below, so resize to match the input_width
-                            w = input_width
-                            h = int((input_width * frame.height / frame.width) / 2) * 2  # force divisible by 2
+                            w = target_width
+                            h = int((target_width * frame.height / frame.width) / 2) * 2  # force divisible by 2
 
                         frame = reformatter.reformat(frame, format='rgba', width=w, height=h)
 
@@ -140,11 +140,11 @@ def decode_av(pipe_input, frame_callback, put_metadata, input_width, input_heigh
                         image = image.convert("RGB")
                     width, height = image.size
 
-                    if (width, height) != (input_width, input_height):
+                    if (width, height) != (target_width, target_height):
                         # Crop to the center to match input dimensions
-                        start_x = width // 2 - input_width // 2
-                        start_y = height // 2 - input_height // 2
-                        image = image.crop((start_x, start_y, start_x + input_width, start_y + input_height))
+                        start_x = width // 2 - target_width // 2
+                        start_y = height // 2 - target_height // 2
+                        image = image.crop((start_x, start_y, start_x + target_width, start_y + target_height))
 
                     # Convert to tensor
                     image_np = np.array(image).astype(np.float32) / 255.0
