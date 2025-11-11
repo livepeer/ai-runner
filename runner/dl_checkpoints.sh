@@ -484,7 +484,7 @@ mkdir -p models/checkpoints models/StreamDiffusion--engines models/insightface m
 
 echo "Checking if 'hf' Hugging Face CLI is installed..."
 if ! command -v hf >/dev/null 2>&1; then
-  echo "WARN: The Hugging Face CLI is required to download models. Please install it using 'pip install huggingface_hub'."
+  echo "ERROR: The Hugging Face CLI is required to download models. Please install it using 'pip install huggingface_hub'."
   exit 1
 fi
 
