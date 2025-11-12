@@ -135,7 +135,7 @@ e.g.:
   "image_postprocessing": {
     "enabled": true,
     "processors": [
-      { "type": "realesrgan_trt", "enabled": true, "params": { "scale_factor": 2.0 } }
+      { "type": "realesrgan_trt", "enabled": true }
     ]
   }
 }
