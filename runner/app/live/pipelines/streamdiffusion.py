@@ -67,8 +67,9 @@ class StreamDiffusion(Pipeline):
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
         if self.params and self.params.controlnets:
-            for i, cn in enumerate(self.params.controlnets):
-                if cn.enabled and cn.conditioning_scale > 0:
+            enabled_cnets = [cn for cn in self.params.controlnets if cn.enabled]
+            for i, cn in enumerate(enabled_cnets):
+                if cn.conditioning_scale > 0:
                     self.pipe.update_control_image(i, img_tensor)
 
         if self.first_frame:
