@@ -1,11 +1,11 @@
 ## StreamDiffusion Schema Update (PR [#808](https://github.com/livepeer/ai-runner/pull/808))
 
-PR #808 expands what the StreamDiffusion pipeline can do without a reload. This document captures the schema additions and how to exercise the new processors and execution modes from client requests.
+PR #808 expands what the StreamDiffusion pipeline can do. This document captures the schema additions and how to exercise the new processors and execution modes from the params schema.
 
 ---
 
 ### Schema Changes at a Glance
-- Four processor blocks now exist on `StreamDiffusionParams`: `image_preprocessing`, `image_postprocessing`, `latent_preprocessing`, `latent_postprocessing`. Each block shares the same shape:
+- Four new "processor" blocks now exist on the pipeline params: `image_preprocessing`, `image_postprocessing`, `latent_preprocessing`, `latent_postprocessing`. Each block shares the same `ProcessingConfig` shape:
 
   ```84:118:runner/app/live/pipelines/streamdiffusion_params.py
   class SingleProcessorConfig(BaseModel, Generic[ProcessorTypeT]):
@@ -18,17 +18,8 @@ PR #808 expands what the StreamDiffusion pipeline can do without a reload. This 
       processors: List[SingleProcessorConfig[ProcessorTypeT]] = []
   ```
 
-- ControlNets gained support for the TemporalNet v2 models, plus a backend-populated `conditioning_channels` field. **Clients must omit `conditioning_channels`**—the runner fills it (6 channels for TemporalNet, 3 for the rest) and ignores user-supplied values.
-- `skip_diffusion` is now exposed so a request can run just the processors (e.g. stream live depth, run a pure upscale) without invoking the diffusion/denoising step.
-
-TemporalNet requires a ControlNet that matches the chosen diffusion base. The table below lists the valid pairings:
-
-| Diffusion `model_id`                | Model type | Matching TemporalNet ControlNet                                       |
-| ----------------------------------- | ---------- | ---------------------------------------------------------------------- |
-| `stabilityai/sd-turbo`              | sd21       | `daydreamlive/TemporalNet2-stable-diffusion-2-1`                       |
-| `prompthero/openjourney-v4`         | sd15       | `daydreamlive/TemporalNet2-stable-diffusion-v1-5`                      |
-| `Lykon/dreamshaper-8`              | sd15       | `daydreamlive/TemporalNet2-stable-diffusion-v1-5`                      |
-| `stabilityai/sdxl-turbo`            | sdxl       | `daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0`               |
+- ControlNets gained support for the TemporalNet v2 models, plus a backend-populated `conditioning_channels` field. **Clients should omit `conditioning_channels`**—they are well-defined per model and the runner fills it automatically (6 channels for TemporalNet, 3 for the rest).
+- `skip_diffusion` is now exposed so a request can run just the processors (e.g. depth-only stream, run a pure upscale) without invoking the diffusion/denoising step.
 
 ---
 
@@ -37,9 +28,10 @@ TemporalNet requires a ControlNet that matches the chosen diffusion base. The ta
 ### TemporalNet ControlNet (`temporal_net_tensorrt`)
 - Supplies frame-to-frame optical flow so diffusion sticks to motion from the source stream.
 - Set the ControlNet’s `preprocessor` to `temporal_net_tensorrt`. Leave `conditioning_channels` absent.
-- **`conditioning_scale` guidance:** values in the `0.25–0.4` band preserve structure while leaving room for creative edits. Pushing beyond ~0.6 drastically suppresses the “AI” effect—you usually end up shrinking `t_index_list` to maintain stability, often with diminishing returns.
-- **`preprocessor_params.flow_strength`** follows the upstream definition: “Strength multiplier for optical flow visualization (1.0 = normal, higher = more pronounced flow)”. Lower values mute the motion field, higher values exaggerate it.
+- **`conditioning_scale` guidance:** values in the `0.25–0.4` band preserve structure while leaving room for creative edits. Pushing beyond ~0.6 drastically suppresses the “AI effect"—you usually end up having to shrink `t_index_list` to get the trippiness back, often with diminishing returns. It can go higher than 1 for even stronger conditioning.
+- **`preprocessor_params.flow_strength`**: Strength multiplier for optical flow visualization (1.0 = normal, higher = more pronounced flow). Lower values mute the motion field, higher values exaggerate it.
 
+e.g.:
 ```json
 "controlnets": [
   {
@@ -54,7 +46,17 @@ TemporalNet requires a ControlNet that matches the chosen diffusion base. The ta
 ]
 ```
 
-> ❗️ **Do not send `conditioning_channels`.** The runner derives it automatically (6 for TemporalNet, 3 otherwise) and will ignore the client value.
+> ❗️ **Do not send `conditioning_channels`.** The runner derives it automatically (6 for TemporalNet, 3 otherwise).
+
+The TemporalNet controlnet has different models, one for each U-net model type. The table below lists the valid pairings:
+
+| Diffusion `model_id`                | Model type | Matching TemporalNet ControlNet                                       |
+| ----------------------------------- | ---------- | ---------------------------------------------------------------------- |
+| `stabilityai/sd-turbo`              | sd21       | `daydreamlive/TemporalNet2-stable-diffusion-2-1`                       |
+| `prompthero/openjourney-v4`         | sd15       | `daydreamlive/TemporalNet2-stable-diffusion-v1-5`                      |
+| `Lykon/dreamshaper-8`              | sd15       | `daydreamlive/TemporalNet2-stable-diffusion-v1-5`                      |
+| `stabilityai/sdxl-turbo`            | sdxl       | `daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0`               |
+
 
 ### Latent Feedback Processor (`latent_feedback`)
 Latent feedback blends the previous latent back into the new latent before diffusion, giving temporal consistency with minimal cost:
@@ -63,13 +65,16 @@ Latent feedback blends the previous latent back into the new latent before diffu
 output_latent = (1 - feedback_strength) * input_latent + feedback_strength * previous_latent
 ```
 
-- Available only under `latent_preprocessing`.
+- Available under `latent_preprocessing` (before denoising) or `latent_postprocessing` (after denoising).
+  - Enable in `latent_preprocessing` to mix the previous input frame with the current one and preserve motion (similar to temporalnet optical flow), or in `latent_postprocessing` to blend the final output latent with the previous output, improving consistency.
 - `feedback_strength` controls how much of the previous frame’s latent leaks in:
   - `0.0`: pass-through (no feedback)
-  - `0.5`: 50/50 blend (default)
+  - `0.15`: Default value, provides some nice feedback
+  - `0.4`: Maximum reasonable value that doesn't overshoot into garbage output
   - `1.0`: reuse the previous latent entirely
 - On the first frame (no cached latent) the preprocessor falls back to the input latent.
 
+e.g.:
 ```json
 "latent_preprocessing": {
   "enabled": true,
@@ -78,19 +83,19 @@ output_latent = (1 - feedback_strength) * input_latent + feedback_strength * pre
       "type": "latent_feedback",
       "enabled": true,
       "params": {
-        "feedback_strength": 0.5
+        "feedback_strength": 0.15
       }
     }
   ]
 }
 ```
+(notice that all `enabled` fields are optional and can be ommited)
 
 ### Image Post-Processing & RealESRGAN (`realesrgan_trt`)
-- Runs after the diffusion step to enhance decoded frames (default 2× super resolution).
-- Provide optional `scale_factor` in `params`.
-- `StreamDiffusionParams.get_output_resolution()` multiplies the base width/height by `scale_factor` for each enabled upscaler.
-- ⚠️ **Cannot be toggled mid-stream.** Enabling or disabling RealESRGAN requires a full pipeline restart because resolution changes break the streaming stack. Choose the final upscale strategy before calling the pipeline.
+- Runs after the diffusion step to enhance decoded frames for 2× super resolution.
+- ⚠️ **Cannot be toggled mid-stream.** Enabling or disabling RealESRGAN requires a full pipeline restart because resolution changes break the streaming stack. When changing upscaler processors, must completely restart the stream.
 
+e.g.:
 ```json
 "image_postprocessing": {
   "enabled": true,
@@ -98,15 +103,17 @@ output_latent = (1 - feedback_strength) * input_latent + feedback_strength * pre
     {
       "type": "realesrgan_trt",
       "enabled": true,
-      "params": {
-        "scale_factor": 2.0
-      }
     }
   ]
 }
 ```
+(notice that all `enabled` fields are optional and can be ommited)
 
 ### Processor Catalog
+
+Additionally from the above, there are still other processors that can still be used. For detailed documentation check the corresponding classes and metadata in the [StreamDiffusion `processors` folder](https://github.com/livepeer/StreamDiffusion/tree/main/src/streamdiffusion/preprocessing/processors).
+
+These processors have specific domains, and can only be used on either `image_` or `latent_` processors configs. The controlnet preprocessors are the same as the `image_` processors. Any preprocessor can also be used as a postprocessor (and the other way around), but there are typical places where they are usually used, mapped below.
 
 | Stage field                | Typical processors                                                                                                                                         | Notes                                                                                           |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
@@ -118,12 +125,12 @@ output_latent = (1 - feedback_strength) * input_latent + feedback_strength * pre
 ### `skip_diffusion`
 Setting `skip_diffusion: true` skips VAE encode → diffusion → decode while still running the configured pre/post-processors. Example use cases:
 - stream the output of a preprocessor (e.g. live depth maps or pose skeletons),
-- run post-processors like RealESRGAN on externally provided frames,
+- run post-processors like RealESRGAN upscaler on externally provided frames,
 - warm a pipeline without paying the diffusion cost.
 
+e.g.:
 ```json
 {
-  "model_id": "stabilityai/sd-turbo",
   "skip_diffusion": true,
   "image_postprocessing": {
     "enabled": true,
@@ -163,7 +170,7 @@ Any ControlNets or diffusion-only parameters are ignored when `skip_diffusion` i
       {
         "type": "latent_feedback",
         "enabled": true,
-        "params": { "feedback_strength": 0.4 }
+        "params": { "feedback_strength": 0.2 }
       }
     ]
   },
@@ -172,8 +179,7 @@ Any ControlNets or diffusion-only parameters are ignored when `skip_diffusion` i
     "processors": [
       {
         "type": "realesrgan_trt",
-        "enabled": true,
-        "params": { "scale_factor": 2.0 }
+        "enabled": true
       }
     ]
   }
@@ -224,6 +230,6 @@ Any ControlNets or diffusion-only parameters are ignored when `skip_diffusion` i
 
 Most fields shown above can be updated during a stream; notable exceptions:
 - RealESRGAN (`realesrgan_trt`) requires a restart to change because it affects resolution.
-- `skip_diffusion` is evaluated at pipeline creation time; switching modes mid-stream triggers a reload.
+- `skip_diffusion` is evaluated at pipeline creation time; switching modes mid-stream triggers a pipeline reload.
 
-Refer back to `StreamDiffusionParams` for the authoritative list of runtime-updateable attributes.
+Refer back to [`StreamDiffusionParams`](https://github.com/livepeer/ai-runner/blob/main/runner/app/live/pipelines/streamdiffusion_params.py) for the authoritative list of runtime-updateable attributes.
