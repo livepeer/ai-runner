@@ -166,7 +166,7 @@ class PipelineProcess:
         self._try_queue_put(self.input_queue, frame)
         # After successfully queuing, clean up CUDA tensor reference in parent process to free GPU memory.
         # The tensor is sent via shared memory IPC, so deleting our local reference is safe.
-        if gpu_tensor:
+        if gpu_tensor is not None:
             del gpu_tensor
 
     async def recv_output(self) -> OutputFrame | None:
