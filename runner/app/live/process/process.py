@@ -141,7 +141,8 @@ class PipelineProcess:
         self.param_update_queue.put(params)
 
     def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
-        # Clear queues to avoid using frames from previous sessions
+        # we cannot clear the input_queue as we send CUDA tensors on it, which can't be received by the same process that sent it.
+        # So we clear only the other queues, and rely on the request_id checks to avoid using frames from previous sessions.
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
@@ -157,12 +158,32 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
+        gpu_tensor = None
+        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
+            frame = frame.replace_tensor(frame.tensor.cuda())
+            gpu_tensor = frame.tensor
+
         self._try_queue_put(self.input_queue, frame)
+        # After successfully queuing, clean up CUDA tensor reference in parent process to free GPU memory.
+        # The tensor is sent via shared memory IPC, so deleting our local reference is safe.
+        if gpu_tensor:
+            del gpu_tensor
 
     async def recv_output(self) -> OutputFrame | None:
         while not self.is_done():
             try:
-                return await asyncio.to_thread(self.output_queue.get, timeout=0.1)
+                output = await asyncio.to_thread(self.output_queue.get, timeout=0.1)
+                # Move CUDA tensors to CPU immediately to free GPU memory in the parent process.
+                # When CUDA tensors are sent over multiprocessing queues, they use shared memory
+                # but still occupy GPU memory in the receiving process until moved to CPU.
+                if isinstance(output, VideoOutput) and output.tensor.is_cuda:
+                    old_tensor = output.tensor
+                    cpu_tensor = old_tensor.cpu()
+                    output = output.replace_tensor(cpu_tensor)
+                    # Explicitly delete the old CUDA tensor reference to help free GPU memory immediately.
+                    # The new output object holds the CPU tensor, so the old CUDA tensor can be freed.
+                    del old_tensor
+                return output
             except queue.Empty:
                 # Timeout ensures the non-daemon threads from to_thread can exit if task is cancelled
                 continue
@@ -282,6 +303,10 @@ class PipelineProcess:
                         await self._render_loading_frame(overlay, input)
                     else:
                         await pipeline.put_video_frame(input, self.request_id)
+
+                    # After processing, explicitly delete the input tensor to free GPU memory.
+                    # The pipeline has already consumed the tensor, so we can safely clean up.
+                    del input.tensor
                 elif isinstance(input, AudioFrame):
                     self._try_queue_put(self.output_queue, AudioOutput([input], self.request_id))
             except queue.Empty:
@@ -296,10 +321,8 @@ class PipelineProcess:
 
         w, h = self._last_params.get_output_resolution()
         loading_tensor = await overlay.render(w, h)
-
-        # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
-        if loading_tensor.is_cuda:
-            loading_tensor = loading_tensor.cpu()
+        if torch.cuda.is_available() and not loading_tensor.is_cuda:
+            loading_tensor = loading_tensor.cuda()
 
         out_frame = input.replace_tensor(loading_tensor)
         out = VideoOutput(out_frame, self.request_id, is_loading_frame=True)
@@ -319,10 +342,8 @@ class PipelineProcess:
                         continue
                     overlay.end_reload()
 
-                # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
-                if isinstance(out, VideoOutput) and out.tensor.is_cuda:
-                    cpu_tensor = out.tensor.cpu()
-                    out = out.replace_tensor(cpu_tensor)
+                if isinstance(out, VideoOutput) and not out.tensor.is_cuda and torch.cuda.is_available():
+                    out = out.replace_tensor(out.tensor.cuda())
 
                 out.log_timestamps["post_process_frame"] = time.time()
                 self._try_queue_put(self.output_queue, out)

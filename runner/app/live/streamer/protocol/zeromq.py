@@ -57,14 +57,7 @@ class ZeroMQProtocol(StreamProtocol):
 
 
 def to_jpeg_bytes(tensor: torch.Tensor):
-    # Move to CPU and convert to numpy, then explicitly delete CUDA tensor reference
-    if tensor.is_cuda:
-        cpu_tensor = tensor.cpu()
-        image_np = (cpu_tensor * 255).byte().numpy()
-        del cpu_tensor, tensor
-    else:
-        image_np = (tensor * 255).byte().numpy()
-        del tensor
+    image_np = (tensor * 255).byte().cpu().numpy()
     image = Image.fromarray(image_np)
 
     buffer = io.BytesIO()
@@ -73,7 +66,6 @@ def to_jpeg_bytes(tensor: torch.Tensor):
         return buffer.getvalue()
     finally:
         buffer.close()
-        del image, image_np
 
 
 def from_jpeg_bytes(frame_bytes: bytes):
