@@ -3,7 +3,7 @@ import asyncio
 import logging
 import hashlib
 import json
-import multiprocessing as mp
+import torch.multiprocessing as mp
 import queue
 import sys
 import signal
@@ -141,7 +141,8 @@ class PipelineProcess:
         self.param_update_queue.put(params)
 
     def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
-        # Clear queues to avoid using frames from previous sessions
+        # we cannot clear the input_queue as we send CUDA tensors on it, which can't be received by the same process that sent it.
+        # So we clear only the other queues, and rely on the request_id checks to avoid using frames from previous sessions.
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
@@ -297,10 +298,6 @@ class PipelineProcess:
         w, h = self._last_params.get_output_resolution()
         loading_tensor = await overlay.render(w, h)
 
-        # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
-        if loading_tensor.is_cuda:
-            loading_tensor = loading_tensor.cpu()
-
         out_frame = input.replace_tensor(loading_tensor)
         out = VideoOutput(out_frame, self.request_id, is_loading_frame=True)
 
@@ -318,11 +315,6 @@ class PipelineProcess:
                         # Ignore frames that may come after the loading started to avoid thrashing the loading overlay.
                         continue
                     overlay.end_reload()
-
-                # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
-                if isinstance(out, VideoOutput) and out.tensor.is_cuda:
-                    cpu_tensor = out.tensor.cpu()
-                    out = out.replace_tensor(cpu_tensor)
 
                 out.log_timestamps["post_process_frame"] = time.time()
                 self._try_queue_put(self.output_queue, out)
