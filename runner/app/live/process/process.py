@@ -165,7 +165,18 @@ class PipelineProcess:
     async def recv_output(self) -> OutputFrame | None:
         while not self.is_done():
             try:
-                return await asyncio.to_thread(self.output_queue.get, timeout=0.1)
+                output = await asyncio.to_thread(self.output_queue.get, timeout=0.1)
+                # Move CUDA tensors to CPU immediately to free GPU memory in the parent process.
+                # When CUDA tensors are sent over multiprocessing queues, they use shared memory
+                # but still occupy GPU memory in the receiving process until moved to CPU.
+                if isinstance(output, VideoOutput) and output.tensor.is_cuda:
+                    old_tensor = output.tensor
+                    cpu_tensor = old_tensor.cpu()
+                    output = output.replace_tensor(cpu_tensor)
+                    # Explicitly delete the old CUDA tensor reference to help free GPU memory immediately.
+                    # The new output object holds the CPU tensor, so the old CUDA tensor can be freed.
+                    del old_tensor
+                return output
             except queue.Empty:
                 # Timeout ensures the non-daemon threads from to_thread can exit if task is cancelled
                 continue
