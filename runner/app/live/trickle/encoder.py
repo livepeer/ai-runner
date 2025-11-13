@@ -106,14 +106,7 @@ def encode_av(
             log_frame_timestamps("Video", avframe.frame)
 
             tensor = avframe.tensor.squeeze(0)
-            # Move to CPU and convert to numpy, then explicitly delete CUDA tensor reference
-            if tensor.is_cuda:
-                cpu_tensor = tensor.cpu()
-                image_np = (cpu_tensor * 255).byte().numpy()
-                del cpu_tensor, tensor
-            else:
-                image_np = (tensor * 255).byte().numpy()
-                del tensor
+            image_np = (tensor * 255).byte().cpu().numpy()
             image = Image.fromarray(image_np)
 
             frame = av.video.frame.VideoFrame.from_image(image)
@@ -133,8 +126,6 @@ def encode_av(
                         logging.error(f"A/V is out of sync, exiting from video audio_ts={float(audio_ts)} video_ts={float(current)} delta={float(delta)}")
                         break
                     # drop the frame by skipping the rest of the following code
-                    # Explicitly delete the frame reference to help free GPU memory
-                    del avframe
                     continue
 
             if not last_kf or float(current - last_kf) >= GOP_SECS:
@@ -149,8 +140,6 @@ def encode_av(
                     continue
                 last_video_ts = frame.pts
                 output_container.mux(ep)
-            # Explicitly delete the frame reference to help free GPU memory
-            del avframe
             continue
 
         if isinstance(avframe, AudioOutput):
