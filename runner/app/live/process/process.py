@@ -142,6 +142,7 @@ class PipelineProcess:
 
     def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
         # Clear queues to avoid using frames from previous sessions
+        clear_queue(self.input_queue)
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
@@ -325,8 +326,7 @@ class PipelineProcess:
 
                 # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
                 if isinstance(out, VideoOutput) and out.tensor.is_cuda:
-                    cpu_tensor = out.tensor.cpu()
-                    out = out.replace_tensor(cpu_tensor)
+                    out = out.replace_tensor(out.tensor.cpu())
 
                 out.log_timestamps["post_process_frame"] = time.time()
                 self._try_queue_put(self.output_queue, out)
