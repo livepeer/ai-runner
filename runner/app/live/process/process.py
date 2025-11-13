@@ -158,9 +158,16 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
+        gpu_tensor = None
         if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
             frame = frame.replace_tensor(frame.tensor.cuda())
+            gpu_tensor = frame.tensor
+
         self._try_queue_put(self.input_queue, frame)
+        # After successfully queuing, clean up CUDA tensor reference in parent process to free GPU memory.
+        # The tensor is sent via shared memory IPC, so deleting our local reference is safe.
+        if gpu_tensor:
+            del gpu_tensor
 
     async def recv_output(self) -> OutputFrame | None:
         while not self.is_done():
@@ -296,6 +303,10 @@ class PipelineProcess:
                         await self._render_loading_frame(overlay, input)
                     else:
                         await pipeline.put_video_frame(input, self.request_id)
+
+                    # After processing, explicitly delete the input tensor to free GPU memory.
+                    # The pipeline has already consumed the tensor, so we can safely clean up.
+                    del input.tensor
                 elif isinstance(input, AudioFrame):
                     self._try_queue_put(self.output_queue, AudioOutput([input], self.request_id))
             except queue.Empty:
