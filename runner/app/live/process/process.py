@@ -278,6 +278,10 @@ class PipelineProcess:
                 if isinstance(input, VideoFrame):
                     input.log_timestamps["pre_process_frame"] = time.time()
 
+                    # Move CPU tensors to GPU before sending to pipeline
+                    if not input.tensor.is_cuda and torch.cuda.is_available():
+                        input = input.replace_tensor(input.tensor.cuda())
+
                     if self._is_loading() and self._last_params.show_reloading_frame:
                         await self._render_loading_frame(overlay, input)
                     else:
