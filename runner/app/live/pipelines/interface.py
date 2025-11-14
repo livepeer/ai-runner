@@ -33,6 +33,13 @@ class BaseParams(BaseModel):
         description="Whether to render a loading overlay while the pipeline initializes or reloads.",
     )
 
+    def get_output_resolution(self) -> tuple[int, int]:
+        """
+        Get the output resolution as a (width, height) tuple. Sub-classes may override this method if the pipeline
+        supports changing resolution during inference.
+        """
+        return (self.width, self.height)
+
 class Pipeline(ABC):
     """Abstract base class for image processing pipelines.
 

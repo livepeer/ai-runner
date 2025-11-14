@@ -49,8 +49,17 @@
       "enabled": true,
       "control_guidance_start": 0.0,
       "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "daydreamlive/TemporalNet2-stable-diffusion-v1-5",
+      "conditioning_scale": 0.0,
+      "preprocessor": "temporal_net_tensorrt",
+      "preprocessor_params": {
+        "flow_strength": 0.4
+      },
+      "enabled": true
     }
   ],
   "ip_adapter": { "scale": 0.5, "enabled": true },
-  "ip_adapter_style_image_url": "https://ipfs.livepeer.com/ipfs/bafkreibnlg3nfizj6ixc2flljo3pewo2ycnxitczawu4d5vmxkejnjwxca"
+  "ip_adapter_style_image_url": "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"
 }

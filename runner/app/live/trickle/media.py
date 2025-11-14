@@ -112,14 +112,14 @@ async def decode_in(in_pipe, frame_callback, put_metadata, write_fd, target_widt
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, decode_runner)
 
-def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadata, **kwargs):
+def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadata, output_width=None, output_height=None, **kwargs):
     # encode_av has a tendency to crash, so restart as necessary
     retryCount = 0
     last_retry_time = time.time()
     recovery_bag = {} # opaque bag of stuff to help recover from encoder crashes
     while retryCount < MAX_ENCODER_RETRIES:
         try:
-            encode_av(image_generator, sync_callback, get_metadata, recovery_bag, **kwargs)
+            encode_av(image_generator, sync_callback, get_metadata, recovery_bag, output_width=output_width, output_height=output_height, **kwargs)
             break  # clean exit
         except Exception as exc:
             current_time = time.time()
@@ -151,7 +151,7 @@ def encode_in(task_pipes, task_lock, image_generator, sync_callback, get_metadat
                         logging.exception("Error closing pipe on task list", stack_info=True)
             logging.info(f"Closed pipes - {pipe_count}/{total_pipes}")
 
-async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback):
+async def run_publish(publish_url: str, image_generator, get_metadata, monitoring_callback, output_width, output_height):
     first_segment = True
 
     publisher = None
@@ -212,7 +212,7 @@ async def run_publish(publish_url: str, image_generator, get_metadata, monitorin
                 return task_done2(task, pipe_writer)
             task.add_done_callback(task_done)
 
-        encode_thread = threading.Thread(target=encode_in, args=(live_pipes, live_tasks_lock, image_generator, sync_callback, get_metadata), kwargs={"audio_codec":"libopus"})
+        encode_thread = threading.Thread(target=encode_in, args=(live_pipes, live_tasks_lock, image_generator, sync_callback, get_metadata), kwargs={"audio_codec":"libopus", "output_width": output_width, "output_height": output_height})
         encode_thread.start()
         logging.debug("run_publish: encoder thread started")
 

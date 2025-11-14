@@ -39,6 +39,7 @@ MODELS_DIR=${HUGGINGFACE_HUB_CACHE:-./models}
 OUTPUT_DIR="./engines"
 BUILD_DEPTH_ANYTHING=false
 BUILD_POSE=false
+BUILD_RAFT=false
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -81,6 +82,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --build-pose)
             BUILD_POSE=true
+            shift
+            ;;
+        --build-raft)
+            BUILD_RAFT=true
             shift
             ;;
         --help)
@@ -153,7 +158,34 @@ if [ "$BUILD_POSE" = true ]; then
 else
     echo "YoloNas Pose: Disabled"
 fi
+if [ "$BUILD_RAFT" = true ]; then
+    echo "RAFT: Enabled"
+else
+    echo "RAFT: Disabled"
+fi
 echo
+
+# We need to build the RAFT engine beforehand because it's required by the TemporalNet ControlNet compilation.
+function build_raft_engine() {
+    echo "Building RAFT TensorRT engine..."
+
+    engines_dir="$(readlink -f "$OUTPUT_DIR/temporal_net")"
+    engine_file="$engines_dir/raft_small_min_384x384_max_1024x1024.engine"
+
+    if [ -f "$engine_file" ]; then
+        echo "Engine already exists at: $engine_file"
+        echo "Skipping build."
+        return 0
+    fi
+
+    mkdir -p "$engines_dir"
+
+    $CONDA_PYTHON -m streamdiffusion.tools.compile_raft_tensorrt --min_resolution 384x384 --max_resolution 1024x1024 --output_dir $engines_dir
+}
+
+if [ "$BUILD_RAFT" = true ]; then
+    build_raft_engine || exit 1
+fi
 
 total_builds=0
 

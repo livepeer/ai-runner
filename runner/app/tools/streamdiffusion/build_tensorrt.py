@@ -1,8 +1,11 @@
 import argparse
 from typing import List
 
-from ...live.pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig
+from ...live.pipelines import streamdiffusion_params
+from ...live.pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig, ProcessingConfig, SingleProcessorConfig
 from ...live.pipelines.streamdiffusion import load_streamdiffusion_sync
+
+streamdiffusion_params._is_building_tensorrt_engines = True
 
 def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNetConfig]:
     """
@@ -14,7 +17,7 @@ def create_controlnet_configs(controlnet_model_ids: List[str]) -> List[ControlNe
         config = ControlNetConfig(
             model_id=model_id,
             conditioning_scale=0.5,
-            preprocessor="passthrough",  # Simplest preprocessor
+            preprocessor="passthrough" if "TemporalNet" not in model_id else "temporal_net_tensorrt",  # Simplest preprocessors
             preprocessor_params={},
             enabled=True,
             control_guidance_start=0.0,
@@ -120,6 +123,11 @@ def main():
             controlnets=controlnets,
             use_safety_checker=True,
             ip_adapter=IPAdapterConfig(type=args.ipadapter_type) if args.ipadapter_type else None,
+            image_postprocessing=ProcessingConfig(
+                processors=[
+                    SingleProcessorConfig(type="realesrgan_trt"),
+                ],
+            ),
         ),
         min_batch_size=args.min_timesteps,
         max_batch_size=args.max_timesteps,

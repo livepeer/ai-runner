@@ -62,8 +62,6 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
             "sar": video_stream.codec_context.sample_aspect_ratio,
             "dar": video_stream.codec_context.display_aspect_ratio,
             "format": str(video_stream.codec_context.format),
-            "target_width": target_width,
-            "target_height": target_height,
             "stream_index": video_stream.index,
         }
 
@@ -124,14 +122,14 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
 
                     # Use efficient reformatter method while maintaining aspect ratio
                     if (frame.width, frame.height) != (target_width, target_height):
-                        target_aspect_ratio = float(target_width) / float(target_height)
+                        input_aspect_ratio = float(target_width) / float(target_height)
                         frame_aspect_ratio = float(frame.width) / float(frame.height)
-                        if target_aspect_ratio < frame_aspect_ratio:
-                            # We will need to crop the width below, so resize to match the target_height
+                        if input_aspect_ratio < frame_aspect_ratio:
+                            # We will need to crop the width below, so resize to match the input_height
                             h = target_height
                             w = int((target_height * frame.width / frame.height) / 2) * 2  # force divisible by 2
                         else:
-                            # We will need to crop the height below, so resize to match the target_width
+                            # We will need to crop the height below, so resize to match the input_width
                             w = target_width
                             h = int((target_width * frame.height / frame.width) / 2) * 2  # force divisible by 2
 
@@ -143,7 +141,7 @@ def decode_av(pipe_input, frame_callback, put_metadata, target_width, target_hei
                     width, height = image.size
 
                     if (width, height) != (target_width, target_height):
-                        # Crop to the center to match target dimensions
+                        # Crop to the center to match input dimensions
                         start_x = width // 2 - target_width // 2
                         start_y = height // 2 - target_height // 2
                         image = image.crop((start_x, start_y, start_x + target_width, start_y + target_height))

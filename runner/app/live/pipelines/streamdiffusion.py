@@ -14,7 +14,15 @@ import aiohttp
 from .interface import Pipeline
 from ..trickle import VideoFrame, VideoOutput
 
-from .streamdiffusion_params import StreamDiffusionParams, IPAdapterConfig, get_model_type, IPADAPTER_SUPPORTED_TYPES
+from .streamdiffusion_params import (
+    StreamDiffusionParams,
+    IPAdapterConfig,
+    ProcessingConfig,
+    get_model_type,
+    IPADAPTER_SUPPORTED_TYPES,
+    LCM_LORAS_BY_TYPE
+)
+
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -59,8 +67,9 @@ class StreamDiffusion(Pipeline):
         img_tensor = self.pipe.preprocess_image(img_tensor)
 
         if self.params and self.params.controlnets:
-            for i, cn in enumerate(self.params.controlnets):
-                if cn.enabled and cn.conditioning_scale > 0:
+            enabled_cnets = [cn for cn in self.params.controlnets if cn.enabled]
+            for i, cn in enumerate(enabled_cnets):
+                if cn.conditioning_scale > 0:
                     self.pipe.update_control_image(i, img_tensor)
 
         if self.first_frame:
@@ -72,14 +81,15 @@ class StreamDiffusion(Pipeline):
         if isinstance(out_tensor, list):
             out_tensor = out_tensor[0]
 
+        # Workaround as the some post-processors produce tensors without the batch dimension
         if out_tensor.dim() == 3:
-            # Workaround as the NSFW fallback image is coming without the batch dimension
             out_tensor = out_tensor.unsqueeze(0)
-            return out_tensor
 
-        # The output tensor from the wrapper is (1, C, H, W), and the encoder expects (1, H, W, C).
-        out_bhwc = out_tensor.permute(0, 2, 3, 1)
-        return out_bhwc
+        # Encoder expects (B, H, W, C) format, so convert from (B, C, H, W) if needed.
+        if _is_bchw_format(out_tensor):
+            out_tensor = out_tensor.permute(0, 2, 3, 1)
+
+        return out_tensor
 
     async def get_processed_video_frame(self) -> VideoOutput:
         return await self.frame_queue.get()
@@ -153,7 +163,8 @@ class StreamDiffusion(Pipeline):
             'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
             'seed', 'seed_interpolation_method', 'normalize_seed_weights',
             'use_safety_checker', 'safety_checker_threshold', 'controlnets',
-            'ip_adapter', 'ip_adapter_style_image_url'
+            'image_preprocessing', 'image_postprocessing', 'latent_preprocessing', 'latent_postprocessing',
+            'ip_adapter', 'ip_adapter_style_image_url',
         }
 
         update_kwargs = {}
@@ -187,6 +198,14 @@ class StreamDiffusion(Pipeline):
             elif key == 'ip_adapter_style_image_url':
                 # Do not set on update_kwargs, we'll update it separately.
                 changed_ipadapter = True
+            elif key == 'image_preprocessing':
+                update_kwargs['image_preprocessing_config'] = _prepare_processing_config(new_params.image_preprocessing)['processors']
+            elif key == 'image_postprocessing':
+                update_kwargs['image_postprocessing_config'] = _prepare_processing_config(new_params.image_postprocessing)['processors']
+            elif key == 'latent_preprocessing':
+                update_kwargs['latent_preprocessing_config'] = _prepare_processing_config(new_params.latent_preprocessing)['processors']
+            elif key == 'latent_postprocessing':
+                update_kwargs['latent_postprocessing_config'] = _prepare_processing_config(new_params.latent_postprocessing)['processors']
             else:
                 update_kwargs[key] = new_value
 
@@ -253,6 +272,7 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
         preprocessor_params = (cn_config.preprocessor_params or {}).copy()
 
         # Inject preprocessor-specific parameters
+        default_cond_chans = 3
         if cn_config.preprocessor == "depth_tensorrt":
             preprocessor_params.update({
                 "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
@@ -267,11 +287,24 @@ def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[
             preprocessor_params.update({
                 "engine_path": engine_path,
             })
+        elif cn_config.preprocessor == "temporal_net_tensorrt":
+            default_cond_chans = 6
+            preprocessor_params.update({
+                "engine_path": "./engines/temporal_net/raft_small_min_384x384_max_1024x1024.engine",
+            })
+
+        # Any preprocessors may make use of the image resolution params from the base preprocessor class.
+        if not any(k in preprocessor_params for k in ['image_resolution', 'image_width', 'image_height']):
+            if params.width == params.height:
+                preprocessor_params.update({'image_resolution': params.width})
+            else:
+                preprocessor_params.update({'image_width': params.width, 'image_height': params.height})
 
         controlnet_config = {
             'model_id': cn_config.model_id,
             'preprocessor': cn_config.preprocessor,
             'conditioning_scale': cn_config.conditioning_scale,
+            'conditioning_channels': cn_config.conditioning_channels or default_cond_chans,
             'enabled': cn_config.enabled,
             'preprocessor_params': preprocessor_params,
             'control_guidance_start': cn_config.control_guidance_start,
@@ -311,6 +344,44 @@ def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[s
     return ip_cfg.model_dump()
 
 
+def _prepare_lora_dict(params: StreamDiffusionParams) -> Optional[Dict[str, float]]:
+    """Prepare LoRA dictionary with LCM LoRA logic applied externally."""
+
+    is_turbo = "turbo" in params.model_id
+    if not params.use_lcm_lora or is_turbo:
+        return params.lora_dict
+
+    lora_dict = params.lora_dict.copy() if params.lora_dict else {}
+    model_type = get_model_type(params.model_id)
+    lcm_lora = LCM_LORAS_BY_TYPE.get(model_type)
+    if lcm_lora and lcm_lora not in lora_dict:
+        lora_dict[lcm_lora] = 1.0
+
+    return lora_dict
+
+def _prepare_processing_config(cfg: Optional[ProcessingConfig[Any]]) -> Dict[str, Any]:
+    """
+    Prepare processing configuration for wrapper in the raw JSON format expected by the library.
+    Always sends enabled=True to the library. When cfg.enabled=False, sends empty processors list.
+    Automatically sets the order of the processors based on the index of the processor in the list.
+    """
+    if not cfg or not cfg.enabled:
+        return {"enabled": True, "processors": []}
+
+    processors: List[Dict[str, Any]] = []
+    for idx, p in enumerate(cfg.processors):
+        processors.append({
+            "type": p.type,
+            "enabled": p.enabled,
+            "order": idx,
+            "params": p.params or {},
+        })
+
+    return {
+        "enabled": True,
+        "processors": processors,
+    }
+
 def load_streamdiffusion_sync(
     params: StreamDiffusionParams,
     min_batch_size=1,
@@ -323,17 +394,16 @@ def load_streamdiffusion_sync(
         t_index_list=params.t_index_list,
         min_batch_size=min_batch_size,
         max_batch_size=max_batch_size,
-        lora_dict=params.lora_dict,
+        lora_dict=_prepare_lora_dict(params),
         mode="img2img",
         output_type="pt",
-        lcm_lora_id=params.lcm_lora_id,
         frame_buffer_size=1,
         width=params.width,
         height=params.height,
         warmup=10,
         acceleration=params.acceleration,
         do_add_noise=params.do_add_noise,
-        use_lcm_lora=params.use_lcm_lora,
+        skip_diffusion=params.skip_diffusion,
         enable_similar_image_filter=params.enable_similar_image_filter,
         similar_image_filter_threshold=params.similar_image_filter_threshold,
         similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
@@ -348,6 +418,10 @@ def load_streamdiffusion_sync(
         engine_dir=engine_dir,
         build_engines_if_missing=build_engines,
         compile_engines_only=build_engines,
+        image_preprocessing_config=_prepare_processing_config(params.image_preprocessing),
+        image_postprocessing_config=_prepare_processing_config(params.image_postprocessing),
+        latent_preprocessing_config=_prepare_processing_config(params.latent_preprocessing),
+        latent_postprocessing_config=_prepare_processing_config(params.latent_postprocessing),
         use_safety_checker=params.use_safety_checker,
         safety_checker_threshold=params.safety_checker_threshold,
     )
@@ -368,7 +442,7 @@ def load_streamdiffusion_sync(
 async def _load_image_from_url_or_b64(url: str) -> Image.Image:
     """
     Load an image from a URL or base64 encoded string.
-    
+
     Supports:
     - HTTP/HTTPS URLs: http://example.com/image.png
     - Data URIs: data:image/png;base64,iVBORw0KG...
@@ -376,7 +450,7 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
     """
     if not url or not isinstance(url, str):
         raise ValueError("Image URL or base64 string cannot be empty")
-            
+
     # Handle HTTP/HTTPS URLs
     if url.startswith('http://') or url.startswith('https://'):
         # Set user-agent to prevent 403 errors from servers like Wikipedia
@@ -393,7 +467,7 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
             raise ValueError(f"Failed to fetch image from URL: {e}") from e
         except asyncio.TimeoutError as e:
             raise ValueError("Request timeout while fetching image from URL") from e
-    
+
     # Handle data URI format: data:image/png;base64,<base64_data>
     elif url.startswith('data:'):
         match = re.match(r'^data:image/[a-zA-Z+]+;base64,(.+)$', url)
@@ -406,7 +480,7 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
             data = base64.b64decode(base64_data, validate=True)
         except Exception as e:
             raise ValueError(f"Invalid base64 encoding in data URI: {e}") from e
-    
+
     # Handle raw base64 string
     else:
         # Check if it looks like base64 (alphanumeric + / + = padding)
@@ -418,10 +492,23 @@ async def _load_image_from_url_or_b64(url: str) -> Image.Image:
             data = base64.b64decode(url, validate=True)
         except Exception as e:
             raise ValueError(f"Invalid base64 encoding: {e}") from e
-    
+
     # Attempt to decode the image data
     try:
         image = Image.open(BytesIO(data))
         return image.convert('RGB')
     except Exception as e:
         raise ValueError(f"Failed to decode image data: {e}") from e
+
+def _is_bchw_format(tensor: torch.Tensor) -> bool:
+    """
+    Detect if a 4D tensor is in (B, C, H, W) format vs (B, H, W, C).
+
+    Simple heuristic: if dim 1 is small (channels, typically 3-4) and dim -1 is large (spatial),
+    it's (B, C, H, W). If it's the other way around, it's (B, H, W, C).
+    """
+    if tensor.dim() != 4:
+        return False
+    dim1_size = tensor.shape[1]
+    dim_last_size = tensor.shape[-1]
+    return dim1_size <= 4 and dim_last_size > 4

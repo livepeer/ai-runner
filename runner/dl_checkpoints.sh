@@ -211,16 +211,17 @@ function download_streamdiffusion_live_models() {
   hf download thibaud/controlnet-sd21-canny-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   hf download thibaud/controlnet-sd21-depth-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   hf download thibaud/controlnet-sd21-color-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
-  hf download thibaud/controlnet-sd21-ade20k-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
-  hf download thibaud/controlnet-sd21-normalbae-diffusers --include "*.bin" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download daydreamlive/TemporalNet2-stable-diffusion-2-1 --include "scheduler.bin" --include "config.json" --include "diffusion_pytorch_model.safetensors" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   # SD1.5 controlnet models
   hf download lllyasviel/control_v11f1p_sd15_depth --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   hf download lllyasviel/control_v11f1e_sd15_tile --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   hf download lllyasviel/control_v11p_sd15_canny --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download daydreamlive/TemporalNet2-stable-diffusion-v1-5 --include "diffusion_pytorch_model.safetensors" --include "config.json" --cache-dir models
   # SDXL controlnet models
   hf download xinsir/controlnet-depth-sdxl-1.0 --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   hf download xinsir/controlnet-canny-sdxl-1.0 --include "diffusion_pytorch_model.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
   hf download xinsir/controlnet-tile-sdxl-1.0 --include "*.safetensors" --include "*.json" --include "*.txt" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
+  hf download daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0 --include "*.safetensors" --include "*.json" --include "scheduler.bin" --exclude ".onnx" --exclude ".onnx_data" --cache-dir models
 
   # IP-Adapter (only required files)
   hf download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" --include "models/image_encoder/*" --include "sdxl_models/ip-adapter_sdxl.bin" --include "sdxl_models/image_encoder/*" --cache-dir models
@@ -310,9 +311,10 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers thibaud/controlnet-sd21-ade20k-diffusers thibaud/controlnet-sd21-normalbae-diffusers' \
+              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers daydreamlive/TemporalNet2-stable-diffusion-2-1' \
               --build-depth-anything \
               --build-pose \
+              --build-raft \
               && \
             chown -R $(id -u):$(id -g) /models" ||
     (
@@ -328,10 +330,11 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny' \
+              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny daydreamlive/TemporalNet2-stable-diffusion-v1-5' \
               --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \
+              --build-raft \
               && \
             chown -R $(id -u):$(id -g) /models" ||
     (
@@ -348,10 +351,11 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '1' \
               --min-timesteps '1' \
               --max-timesteps '4' \
-              --controlnets 'xinsir/controlnet-depth-sdxl-1.0 xinsir/controlnet-canny-sdxl-1.0 xinsir/controlnet-tile-sdxl-1.0' \
+              --controlnets 'xinsir/controlnet-depth-sdxl-1.0 xinsir/controlnet-canny-sdxl-1.0 xinsir/controlnet-tile-sdxl-1.0 daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0' \
               --ipadapter-types 'regular faceid' \
               --build-depth-anything \
               --build-pose \
+              --build-raft \
               && \
             chown -R $(id -u):$(id -g) /models" ||
     (
@@ -480,7 +484,7 @@ done
 
 echo "Starting livepeer AI subnet model downloader..."
 echo "Creating 'models' directory in the current working directory..."
-mkdir -p models/checkpoints models/StreamDiffusion--engines models/insightface models/ComfyUI--{models,output}
+mkdir -p models/checkpoints models/StreamDiffusion--engines models/insightface models/StreamDiffusion--engines/cwd_models models/ComfyUI--{models,output}
 
 echo "Checking if 'hf' Hugging Face CLI is installed..."
 if ! command -v hf >/dev/null 2>&1; then

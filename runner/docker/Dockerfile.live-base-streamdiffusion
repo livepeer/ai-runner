@@ -25,29 +25,14 @@ RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
     torch==2.7.1+cu128 \
     torchvision==0.22.1+cu128 \
     torchaudio==2.7.1+cu128 \
-    --index-url https://download.pytorch.org/whl/cu128 && \
-    conda run -n comfystream pip install --no-cache-dir \
-    xformers==0.0.30 --no-deps
+    --index-url https://download.pytorch.org/whl/cu128
 
 # Install StreamDiffusion lib into the comfystream environment
-ARG STREAMDIFFUSION_VERSION=7a2c325648d15bd3478c465ec642959d86a18362
-RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt]
-
-# Pin versions of ONNX runtime which are too loose on streamdiffusion setup.py
-RUN conda run -n comfystream pip install --no-cache-dir \
-    onnx==1.18.0 onnxruntime==1.22.0 onnxruntime-gpu==1.22.0
+ARG STREAMDIFFUSION_VERSION=v1.0.0-beta
+RUN conda run -n comfystream pip install git+https://github.com/daydreamlive/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt,controlnet,ipadapter]
 
 # Install TensorRT bindings and libraries into the comfystream environment
-# TODO: update install-tensorrt script in streamdiffusion and use it instead of this
-RUN conda run -n comfystream pip install --no-cache-dir --upgrade --root-user-action=ignore \
-    tensorrt==10.12.0.36 \
-    tensorrt-cu12-bindings==10.12.0.36 \
-    tensorrt-cu12-libs==10.12.0.36 \
-    polygraphy==0.49.24 \
-    onnx-graphsurgeon==0.5.8 \
-    controlnet-aux==0.0.10 \
-    mediapipe==0.10.21 \
-    insightface==0.7.3
+RUN conda run -n comfystream python -m streamdiffusion.tools.install-tensorrt
 
 WORKDIR /app
 
@@ -58,3 +43,5 @@ ENV HF_HUB_OFFLINE=1
 # Create symlink for where StreamDiffusion builds TensorRT engines at runtime
 RUN ln -s /models/StreamDiffusion--engines ./engines
 RUN mkdir -p /root && ln -s /models/insightface /root/.insightface
+# this one is used only for realesrgan_trt which has ./models hardcoded
+RUN ln -s /models/StreamDiffusion--engines/cwd_models ./models

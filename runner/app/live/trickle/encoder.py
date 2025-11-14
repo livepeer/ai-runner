@@ -27,7 +27,9 @@ def encode_av(
     get_metadata,
     recovery_bag: dict, # opaque bag of stuff to better manage crash recovery
     video_codec: Optional[str] ='libx264',
-    audio_codec: Optional[str] ='libfdk_aac'
+    audio_codec: Optional[str] ='libfdk_aac',
+    output_width: Optional[int] = None,
+    output_height: Optional[int] = None
 ):
     logging.info("Starting encoder")
 
@@ -63,9 +65,9 @@ def encode_av(
 
     if video_meta and video_codec:
         # Add a new stream to the output using the desired video codec
-        target_width = video_meta.get('target_width', DEFAULT_WIDTH)
-        target_height = video_meta.get('target_height', DEFAULT_HEIGHT)
-        video_opts = { 'video_size':f'{target_width}x{target_height}', 'bf':'0' }
+        width = output_width if output_width is not None else DEFAULT_WIDTH
+        height = output_height if output_height is not None else DEFAULT_HEIGHT
+        video_opts = { 'video_size':f'{width}x{height}', 'bf':'0' }
         if video_codec == 'libx264':
             video_opts = video_opts | { 'preset':'superfast', 'tune':'zerolatency', 'forced-idr':'1' }
         output_video_stream = output_container.add_stream(video_codec, options=video_opts)

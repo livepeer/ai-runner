@@ -1,10 +1,13 @@
-from typing import Dict, List, Literal, Optional, Any, Tuple
+from typing import Dict, List, Literal, Optional, Any, Tuple, TypeVar, Generic
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_validator, Field
 
 from .interface import BaseParams
 
 ModelType = Literal["sd15", "sd21", "sdxl"]
+
+# Module-level flag to skip ControlNet limit check during TensorRT compilation
+_is_building_tensorrt_engines = False
 
 IPADAPTER_SUPPORTED_TYPES: List[ModelType] = ["sd15", "sdxl"]
 
@@ -15,19 +18,25 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
         "thibaud/controlnet-sd21-canny-diffusers",
         "thibaud/controlnet-sd21-depth-diffusers",
         "thibaud/controlnet-sd21-color-diffusers",
-        "thibaud/controlnet-sd21-ade20k-diffusers",
-        "thibaud/controlnet-sd21-normalbae-diffusers",
+        "daydreamlive/TemporalNet2-stable-diffusion-2-1",
     ],
     "sd15": [
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
+        "daydreamlive/TemporalNet2-stable-diffusion-v1-5",
     ],
     "sdxl": [
         "xinsir/controlnet-depth-sdxl-1.0",
         "xinsir/controlnet-canny-sdxl-1.0",
         "xinsir/controlnet-tile-sdxl-1.0",
+        "daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0",
     ],
+}
+
+LCM_LORAS_BY_TYPE: Dict[ModelType, str] = {
+    "sdxl": "latent-consistency/lcm-lora-sdxl",
+    "sd15": "latent-consistency/lcm-lora-sdv1-5",
 }
 
 MODEL_ID_TO_TYPE: Dict[str, ModelType] = {
@@ -42,6 +51,67 @@ def get_model_type(model_id: str) -> ModelType:
         raise ValueError(f"Invalid model_id: {model_id}")
     return MODEL_ID_TO_TYPE[model_id]
 
+ImageProcessorName = Literal[
+    "blur",
+    "canny",
+    "depth",
+    "depth_tensorrt",
+    "external",
+    "feedback",
+    "hed",
+    "lineart",
+    "mediapipe_pose",
+    "mediapipe_segmentation",
+    "openpose",
+    "passthrough",
+    "pose_tensorrt",
+    "realesrgan_trt",
+    "sharpen",
+    "soft_edge",
+    "standard_lineart",
+    "temporal_net_tensorrt",
+    "upscale",
+]
+
+LatentProcessorsName = Literal["latent_feedback"]
+
+ProcessorParams = Dict[str, Any]
+
+ProcessorTypeT = TypeVar("ProcessorTypeT", bound=str)
+
+class SingleProcessorConfig(BaseModel, Generic[ProcessorTypeT]):
+    """
+    Generic preprocessor configuration model.
+
+    Type parameter ProcessorTypeT should be a Literal type defining the available processor types.
+    """
+    class Config:
+        extra = "forbid"
+
+    type: ProcessorTypeT
+    """Type of the preprocessor."""
+
+    enabled: bool = True
+    """Whether this preprocessor is active."""
+
+    # Library has an "order" field, but we simply populate it with the index of the processor in the list
+    # order: int
+
+    params: ProcessorParams = {}
+    """Parameters for the preprocessor."""
+
+class ProcessingConfig(BaseModel, Generic[ProcessorTypeT]):
+    """
+    Generic image and latent preprocessing configuration model.
+    """
+    class Config:
+        extra = "forbid"
+
+    enabled: bool = True
+    """Whether this preprocessing is active."""
+
+    processors: List[SingleProcessorConfig[ProcessorTypeT]] = []
+    """List of processors to apply."""
 
 class ControlNetConfig(BaseModel):
     """
@@ -59,14 +129,15 @@ class ControlNetConfig(BaseModel):
         "thibaud/controlnet-sd21-canny-diffusers",
         "thibaud/controlnet-sd21-depth-diffusers",
         "thibaud/controlnet-sd21-color-diffusers",
-        "thibaud/controlnet-sd21-ade20k-diffusers",
-        "thibaud/controlnet-sd21-normalbae-diffusers",
+        "daydreamlive/TemporalNet2-stable-diffusion-2-1",
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
+        "daydreamlive/TemporalNet2-stable-diffusion-v1-5",
         "xinsir/controlnet-depth-sdxl-1.0",
         "xinsir/controlnet-canny-sdxl-1.0",
         "xinsir/controlnet-tile-sdxl-1.0",
+        "daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0",
     ]
     """ControlNet model identifier. Each model provides different types of conditioning:
     - openpose: Human pose estimation for figure control
@@ -79,12 +150,17 @@ class ControlNetConfig(BaseModel):
     conditioning_scale: float = 1.0
     """Strength of the ControlNet's influence on generation. Higher values make the model follow the control signal more strictly. Typical range 0.0-1.0, where 0.0 disables the control and 1.0 applies full control."""
 
-    preprocessor: Literal[
-        "canny", "depth", "openpose", "lineart", "standard_lineart", "passthrough", "external", "soft_edge", "hed", "feedback", "depth_tensorrt", "pose_tensorrt", "mediapipe_pose", "mediapipe_segmentation"
-    ] = "passthrough"
+    conditioning_channels: int | None = Field(
+        default=None, # model-specific default derived when constructing params
+        description="Number of channels in the controlnet's conditioning input tensor. Defaults to 6 for TemporalNets and 3 for others.",
+        ge=1,
+        le=6
+    )
+
+    preprocessor: ImageProcessorName = "passthrough"
     """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
 
-    preprocessor_params: Dict[str, Any] = {}
+    preprocessor_params: ProcessorParams = {}
     """Additional parameters for the preprocessor. For example, canny edge detection uses 'low_threshold' and 'high_threshold' values."""
 
     enabled: bool = True
@@ -141,6 +217,17 @@ _DEFAULT_CONTROLNETS = [
         conditioning_scale=0.2,
         preprocessor="passthrough",
         preprocessor_params={},
+        enabled=True,
+        control_guidance_start=0.0,
+        control_guidance_end=1.0,
+    ),
+    ControlNetConfig(
+        model_id="daydreamlive/TemporalNet2-stable-diffusion-2-1",
+        conditioning_scale=0.0,
+        preprocessor="temporal_net_tensorrt",
+        preprocessor_params={
+            "flow_strength": 0.4,
+        },
         enabled=True,
         control_guidance_start=0.0,
         control_guidance_end=1.0,
@@ -229,8 +316,12 @@ class StreamDiffusionParams(BaseParams):
     delta: float = 0.7
     """Delta sets per-frame denoising progress: lower delta means steadier, less flicker but slower/softer; higher delta means faster, sharper but more flicker/artifacts (often reduce CFG)."""
 
-    num_inference_steps: int = 50
-    """Builds the full denoising schedule (the "grid" of possible refinement steps). Changing it changes what each step number (t_index_list value) means. Keep it fixed for a session and only adjust if you're deliberately redefining the schedule; if you do, proportionally remap your t_index_list. Typical range 10–200 with default being 50."""
+    num_inference_steps: int = Field(
+        default=50,
+        ge=1,
+        le=100,
+        description='Builds the full denoising schedule (the "grid" of possible refinement steps). Changing it changes what each step number (t_index_list value) means. Keep it fixed for a session and only adjust if you\'re deliberately redefining the schedule; if you do, proportionally remap your t_index_list. Range: 1–100 with default being 50.'
+    )
 
     t_index_list: List[int] = [12, 20, 32]
     """The ordered list of step indices from the num_inference_steps schedule to execute per frame. Each index is one model pass, so latency scales with the list length. Higher indices (e.g., 40–49 on a 50-step grid) mainly polish and preserve structure (lower flicker), while lower indices (<20) rewrite structure (more flicker, creative). Values must be non-decreasing, and each between 0 and num_inference_steps."""
@@ -262,6 +353,9 @@ class StreamDiffusionParams(BaseParams):
     do_add_noise: bool = True
     """Whether to add noise to input frames before processing. Enabling this slightly re-noises each frame to improve temporal stability, reduce ghosting/texture sticking, and prevent drift; disabling can yield sharper, lower-latency results but may increase flicker and artifact accumulation over time."""
 
+    skip_diffusion: bool = False
+    """Whether to skip diffusion and apply only preprocessing/postprocessing hooks. When True, bypasses VAE encoding, diffusion, and VAE decoding, but still applies image preprocessing and postprocessing hooks for consistent processing."""
+
     seed: int | List[Tuple[int, float]] = 789
     """Random seed for generation. Can be a single integer or weighted list of (seed, weight) tuples."""
 
@@ -289,8 +383,38 @@ class StreamDiffusionParams(BaseParams):
     ip_adapter: Optional[IPAdapterConfig] = IPAdapterConfig(enabled=False)
     """IPAdapter configuration for style transfer."""
 
-    ip_adapter_style_image_url: str = "https://ipfs.livepeer.com/ipfs/bafkreibnlg3nfizj6ixc2flljo3pewo2ycnxitczawu4d5vmxkejnjwxca"
+    ip_adapter_style_image_url: str = "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"
     """URL to fetch the style image for IPAdapter."""
+
+    # Processors
+
+    image_preprocessing: Optional[ProcessingConfig[ImageProcessorName]] = None
+    """List of image preprocessor configurations for image processing."""
+
+    image_postprocessing: Optional[ProcessingConfig[ImageProcessorName]] = None
+    """List of image postprocessor configurations for image processing."""
+
+    latent_preprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
+    """List of latent preprocessor configurations for latent processing."""
+
+    latent_postprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
+    """List of latent postprocessor configurations for latent processing."""
+
+    def get_output_resolution(self) -> tuple[int, int]:
+        """
+        Get the output resolution as a (width, height) tuple, accounting for upscale processors
+        in image_postprocessing.
+        """
+        output_width, output_height = self.width, self.height
+
+        if self.image_postprocessing and self.image_postprocessing.enabled:
+            for proc in self.image_postprocessing.processors:
+                if proc.enabled and proc.type in ["upscale", "realesrgan_trt"]:
+                    scale_factor = 2.0 if proc.type == "realesrgan_trt" else proc.params.get("scale_factor", 2.0)
+                    output_width = int(output_width * scale_factor)
+                    output_height = int(output_height * scale_factor)
+
+        return (output_width, output_height)
 
     @model_validator(mode="after")
     @staticmethod
@@ -338,5 +462,16 @@ class StreamDiffusionParams(BaseParams):
         invalid_cns = [cn for cn in cn_ids if cn not in supported_cns]
         if invalid_cns:
             raise ValueError(f"Invalid ControlNets for model {model.model_id}: {invalid_cns}")
+
+        # SDXL models can only have up to 3 enabled controlnets due to VRAM limitations on 4090s
+        if model_type == "sdxl" and not _is_building_tensorrt_engines:
+            enabled_cns = [
+                cn for cn in model.controlnets
+                if cn.enabled and cn.conditioning_scale > 0
+            ]
+            if len(enabled_cns) > 3:
+                raise ValueError(
+                    f"SDXL models support a maximum of 3 enabled ControlNets, found {len(enabled_cns)}."
+                )
 
         return model

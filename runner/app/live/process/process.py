@@ -14,6 +14,7 @@ from typing import Any
 import torch
 
 from ..pipelines import load_pipeline, Pipeline, BaseParams
+from ..pipelines.loader import parse_pipeline_params
 from ..log import config_logging, config_logging_fields, log_timing
 from ..trickle import (
     InputFrame,
@@ -56,6 +57,7 @@ class PipelineProcess:
 
         # Using underscored names to emphasize state used only from the child process.
         self._last_params = BaseParams()
+        self._last_params_request_id = ""
 
     def is_alive(self):
         return self.process.is_alive()
@@ -139,8 +141,8 @@ class PipelineProcess:
         self.param_update_queue.put(params)
 
     def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
-        # we cannot clear the input_queue as we send CUDA tensors on it, which can't be received by the same process that sent it.
-        # So we clear only the other queues, and rely on the request_id checks to avoid using frames from previous sessions.
+        # Clear queues to avoid using frames from previous sessions
+        clear_queue(self.input_queue)
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
@@ -156,8 +158,6 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
-        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
-            frame = frame.replace_tensor(frame.tensor.cuda())
         self._try_queue_put(self.input_queue, frame)
 
     async def recv_output(self) -> OutputFrame | None:
@@ -223,7 +223,8 @@ class PipelineProcess:
                 params = {}
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
-                self._last_params = BaseParams(**params)
+                self._last_params = parse_pipeline_params(self.pipeline_name, params)
+                self._last_params_request_id = self.request_id
                 pipeline = load_pipeline(self.pipeline_name)
                 await pipeline.initialize(**params)
                 return pipeline
@@ -236,7 +237,8 @@ class PipelineProcess:
                 with log_timing(
                     f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"
                 ):
-                    self._last_params = BaseParams()
+                    self._last_params = parse_pipeline_params(self.pipeline_name, {})
+                    self._last_params_request_id = self.request_id
                     pipeline = load_pipeline(self.pipeline_name)
                     await pipeline.initialize()
                     return pipeline
@@ -277,6 +279,10 @@ class PipelineProcess:
                 if isinstance(input, VideoFrame):
                     input.log_timestamps["pre_process_frame"] = time.time()
 
+                    # Move CPU tensors to GPU before sending to pipeline
+                    if not input.tensor.is_cuda and torch.cuda.is_available():
+                        input = input.replace_tensor(input.tensor.cuda())
+
                     if self._is_loading() and self._last_params.show_reloading_frame:
                         await self._render_loading_frame(overlay, input)
                     else:
@@ -293,10 +299,12 @@ class PipelineProcess:
         if not overlay.is_active():
             overlay.begin_reload()
 
-        w, h = self._last_params.width, self._last_params.height
+        w, h = self._last_params.get_output_resolution()
         loading_tensor = await overlay.render(w, h)
-        if torch.cuda.is_available() and not loading_tensor.is_cuda:
-            loading_tensor = loading_tensor.cuda()
+
+        # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
+        if loading_tensor.is_cuda:
+            loading_tensor = loading_tensor.cpu()
 
         out_frame = input.replace_tensor(loading_tensor)
         out = VideoOutput(out_frame, self.request_id, is_loading_frame=True)
@@ -316,8 +324,9 @@ class PipelineProcess:
                         continue
                     overlay.end_reload()
 
-                if isinstance(out, VideoOutput) and not out.tensor.is_cuda and torch.cuda.is_available():
-                    out = out.replace_tensor(out.tensor.cuda())
+                # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
+                if isinstance(out, VideoOutput) and out.tensor.is_cuda:
+                    out = out.replace_tensor(out.tensor.cpu())
 
                 out.log_timestamps["post_process_frame"] = time.time()
                 self._try_queue_put(self.output_queue, out)
@@ -339,9 +348,21 @@ class PipelineProcess:
                     f"PipelineProcess: Updating pipeline parameters: hash={params_hash} params={params}"
                 )
 
+                # Check resolution change within the same request_id
+                new_params = parse_pipeline_params(self.pipeline_name, params)
+                if self._last_params_request_id == self.request_id:
+                    new_resolution = new_params.get_output_resolution()
+                    current_resolution = self._last_params.get_output_resolution()
+                    if current_resolution != new_resolution:
+                        raise ValueError(
+                            f"Cannot change output resolution mid-stream (Current resolution: {current_resolution} requested resolution: {new_resolution}). "
+                            f"Output resolution (e.g. upscalers) can only be configured when starting a new stream."
+                        )
+
                 with log_timing(f"PipelineProcess: Pipeline update parameters with params_hash={params_hash}"):
                     reload_task = await pipeline.update_params(**params)
-                    self._last_params = BaseParams(**params)
+                    self._last_params = new_params
+                    self._last_params_request_id = self.request_id
             except Exception as e:
                 self._report_error("Error updating params", e)
                 continue
@@ -363,7 +384,8 @@ class PipelineProcess:
             finally:
                 # Pre-warm the loading overlay, so it's shown with the new resolution on the next reload.
                 try:
-                    await overlay.prewarm(self._last_params.width, self._last_params.height)
+                    w, h = self._last_params.get_output_resolution()
+                    await overlay.prewarm(w, h)
                 except Exception:
                     logging.warning("Failed to prewarm loading overlay caches", exc_info=True)
 
