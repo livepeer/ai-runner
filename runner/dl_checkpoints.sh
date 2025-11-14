@@ -211,8 +211,6 @@ function download_streamdiffusion_live_models() {
   huggingface-cli download thibaud/controlnet-sd21-canny-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download thibaud/controlnet-sd21-depth-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download thibaud/controlnet-sd21-color-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download thibaud/controlnet-sd21-ade20k-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download thibaud/controlnet-sd21-normalbae-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
   huggingface-cli download daydreamlive/TemporalNet2-stable-diffusion-2-1 --include "config.json" "diffusion_pytorch_model.safetensors" "scheduler.bin" --exclude ".onnx" ".onnx_data" --cache-dir models
   # SD1.5 controlnet models
   huggingface-cli download lllyasviel/control_v11f1p_sd15_depth --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
@@ -313,7 +311,11 @@ function build_streamdiffusion_tensorrt() {
               --opt-timesteps '3' \
               --min-timesteps '1' \
               --max-timesteps '4' \
+<<<<<<< HEAD
               --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers thibaud/controlnet-sd21-ade20k-diffusers thibaud/controlnet-sd21-normalbae-diffusers daydreamlive/TemporalNet2-stable-diffusion-2-1' \
+=======
+              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers' \
+>>>>>>> parent of 75b9d00 (Add new controlnet models for streamdiffusion (#802))
               --build-depth-anything \
               --build-pose \
               --build-raft \

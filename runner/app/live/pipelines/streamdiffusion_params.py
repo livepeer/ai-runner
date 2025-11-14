@@ -18,8 +18,6 @@ CONTROLNETS_BY_TYPE: Dict[ModelType, List[str]] = {
         "thibaud/controlnet-sd21-canny-diffusers",
         "thibaud/controlnet-sd21-depth-diffusers",
         "thibaud/controlnet-sd21-color-diffusers",
-        "thibaud/controlnet-sd21-ade20k-diffusers",
-        "thibaud/controlnet-sd21-normalbae-diffusers",
         "daydreamlive/TemporalNet2-stable-diffusion-2-1",
     ],
     "sd15": [
@@ -131,9 +129,12 @@ class ControlNetConfig(BaseModel):
         "thibaud/controlnet-sd21-canny-diffusers",
         "thibaud/controlnet-sd21-depth-diffusers",
         "thibaud/controlnet-sd21-color-diffusers",
+<<<<<<< HEAD
         "thibaud/controlnet-sd21-ade20k-diffusers",
         "thibaud/controlnet-sd21-normalbae-diffusers",
         "daydreamlive/TemporalNet2-stable-diffusion-2-1",
+=======
+>>>>>>> parent of 75b9d00 (Add new controlnet models for streamdiffusion (#802))
         "lllyasviel/control_v11f1p_sd15_depth",
         "lllyasviel/control_v11f1e_sd15_tile",
         "lllyasviel/control_v11p_sd15_canny",
