@@ -3,9 +3,9 @@ import json
 from typing import Union
 from pydantic import field_validator
 
-from .interface import BaseParams
+from ..interface import BaseParams
 
-_default_workflow_path = pathlib.Path(__file__).parent.absolute() / "comfyui_default_workflow.json"
+_default_workflow_path = pathlib.Path(__file__).parent.absolute() / "default_workflow.json"
 with open(_default_workflow_path, 'r') as f:
     DEFAULT_WORKFLOW_JSON = json.load(f)
 

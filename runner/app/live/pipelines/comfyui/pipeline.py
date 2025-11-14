@@ -5,9 +5,9 @@ import logging
 
 from comfystream.client import ComfyStreamClient
 
-from .interface import Pipeline
-from .comfyui_params import ComfyUIParams
-from ..trickle import VideoFrame, VideoOutput
+from ..interface import Pipeline
+from .params import ComfyUIParams
+from ...trickle import VideoFrame, VideoOutput
 
 
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
