@@ -11,10 +11,10 @@ from PIL import Image
 from io import BytesIO
 import aiohttp
 
-from .interface import Pipeline
-from ..trickle import VideoFrame, VideoOutput
+from ..interface import Pipeline
+from ...trickle import VideoFrame, VideoOutput
 
-from .streamdiffusion_params import (
+from .params import (
     StreamDiffusionParams,
     IPAdapterConfig,
     ProcessingConfig,

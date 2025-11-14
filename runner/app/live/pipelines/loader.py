@@ -6,7 +6,7 @@ from .interface import Pipeline, BaseParams
 
 def load_pipeline(name: str) -> Pipeline:
     if name == "streamdiffusion" or name.startswith("streamdiffusion-"):
-        from .streamdiffusion import StreamDiffusion
+        from .streamdiffusion.pipeline import StreamDiffusion
         return StreamDiffusion()
     if name == "comfyui":
         from .comfyui import ComfyUI
@@ -24,7 +24,7 @@ def parse_pipeline_params(name: str, params: dict) -> BaseParams:
     """
     if name == "streamdiffusion" or name.startswith("streamdiffusion-"):
         with _no_expensive_imports():
-            from .streamdiffusion_params import StreamDiffusionParams
+            from .streamdiffusion.params import StreamDiffusionParams
             return StreamDiffusionParams(**params)
     if name == "comfyui":
         with _no_expensive_imports():

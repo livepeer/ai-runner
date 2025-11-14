@@ -2,7 +2,7 @@ from typing import Dict, List, Literal, Optional, Any, Tuple, TypeVar, Generic
 
 from pydantic import BaseModel, model_validator, Field
 
-from .interface import BaseParams
+from ..interface import BaseParams
 
 ModelType = Literal["sd15", "sd21", "sdxl"]
 
