@@ -27,7 +27,7 @@ The AI Runner container's runner app uses [HuggingFace](https://huggingface.co/)
 1. **Install Hugging Face CLI**: Install the Hugging Face CLI by running the following command:
 
    ```bash
-   pip install huggingface_hub[cli,hf_transfer]
+   pip install huggingface_hub
    ```
 
 2. **Set up Hugging Face Access Token**: Generate a Hugging Face access token as per the [official guide](https://huggingface.co/docs/hub/en/security-tokens) and assign it to the `HG_TOKEN` environment variable. This token enables downloading of [private models](https://huggingface.co/docs/transformers.js/en/guides/private) from the Hugging Face model hub. Alternatively, use the Hugging Face CLI's [login command](https://huggingface.co/docs/huggingface_hub/en/guides/cli#huggingface-cli-login) to install the token.
