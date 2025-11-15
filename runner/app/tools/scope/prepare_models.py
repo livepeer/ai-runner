@@ -28,12 +28,6 @@ def parse_args() -> argparse.Namespace:
         help="Directory where Scope assets should live (default: /models).",
     )
     parser.add_argument(
-        "--scope-path",
-        type=Path,
-        default=Path("/workspace/scope"),
-        help="Path to the Scope source tree (default: /workspace/scope).",
-    )
-    parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable verbose logging for troubleshooting.",
@@ -77,23 +71,11 @@ def ensure_models_dir(path: Path) -> None:
     LOG.info("Using models directory: %s", path)
 
 
-def ensure_scope_on_path(scope_path: Path) -> None:
-    if not scope_path.exists():
-        raise RuntimeError(f"Scope repo not found at {scope_path}")
-
-    scope_str = str(scope_path)
-    if scope_str not in sys.path:
-        sys.path.insert(0, scope_str)
-        LOG.debug("Added %s to sys.path", scope_str)
-    LOG.info("Using Scope path: %s", scope_str)
-
-
 def main() -> None:
     args = parse_args()
     configure_logging(args.verbose)
     LOG.info("Starting Scope model preparation workflow.")
     ensure_models_dir(args.models_dir)
-    ensure_scope_on_path(args.scope_path)
     verify_scope_installation()
     LOG.info("Scope model preparation complete.")
 
