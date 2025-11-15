@@ -3,6 +3,7 @@ import logging
 import asyncio
 import base64
 import re
+from pathlib import Path
 from typing import Dict, List, Optional, Any, cast
 
 import torch
@@ -257,6 +258,12 @@ class StreamDiffusion(Pipeline):
             self.pipe = None
             self.params = None
             self.frame_queue = asyncio.Queue()
+
+    @classmethod
+    def prepare_models(cls, models_dir: Path):
+        from .prepare import prepare_streamdiffusion_models
+
+        prepare_streamdiffusion_models(models_dir)
 
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
