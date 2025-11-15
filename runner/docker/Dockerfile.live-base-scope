@@ -44,6 +44,9 @@ RUN git clone --depth 1 --branch ${SCOPE_VERSION} https://github.com/daydreamliv
 
 WORKDIR /app
 
+# Add Scope repository to Python path so lib module can be imported
+ENV PYTHONPATH="/workspace/scope:${PYTHONPATH:-}"
+
 # Disable HF hub connectivity to avoid internet access during runtime.
 # This is manually disabled on the script to download models (dl_checkpoints.sh)
 ENV HF_HUB_OFFLINE=1
