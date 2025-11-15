@@ -199,13 +199,14 @@ class ProcessGuardian:
         # Special case: short halt after params update
         active_after_load = time_since_last_output < time_since_pipeline_load
         if not active_after_load:
+            error_threshold = 30 if self.pipeline == "comfyui" else 10
             return (
                 PipelineState.ONLINE
                 if time_since_pipeline_load < 2
                 else PipelineState.DEGRADED_INPUT
                 if time_since_last_input > time_since_pipeline_load
                 else PipelineState.DEGRADED_INFERENCE
-                if time_since_pipeline_load < 10
+                if time_since_pipeline_load < error_threshold
                 else PipelineState.ERROR
             )
 
