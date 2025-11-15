@@ -47,8 +47,8 @@ class ComfyUI(Pipeline):
             tensor = tensor.clone()
         frame.side_data.input = tensor
         frame.side_data.skipped = True
-        self.client.put_video_input(frame)
         await self.video_incoming_frames.put(VideoOutput(frame, request_id))
+        self.client.put_video_input(frame)
 
     async def get_processed_video_frame(self):
         result_tensor = await self.client.get_video_output()
