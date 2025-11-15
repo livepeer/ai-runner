@@ -7,6 +7,7 @@ set -e
 PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
 AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion}
+AI_RUNNER_SCOPE_IMAGE=${AI_RUNNER_SCOPE_IMAGE:-livepeer/ai-runner:live-app-scope}
 CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 PIPELINE=${PIPELINE:-all}
 
@@ -105,7 +106,7 @@ function display_help() {
   echo "  PULL_IMAGES  Whether to pull Docker images (default: true)"
   echo "  AI_RUNNER_COMFYUI_IMAGE  ComfyUI Docker image (default: livepeer/ai-runner:live-app-comfyui)"
   echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion Docker image (default: livepeer/ai-runner:live-app-streamdiffusion)"
-  echo "  PIPELINE  When using --live or --tensorrt, specify which pipeline to use: 'streamdiffusion', 'comfyui', or 'all' (default)"
+  echo "  PIPELINE  When using --live or --tensorrt, specify which pipeline to use: 'streamdiffusion', 'comfyui', 'scope', or 'all' (default)"
   echo "  HF_TOKEN  HuggingFace token for downloading token-gated models"
   echo "  DEBUG  Enable debug mode with set -x"
 }
@@ -184,13 +185,18 @@ function download_live_models() {
     printf "\nDownloading ComfyUI live models only...\n"
     download_comfyui_live_models
     ;;
+  "scope")
+    printf "\nPreparing Scope live models only...\n"
+    prepare_scope_models
+    ;;
   "all")
     printf "\nDownloading all live models...\n"
     download_streamdiffusion_live_models
     download_comfyui_live_models
+    prepare_scope_models
     ;;
   *)
-    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, all\n" "$PIPELINE"
+    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, scope, all\n" "$PIPELINE"
     exit 1
     ;;
   esac
@@ -280,13 +286,18 @@ function build_tensorrt_models() {
     printf "\nBuilding ComfyUI TensorRT models only...\n"
     build_comfyui_tensorrt
     ;;
+  "scope")
+    printf "\nPreparing Scope models only...\n"
+    prepare_scope_models
+    ;;
   "all")
     printf "\nBuilding all TensorRT models...\n"
     build_streamdiffusion_tensorrt
     build_comfyui_tensorrt
+    prepare_scope_models
     ;;
   *)
-    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, all\n" "$PIPELINE"
+    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, scope, all\n" "$PIPELINE"
     exit 1
     ;;
   esac
@@ -360,6 +371,27 @@ function build_streamdiffusion_tensorrt() {
             chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed streamdiffusion tensorrt"
+      exit 1
+    )
+}
+
+function prepare_scope_models() {
+  printf "\nPreparing Scope models...\n"
+
+  if [ "$PULL_IMAGES" = true ]; then
+    docker pull $AI_RUNNER_SCOPE_IMAGE
+  fi
+
+  # ai-worker references the live-app tag, so replicate it locally for consistency.
+  docker image tag $AI_RUNNER_SCOPE_IMAGE livepeer/ai-runner:live-app-scope
+
+  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
+    -l Scope-Prepare-Models -e HF_HUB_OFFLINE=0 \
+    --name scope-prepare-models $AI_RUNNER_SCOPE_IMAGE \
+    bash -c "$CONDA_PYTHON -m app.tools.scope.prepare_models --models-dir /models && \
+             chown -R $(id -u):$(id -g) /models" ||
+    (
+      echo "failed Scope model preparation"
       exit 1
     )
 }

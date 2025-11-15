@@ -1,0 +1,53 @@
+ARG BASE_IMAGE=livepeer/ai-runner:live-base
+FROM ${BASE_IMAGE}
+
+# Install Miniconda and create the 'comfystream' environment
+ARG PYTHON_VERSION=3.11
+ENV CONDA_DIR="/workspace/miniconda3"
+ENV PATH="$CONDA_DIR/bin:$PATH" \
+    PIP_PREFER_BINARY=1
+
+RUN apt update && apt install -yqq --no-install-recommends wget curl ca-certificates && \
+    wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.11.0-2-Linux-x86_64.sh -O ~/miniconda.sh && \
+    /bin/bash ~/miniconda.sh -b -p $CONDA_DIR && \
+    rm ~/miniconda.sh && \
+    conda init bash && \
+    conda config --set auto_activate_base false && \
+    conda clean -a -y && \
+    conda create -n comfystream python=$PYTHON_VERSION -y && \
+    conda run -n comfystream pip install --no-cache-dir --upgrade pip==23.3.2 setuptools==69.5.1 wheel==0.43.0 uv==0.9.9 && \
+    conda clean -a -y && \
+    apt purge -y --auto-remove wget curl && \
+    apt clean && rm -rf /var/lib/apt/lists/*
+
+# Install Node.js for frontend build
+RUN apt update && apt install -yqq --no-install-recommends curl ca-certificates gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt install -yqq nodejs && \
+    apt clean && rm -rf /var/lib/apt/lists/*
+
+RUN conda run -n comfystream pip install --no-cache-dir diffusers==0.35.0 transformers==4.56.0
+
+# Install Scope dependencies into the comfystream environment
+# Clone scope repo and install with uv
+# Note: --active flag ensures uv installs packages into the active conda environment instead of
+# creating a separate .venv, making packages available alongside pip-installed packages
+ARG SCOPE_VERSION=main
+RUN git clone --depth 1 --branch ${SCOPE_VERSION} https://github.com/daydreamlive/scope.git /workspace/scope && \
+    cd /workspace/scope && \
+    conda run -n comfystream uv sync --frozen --active && \
+    cd frontend && \
+    npm install && \
+    npm run build && \
+    cd /workspace && \
+    rm -rf /workspace/scope/.git
+
+WORKDIR /app
+
+# Add Scope repository to Python path so lib module can be imported
+ENV PYTHONPATH="/workspace/scope:${PYTHONPATH:-}"
+
+# Disable HF hub connectivity to avoid internet access during runtime.
+# This is manually disabled on the script to download models (dl_checkpoints.sh)
+ENV HF_HUB_OFFLINE=1
+
