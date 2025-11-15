@@ -78,12 +78,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - subtype: ""
+          - subtype: "sdturbo"
           - subtype: "sd15"
           - subtype: "sdxl"
           - subtype: "sdxl-faceid"
     env:
-      DOCKER_SUFFIX: ${{ matrix.subtype && format('-{0}', matrix.subtype) }}
+      DOCKER_SUFFIX: ${{ matrix.subtype == 'sdturbo' && '' || format('-{0}', matrix.subtype) }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -120,14 +120,13 @@ jobs:
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
       - name: Load params for subtype
-        if: ${{ matrix.subtype != '' }}
         id: params_json
         shell: bash
         run: |
           set -ex
 
-          FILE_SUFFIX="$(printf '%s' "$DOCKER_SUFFIX" | tr '-' '_')"
-          JSON_FILE="runner/app/live/pipelines/streamdiffusion/${FILE_SUFFIX#_}_default_params.json"
+          PARAM_NAME="$(echo "${{ matrix.subtype }}" | tr '-' '_')"
+          JSON_FILE="runner/app/live/pipelines/streamdiffusion/${PARAM_NAME}_default_params.json"
           if [ ! -f "$JSON_FILE" ]; then
             echo "Params file missing: $JSON_FILE" >&2
             exit 1
