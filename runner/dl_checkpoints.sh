@@ -202,43 +202,51 @@ function download_live_models() {
   esac
 }
 
+function run_pipeline_prepare() {
+  local pipeline="$1"
+  local image="$2"
+  local label="${3:-Pipeline-Prepare}"
+  local container_name="ai-runner-${pipeline}-prepare"
+
+  if [[ "$(docker ps -a -q --filter="label=${label}")" ]]; then
+    printf "Previous ${pipeline} prepare run hasn't finished correctly. There are containers still running:\n"
+    docker ps -a --filter="label=${label}"
+    exit 1
+  fi
+
+  if [ "$PULL_IMAGES" = true ]; then
+    docker pull "$image"
+  fi
+
+  local retag=""
+  case "$pipeline" in
+  streamdiffusion)
+    retag="livepeer/ai-runner:live-app-streamdiffusion"
+    ;;
+  scope)
+    retag="livepeer/ai-runner:live-app-scope"
+    ;;
+  esac
+
+  if [ -n "$retag" ]; then
+    docker image tag "$image" "$retag"
+  fi
+
+  docker run --rm --name "$container_name" -v ./models:/models "${docker_run_flags[@]}" \
+    -l "$label" \
+    -e HF_HUB_OFFLINE=0 \
+    -e HF_HUB_ENABLE_HF_TRANSFER \
+    -e HF_TOKEN="${HF_TOKEN:-}" \
+    "$image" bash -c "set -euo pipefail && \
+      $CONDA_PYTHON -m pip install --no-cache-dir hf_transfer==0.1.4 && \
+      cd /app && \
+      $CONDA_PYTHON -m app.tools.prepare_models --pipeline ${pipeline} --models-dir /models && \
+      chown -R $(id -u):$(id -g) /models"
+}
+
 function download_streamdiffusion_live_models() {
-  printf "\nDownloading StreamDiffusion live models...\n"
-
-  # U-net models
-  huggingface-cli download stabilityai/sd-turbo --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download stabilityai/sdxl-turbo --include "*.json" "*.txt" "*/model.safetensors" "*/diffusion_pytorch_model.safetensors" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download prompthero/openjourney-v4 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download Lykon/dreamshaper-8 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-
-  # SD2.1 (turbo) ControlNet models
-  huggingface-cli download thibaud/controlnet-sd21-openpose-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download thibaud/controlnet-sd21-hed-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download thibaud/controlnet-sd21-canny-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download thibaud/controlnet-sd21-depth-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download thibaud/controlnet-sd21-color-diffusers --include "*.bin" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download daydreamlive/TemporalNet2-stable-diffusion-2-1 --include "config.json" "diffusion_pytorch_model.safetensors" "scheduler.bin" --exclude ".onnx" ".onnx_data" --cache-dir models
-  # SD1.5 controlnet models
-  huggingface-cli download lllyasviel/control_v11f1p_sd15_depth --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download lllyasviel/control_v11f1e_sd15_tile --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download lllyasviel/control_v11p_sd15_canny --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download daydreamlive/TemporalNet2-stable-diffusion-v1-5 --include "config.json" "diffusion_pytorch_model.safetensors" --cache-dir models
-  # SDXL controlnet models
-  huggingface-cli download xinsir/controlnet-depth-sdxl-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download xinsir/controlnet-canny-sdxl-1.0 --include "diffusion_pytorch_model.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download xinsir/controlnet-tile-sdxl-1.0 --include "*.safetensors" "*.json" "*.txt" --exclude ".onnx" ".onnx_data" --cache-dir models
-  huggingface-cli download daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0 --include "*.json" "*.safetensors" "scheduler.bin" --exclude ".onnx" ".onnx_data" --cache-dir models
-
-  # IP-Adapter (only required files)
-  huggingface-cli download h94/IP-Adapter --include "models/ip-adapter_sd15.bin" "models/image_encoder/*" "sdxl_models/ip-adapter_sdxl.bin" "sdxl_models/image_encoder/*" --cache-dir models
-  huggingface-cli download h94/IP-Adapter-FaceID --include "ip-adapter-faceid_sd15.bin" "ip-adapter-faceid_sdxl.bin" --cache-dir models
-
-  # Pre-processor models
-  huggingface-cli download yuvraj108c/Depth-Anything-2-Onnx --include "depth_anything_v2_vits.onnx" --cache-dir models
-  huggingface-cli download yuvraj108c/yolo-nas-pose-onnx --include "yolo_nas_pose_l_0.5.onnx" --cache-dir models
-
-  # Post-processor models
-  huggingface-cli download Freepik/nsfw_image_detector --include "*.safetensors" "*.json" "*.txt" --cache-dir models
+  printf "\nPreparing StreamDiffusion live models...\n"
+  run_pipeline_prepare "streamdiffusion" "$AI_RUNNER_STREAMDIFFUSION_IMAGE" "StreamDiffusion-Prepare"
 }
 
 function download_comfyui_live_models() {
@@ -305,95 +313,12 @@ function build_tensorrt_models() {
 
 function build_streamdiffusion_tensorrt() {
   printf "\nBuilding StreamDiffusion TensorRT models...\n"
-
-  # StreamDiffusion (compile a matrix of models and timesteps)
-  if [ "$PULL_IMAGES" = true ]; then
-    docker pull $AI_RUNNER_STREAMDIFFUSION_IMAGE
-  fi
-  # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
-  docker image tag $AI_RUNNER_STREAMDIFFUSION_IMAGE livepeer/ai-runner:live-app-streamdiffusion
-
-  # SD2.1 (turbo) models
-  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
-    -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
-    --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
-    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
-              --models 'stabilityai/sd-turbo' \
-              --opt-timesteps '3' \
-              --min-timesteps '1' \
-              --max-timesteps '4' \
-              --controlnets 'thibaud/controlnet-sd21-openpose-diffusers thibaud/controlnet-sd21-hed-diffusers thibaud/controlnet-sd21-canny-diffusers thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-color-diffusers daydreamlive/TemporalNet2-stable-diffusion-2-1' \
-              --build-depth-anything \
-              --build-pose \
-              --build-raft \
-              && \
-            chown -R $(id -u):$(id -g) /models" ||
-    (
-      echo "failed streamdiffusion tensorrt"
-      exit 1
-    )
-  # SD1.5 models
-  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
-    -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
-    --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
-    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
-              --models 'prompthero/openjourney-v4 Lykon/dreamshaper-8' \
-              --opt-timesteps '3' \
-              --min-timesteps '1' \
-              --max-timesteps '4' \
-              --controlnets 'lllyasviel/control_v11f1p_sd15_depth lllyasviel/control_v11f1e_sd15_tile lllyasviel/control_v11p_sd15_canny daydreamlive/TemporalNet2-stable-diffusion-v1-5' \
-              --ipadapter-types 'regular faceid' \
-              --build-depth-anything \
-              --build-pose \
-              --build-raft \
-              && \
-            chown -R $(id -u):$(id -g) /models" ||
-    (
-      echo "failed streamdiffusion tensorrt"
-      exit 1
-    )
-  # SDXL models
-  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
-    -l TensorRT-engines -e HF_HUB_OFFLINE=0 \
-    --name streamdiffusion-tensorrt-build $AI_RUNNER_STREAMDIFFUSION_IMAGE \
-    bash -c "./app/tools/streamdiffusion/build_tensorrt_internal.sh \
-              --models 'stabilityai/sdxl-turbo' \
-              --dimensions '1024x1024' \
-              --opt-timesteps '1' \
-              --min-timesteps '1' \
-              --max-timesteps '4' \
-              --controlnets 'xinsir/controlnet-depth-sdxl-1.0 xinsir/controlnet-canny-sdxl-1.0 xinsir/controlnet-tile-sdxl-1.0 daydreamlive/TemporalNet2-stable-diffusion-xl-base-1.0' \
-              --ipadapter-types 'regular faceid' \
-              --build-depth-anything \
-              --build-pose \
-              --build-raft \
-              && \
-            chown -R $(id -u):$(id -g) /models" ||
-    (
-      echo "failed streamdiffusion tensorrt"
-      exit 1
-    )
+  printf "StreamDiffusion engines are prepared during the download phase.\n"
 }
 
 function prepare_scope_models() {
   printf "\nPreparing Scope models...\n"
-
-  if [ "$PULL_IMAGES" = true ]; then
-    docker pull $AI_RUNNER_SCOPE_IMAGE
-  fi
-
-  # ai-worker references the live-app tag, so replicate it locally for consistency.
-  docker image tag $AI_RUNNER_SCOPE_IMAGE livepeer/ai-runner:live-app-scope
-
-  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
-    -l Scope-Prepare-Models -e HF_HUB_OFFLINE=0 \
-    --name scope-prepare-models $AI_RUNNER_SCOPE_IMAGE \
-    bash -c "$CONDA_PYTHON -m app.tools.scope.prepare_models --models-dir /models && \
-             chown -R $(id -u):$(id -g) /models" ||
-    (
-      echo "failed Scope model preparation"
-      exit 1
-    )
+  run_pipeline_prepare "scope" "$AI_RUNNER_SCOPE_IMAGE" "Scope-Prepare-Models"
 }
 
 function build_comfyui_tensorrt() {

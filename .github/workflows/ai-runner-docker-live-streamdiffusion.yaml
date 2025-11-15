@@ -16,6 +16,7 @@ on:
       - "runner/docker/Dockerfile.live-*"
       - "runner/app/**"
       - "runner/images/**"
+      - "runner/VERSION"
   workflow_dispatch:
 
 concurrency:

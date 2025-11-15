@@ -1,5 +1,6 @@
-import logging
 import asyncio
+import logging
+from pathlib import Path
 
 from ..interface import Pipeline
 from ...trickle import VideoFrame, VideoOutput
@@ -34,4 +35,18 @@ class Scope(Pipeline):
 
     async def stop(self):
         logging.info("Stopping pipeline")
+
+    @classmethod
+    def prepare_models(cls, models_dir: Path):
+        logging.info("Preparing Scope models in %s", models_dir)
+        models_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            from lib.schema import HealthResponse  # type: ignore
+
+            assert HealthResponse is not None
+        except ImportError as exc:
+            raise RuntimeError(
+                "Scope Python dependencies are not installed inside this image."
+            ) from exc
+        logging.info("Scope model preparation complete")
 
