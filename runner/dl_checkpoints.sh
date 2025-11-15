@@ -230,7 +230,7 @@ function run_pipeline_prepare() {
     -e HF_HUB_OFFLINE=0 \
     -e HF_HUB_ENABLE_HF_TRANSFER \
     -e HF_TOKEN="${HF_TOKEN:-}" \
-    "$image" bash -c "cd /workspace && python -m app.tools.prepare_models --pipeline ${pipeline} --models-dir /models && chown -R $(id -u):$(id -g) /models"
+    "$image" bash -c "cd /app && $CONDA_PYTHON -m app.tools.prepare_models --pipeline ${pipeline} --models-dir /models && chown -R $(id -u):$(id -g) /models"
 }
 
 function download_streamdiffusion_live_models() {
