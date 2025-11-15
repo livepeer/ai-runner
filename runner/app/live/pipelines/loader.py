@@ -11,6 +11,9 @@ def load_pipeline(name: str) -> Pipeline:
     if name == "comfyui":
         from .comfyui.pipeline import ComfyUI
         return ComfyUI()
+    elif name == "scope":
+        from .scope.pipeline import Scope
+        return Scope()
     elif name == "noop":
         from .noop import Noop
         return Noop()
@@ -30,6 +33,10 @@ def parse_pipeline_params(name: str, params: dict) -> BaseParams:
         with _no_expensive_imports():
             from .comfyui.params import ComfyUIParams
             return ComfyUIParams(**params)
+    if name == "scope":
+        with _no_expensive_imports():
+            from .scope.params import ScopeParams
+            return ScopeParams(**params)
     if name == "noop":
         return BaseParams(**params)
     raise ValueError(f"Unknown pipeline: {name}")

@@ -1,0 +1,136 @@
+name: Build scope ai-runner images
+
+on:
+  pull_request:
+    paths:
+      - "runner/docker/Dockerfile.live-*"
+      - "runner/app/**"
+      - "runner/images/**"
+      - "runner/VERSION"
+  push:
+    branches:
+      - main
+    tags:
+      - '*'
+    paths:
+      - "runner/docker/Dockerfile.live-*"
+      - "runner/app/**"
+      - "runner/images/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ !((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag') }}
+
+jobs:
+  base:
+    name: scope-base image
+    runs-on: [self-hosted, linux, amd64]
+    outputs:
+      image-digest: ${{ steps.build-base.outputs.digest }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for base image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: livepeer/ai-runner
+          tags: |
+            type=raw,value=live-base-scope,enable={{is_default_branch}}
+            type=sha,prefix=live-base-scope-sha-
+            type=sha,format=long,prefix=live-base-scope-sha-
+            type=ref,event=pr,prefix=live-base-scope-pr-
+            type=ref,event=tag,prefix=live-base-scope-
+            type=ref,event=branch,prefix=live-base-scope-
+            type=raw,value=latest,enable={{is_default_branch}},prefix=live-base-scope-
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
+
+      - name: Build and push live-base image
+        id: build-base
+        uses: docker/build-push-action@v6
+        with:
+          context: "{{defaultContext}}:runner"
+          file: docker/Dockerfile.live-base-scope
+          provenance: mode=max
+          sbom: true
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=livepeer/ai-runner:live-base-scope-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-base-scope-dockerbuildcache,mode=max
+
+  app:
+    name: Build pipeline image for runner
+    needs: base
+    runs-on: [self-hosted, linux, amd64]
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for app image
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: livepeer/ai-runner
+          tags: |
+            type=raw,value=live-app-scope,enable={{is_default_branch}}
+            type=sha,prefix=live-app-scope-sha-
+            type=sha,format=long,prefix=live-app-scope-sha-
+            type=ref,event=pr,prefix=live-app-scope-pr-
+            type=ref,event=tag,prefix=live-app-scope-
+            type=ref,event=branch,prefix=live-app-scope-
+            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-scope-
+
+      - name: Get version information (for docker build tag)
+        id: version
+        run: |
+          echo "version=$(bash runner/print_version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
+          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
+
+      - name: Build and push pipeline app image
+        uses: docker/build-push-action@v6
+        with:
+          context: "{{defaultContext}}:runner"
+          provenance: mode=max
+          sbom: true
+          push: true
+          file: docker/Dockerfile.live-app__PIPELINE__
+          build-args: |
+            PIPELINE=scope
+            GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
+            VERSION=${{ steps.version.outputs.version }}
+            # only specify base image if we just built it above, otherwise use whatever default is in the Dockerfile
+            ${{ needs.base.outputs.image-digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.base.outputs.image-digest) }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=livepeer/ai-runner:live-app-scope-dockerbuildcache
+          cache-to: type=registry,ref=livepeer/ai-runner:live-app-scope-dockerbuildcache,mode=max
+
+      - name: Notify new build upload
+        run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
+
