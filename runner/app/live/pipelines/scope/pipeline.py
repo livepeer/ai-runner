@@ -18,6 +18,15 @@ class Scope(Pipeline):
 
     async def initialize(self, **params):
         logging.info(f"Initializing Scope pipeline with params: {params}")
+        # Verify scope packages are available at runtime
+        try:
+            from lib.schema import HealthResponse
+            # Test that the import works by checking the class exists
+            assert HealthResponse is not None
+            logging.info("Successfully imported scope packages (lib.schema.HealthResponse)")
+        except ImportError as e:
+            logging.error(f"Failed to import scope packages during initialization: {e}")
+            raise RuntimeError(f"Scope packages not available: {e}")
         logging.info("Pipeline initialization complete")
 
     async def update_params(self, **params):

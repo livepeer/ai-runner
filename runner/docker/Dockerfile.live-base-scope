@@ -28,12 +28,12 @@ RUN apt update && apt install -yqq --no-install-recommends curl ca-certificates 
 
 # Install Scope dependencies into the comfystream environment
 # Clone scope repo and install with uv
-# Note: --system flag ensures uv installs packages into the conda environment instead of
+# Note: --active flag ensures uv installs packages into the active conda environment instead of
 # creating a separate .venv, making packages available alongside pip-installed packages
 ARG SCOPE_VERSION=main
 RUN git clone --depth 1 --branch ${SCOPE_VERSION} https://github.com/daydreamlive/scope.git /workspace/scope && \
     cd /workspace/scope && \
-    conda run -n comfystream uv sync --frozen --system && \
+    conda run -n comfystream uv sync --frozen --active && \
     cd frontend && \
     npm install && \
     npm run build && \
