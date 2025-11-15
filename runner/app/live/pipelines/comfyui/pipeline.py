@@ -41,13 +41,10 @@ class ComfyUI(Pipeline):
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        tensor = frame.tensor
-        if tensor.is_cuda:
-            # Clone the tensor to be able to send it on comfystream internal queue
-            tensor = tensor.clone()
-        frame.side_data.input = tensor
+        frame.side_data.input = frame.tensor
         frame.side_data.skipped = True
-        await self.video_incoming_frames.put(VideoOutput(frame, request_id))
+        out_frame = VideoOutput(frame.replace_tensor(torch.zeros()), request_id)
+        await self.video_incoming_frames.put(out_frame)
         self.client.put_video_input(frame)
 
     async def get_processed_video_frame(self):
