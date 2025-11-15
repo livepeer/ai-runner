@@ -38,7 +38,7 @@ jobs:
           MIN_MODELS_SIZE_MB: 500
         run: |
           set -e
-          pip install 'huggingface_hub[cli,hf_transfer]' hf_transfer
+          pip install huggingface_hub
           runner/dl_checkpoints.sh --batch
           du -hs ./models/
 
@@ -114,7 +114,7 @@ jobs:
           MIN_MODELS_SIZE_MB: 500
         run: |
           set -e
-          pip install 'huggingface_hub[cli,hf_transfer]' hf_transfer
+          pip install huggingface_hub
           rm -rf ./models/*
           runner/dl_checkpoints.sh --tensorrt
           du -hs ./models/

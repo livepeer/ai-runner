@@ -22,7 +22,7 @@ downloader_image = (
         "huggingface_hub==0.20.2",
         "hf-transfer==0.1.4",
     )
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1", "HF_HUB_DISABLE_PROGRESS_BARS": "1"})
+    .env({"HF_XET_HIGH_PERFORMANCE": "1", "HF_HUB_DISABLE_PROGRESS_BARS": "1"})
 )
 models_volume = Volume.persisted("models")
 models_path = Path("/models")
