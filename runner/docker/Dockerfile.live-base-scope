@@ -15,7 +15,7 @@ RUN apt update && apt install -yqq --no-install-recommends wget curl ca-certific
     conda config --set auto_activate_base false && \
     conda clean -a -y && \
     conda create -n comfystream python=$PYTHON_VERSION -y && \
-    conda run -n comfystream pip install --no-cache-dir --upgrade pip==23.3.2 setuptools==69.5.1 wheel==0.43.0 && \
+    conda run -n comfystream pip install --no-cache-dir --upgrade pip==23.3.2 setuptools==69.5.1 wheel==0.43.0 uv && \
     conda clean -a -y && \
     apt purge -y --auto-remove wget curl && \
     apt clean && rm -rf /var/lib/apt/lists/*
@@ -28,11 +28,12 @@ RUN apt update && apt install -yqq --no-install-recommends curl ca-certificates 
 
 # Install Scope dependencies into the comfystream environment
 # Clone scope repo and install with uv
+# Note: --system flag ensures uv installs packages into the conda environment instead of
+# creating a separate .venv, making packages available alongside pip-installed packages
 ARG SCOPE_VERSION=main
 RUN git clone --depth 1 --branch ${SCOPE_VERSION} https://github.com/daydreamlive/scope.git /workspace/scope && \
     cd /workspace/scope && \
-    conda run -n comfystream pip install --no-cache-dir uv && \
-    conda run -n comfystream uv sync --frozen && \
+    conda run -n comfystream uv sync --frozen --system && \
     cd frontend && \
     npm install && \
     npm run build && \
