@@ -152,7 +152,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def text_to_image(
+def text_to_image(
     params: TextToImageParams,
     pipeline: Pipeline = Depends(get_pipeline),
     token: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
