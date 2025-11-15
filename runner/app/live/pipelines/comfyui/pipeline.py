@@ -55,7 +55,21 @@ class ComfyUI(Pipeline):
         return out.replace_tensor(result_tensor)
 
     async def update_params(self, **params):
+        update_task = asyncio.create_task(self._do_update_params(**params))
+
+        try:
+            await asyncio.wait_for(asyncio.shield(update_task), timeout=2.0)
+        except asyncio.TimeoutError:
+            logging.info("Update taking a while, returning task for loading overlay")
+            return update_task
+
+    async def _do_update_params(self, **params):
+        """Perform the actual parameter update with logging and param setting."""
         new_params = ComfyUIParams(**params)
+        if new_params == self.params:
+            logging.info("No parameters changed")
+            return
+
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
         try:
