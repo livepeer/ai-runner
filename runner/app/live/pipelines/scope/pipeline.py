@@ -1,7 +1,7 @@
 import logging
 import asyncio
 
-from .interface import Pipeline
+from ..interface import Pipeline
 from ...trickle import VideoFrame, VideoOutput
 
 
