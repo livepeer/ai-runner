@@ -178,8 +178,8 @@ function download_live_models() {
   # Check PIPELINE environment variable and download accordingly
   case "$PIPELINE" in
   "streamdiffusion")
-    printf "\nDownloading StreamDiffusion live models only...\n"
-    download_streamdiffusion_live_models
+    printf "\nPreparing StreamDiffusion live models only...\n"
+    prepare_streamdiffusion_models
     ;;
   "comfyui")
     printf "\nDownloading ComfyUI live models only...\n"
@@ -190,8 +190,8 @@ function download_live_models() {
     prepare_scope_models
     ;;
   "all")
-    printf "\nDownloading all live models...\n"
-    download_streamdiffusion_live_models
+    printf "\Preparing all live models...\n"
+    prepare_streamdiffusion_models
     download_comfyui_live_models
     prepare_scope_models
     ;;
@@ -205,11 +205,10 @@ function download_live_models() {
 function run_pipeline_prepare() {
   local pipeline="$1"
   local image="$2"
-  local label="${3:-Pipeline-Prepare}"
-  local container_name="ai-runner-${pipeline}-prepare"
 
+  local label="Pipeline-Prepare"
   if [[ "$(docker ps -a -q --filter="label=${label}")" ]]; then
-    printf "Previous ${pipeline} prepare run hasn't finished correctly. There are containers still running:\n"
+    printf "Previous prepare container run hasn't finished correctly. There are containers still running:\n"
     docker ps -a --filter="label=${label}"
     exit 1
   fi
@@ -218,35 +217,23 @@ function run_pipeline_prepare() {
     docker pull "$image"
   fi
 
-  local retag=""
-  case "$pipeline" in
-  streamdiffusion)
-    retag="livepeer/ai-runner:live-app-streamdiffusion"
-    ;;
-  scope)
-    retag="livepeer/ai-runner:live-app-scope"
-    ;;
-  esac
+  # ai-worker has live-app tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here
+  docker image tag "$image" "livepeer/ai-runner:live-app-$pipeline"
 
-  if [ -n "$retag" ]; then
-    docker image tag "$image" "$retag"
-  fi
-
-  docker run --rm --name "$container_name" -v ./models:/models "${docker_run_flags[@]}" \
+  docker run --rm --name "ai-runner-${pipeline}-prepare" -v ./models:/models "${docker_run_flags[@]}" \
     -l "$label" \
     -e HF_HUB_OFFLINE=0 \
     -e HF_HUB_ENABLE_HF_TRANSFER \
     -e HF_TOKEN="${HF_TOKEN:-}" \
     "$image" bash -c "set -euo pipefail && \
       $CONDA_PYTHON -m pip install --no-cache-dir hf_transfer==0.1.4 && \
-      cd /app && \
       $CONDA_PYTHON -m app.tools.prepare_models --pipeline ${pipeline} --models-dir /models && \
       chown -R $(id -u):$(id -g) /models"
 }
 
-function download_streamdiffusion_live_models() {
+function prepare_streamdiffusion_models() {
   printf "\nPreparing StreamDiffusion live models...\n"
-  run_pipeline_prepare "streamdiffusion" "$AI_RUNNER_STREAMDIFFUSION_IMAGE" "StreamDiffusion-Prepare"
+  run_pipeline_prepare "streamdiffusion" "$AI_RUNNER_STREAMDIFFUSION_IMAGE"
 }
 
 function download_comfyui_live_models() {
@@ -287,22 +274,18 @@ function build_tensorrt_models() {
   # Check PIPELINE environment variable and build accordingly
   case "$PIPELINE" in
   "streamdiffusion")
-    printf "\nBuilding StreamDiffusion TensorRT models only...\n"
-    build_streamdiffusion_tensorrt
+    printf "\nStreamDiffusion models already built on prepare...\n"
+    ;;
+  "scope")
+    printf "\nScope models already built on prepare...\n"
     ;;
   "comfyui")
     printf "\nBuilding ComfyUI TensorRT models only...\n"
     build_comfyui_tensorrt
     ;;
-  "scope")
-    printf "\nPreparing Scope models only...\n"
-    prepare_scope_models
-    ;;
   "all")
     printf "\nBuilding all TensorRT models...\n"
-    build_streamdiffusion_tensorrt
     build_comfyui_tensorrt
-    prepare_scope_models
     ;;
   *)
     printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, scope, all\n" "$PIPELINE"
@@ -311,14 +294,9 @@ function build_tensorrt_models() {
   esac
 }
 
-function build_streamdiffusion_tensorrt() {
-  printf "\nBuilding StreamDiffusion TensorRT models...\n"
-  printf "StreamDiffusion engines are prepared during the download phase.\n"
-}
-
 function prepare_scope_models() {
   printf "\nPreparing Scope models...\n"
-  run_pipeline_prepare "scope" "$AI_RUNNER_SCOPE_IMAGE" "Scope-Prepare-Models"
+  run_pipeline_prepare "scope" "$AI_RUNNER_SCOPE_IMAGE"
 }
 
 function build_comfyui_tensorrt() {
