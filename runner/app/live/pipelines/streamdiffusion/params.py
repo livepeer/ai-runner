@@ -172,67 +172,6 @@ class ControlNetConfig(BaseModel):
     control_guidance_end: float = 1.0
     """Fraction of the denoising process (0.0-1.0) when ControlNet guidance ends. 1.0 means guidance continues until the end."""
 
-_DEFAULT_CONTROLNETS = [
-    ControlNetConfig(
-        model_id="thibaud/controlnet-sd21-openpose-diffusers",
-        conditioning_scale=0.711,
-        preprocessor="pose_tensorrt",
-        preprocessor_params={},
-        enabled=True,
-        control_guidance_start=0.0,
-        control_guidance_end=1.0,
-    ),
-    ControlNetConfig(
-        model_id="thibaud/controlnet-sd21-hed-diffusers",
-        conditioning_scale=0.2,
-        preprocessor="soft_edge",
-        preprocessor_params={},
-        enabled=True,
-        control_guidance_start=0.0,
-        control_guidance_end=1.0,
-    ),
-    ControlNetConfig(
-        model_id="thibaud/controlnet-sd21-canny-diffusers",
-        conditioning_scale=0.2,
-        preprocessor="canny",
-        preprocessor_params={
-            "low_threshold": 100,
-            "high_threshold": 200
-        },
-        enabled=True,
-        control_guidance_start=0.0,
-        control_guidance_end=1.0,
-    ),
-    ControlNetConfig(
-        model_id="thibaud/controlnet-sd21-depth-diffusers",
-        conditioning_scale=0.5,
-        preprocessor="depth_tensorrt",
-        preprocessor_params={},
-        enabled=True,
-        control_guidance_start=0.0,
-        control_guidance_end=1.0,
-    ),
-    ControlNetConfig(
-        model_id="thibaud/controlnet-sd21-color-diffusers",
-        conditioning_scale=0.2,
-        preprocessor="passthrough",
-        preprocessor_params={},
-        enabled=True,
-        control_guidance_start=0.0,
-        control_guidance_end=1.0,
-    ),
-    ControlNetConfig(
-        model_id="daydreamlive/TemporalNet2-stable-diffusion-2-1",
-        conditioning_scale=0.0,
-        preprocessor="temporal_net_tensorrt",
-        preprocessor_params={
-            "flow_strength": 0.4,
-        },
-        enabled=True,
-        control_guidance_start=0.0,
-        control_guidance_end=1.0,
-    ),
-]
 class IPAdapterConfig(BaseModel):
     """
     IPAdapter configuration for style transfer.
@@ -376,11 +315,11 @@ class StreamDiffusionParams(BaseParams):
     """Maximum number of consecutive frames that can be skipped by the similarity filter."""
 
     # ControlNet settings
-    controlnets: Optional[List[ControlNetConfig]] = _DEFAULT_CONTROLNETS
+    controlnets: List[ControlNetConfig] = []
     """List of ControlNet configurations for guided generation. Each ControlNet provides different types of conditioning (pose, edges, depth, etc.)."""
 
     # IPAdapter settings
-    ip_adapter: Optional[IPAdapterConfig] = IPAdapterConfig(enabled=False)
+    ip_adapter: IPAdapterConfig = IPAdapterConfig(enabled=False)
     """IPAdapter configuration for style transfer."""
 
     ip_adapter_style_image_url: str = "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"

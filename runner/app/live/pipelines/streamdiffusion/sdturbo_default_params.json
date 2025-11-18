@@ -1,0 +1,94 @@
+{
+  "model_id": "stabilityai/sd-turbo",
+  "prompt": "flowers",
+  "prompt_interpolation_method": "slerp",
+  "normalize_prompt_weights": true,
+  "negative_prompt": "blurry, low quality, flat, 2d",
+  "guidance_scale": 1.0,
+  "delta": 0.7,
+  "num_inference_steps": 50,
+  "t_index_list": [12, 20, 32],
+  "width": 512,
+  "height": 512,
+  "lora_dict": null,
+  "use_lcm_lora": true,
+  "lcm_lora_id": "latent-consistency/lcm-lora-sdv1-5",
+  "acceleration": "tensorrt",
+  "use_safety_checker": true,
+  "safety_checker_threshold": 0.5,
+  "use_denoising_batch": true,
+  "do_add_noise": true,
+  "skip_diffusion": false,
+  "seed": 789,
+  "seed_interpolation_method": "linear",
+  "normalize_seed_weights": true,
+  "enable_similar_image_filter": false,
+  "similar_image_filter_threshold": 0.98,
+  "similar_image_filter_max_skip_frame": 10,
+  "controlnets": [
+    {
+      "model_id": "thibaud/controlnet-sd21-openpose-diffusers",
+      "conditioning_scale": 0.711,
+      "preprocessor": "pose_tensorrt",
+      "preprocessor_params": {},
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "thibaud/controlnet-sd21-hed-diffusers",
+      "conditioning_scale": 0.2,
+      "preprocessor": "soft_edge",
+      "preprocessor_params": {},
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "thibaud/controlnet-sd21-canny-diffusers",
+      "conditioning_scale": 0.2,
+      "preprocessor": "canny",
+      "preprocessor_params": {
+        "low_threshold": 100,
+        "high_threshold": 200
+      },
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "thibaud/controlnet-sd21-depth-diffusers",
+      "conditioning_scale": 0.5,
+      "preprocessor": "depth_tensorrt",
+      "preprocessor_params": {},
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "thibaud/controlnet-sd21-color-diffusers",
+      "conditioning_scale": 0.2,
+      "preprocessor": "passthrough",
+      "preprocessor_params": {},
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "daydreamlive/TemporalNet2-stable-diffusion-2-1",
+      "conditioning_scale": 0.0,
+      "preprocessor": "temporal_net_tensorrt",
+      "preprocessor_params": {
+        "flow_strength": 0.4
+      },
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    }
+  ],
+  "ip_adapter": {
+    "enabled": false
+  },
+  "ip_adapter_style_image_url": "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"
+}
+

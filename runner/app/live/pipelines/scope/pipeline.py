@@ -1,6 +1,11 @@
+<<<<<<< HEAD
 import asyncio
 import logging
 from pathlib import Path
+=======
+import logging
+import asyncio
+>>>>>>> main
 
 from ..interface import Pipeline
 from ...trickle import VideoFrame, VideoOutput
@@ -35,6 +40,8 @@ class Scope(Pipeline):
 
     async def stop(self):
         logging.info("Stopping pipeline")
+        # clear the frame queue
+        self.frame_queue = asyncio.Queue()
 
     @classmethod
     def prepare_models(cls):
