@@ -263,10 +263,10 @@ class StreamDiffusion(Pipeline):
             self.frame_queue = asyncio.Queue()
 
     @classmethod
-    def prepare_models(cls, models_dir: Path):
+    def prepare_models(cls):
         from .prepare import prepare_streamdiffusion_models
 
-        prepare_streamdiffusion_models(models_dir)
+        prepare_streamdiffusion_models()
 
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:

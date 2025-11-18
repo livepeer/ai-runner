@@ -35,6 +35,9 @@ MAX_RESOLUTION = 1024
 
 BASE_GIT_REPOS_DIR = Path("/workspace")
 
+# Models directory is fixed in Docker image via HUGGINGFACE_HUB_CACHE env var
+MODELS_DIR = Path(os.environ.get("HUGGINGFACE_HUB_CACHE", "/models"))
+
 @dataclass(frozen=True)
 class GitRepo:
     url: str
@@ -81,7 +84,7 @@ class BuildJob:
     height: int
 
 
-def prepare_streamdiffusion_models(models_dir: Path) -> None:
+def prepare_streamdiffusion_models() -> None:
     params._is_building_tensorrt_engines = True
 
     if not Path(ENGINES_DIR).exists():
@@ -89,8 +92,8 @@ def prepare_streamdiffusion_models(models_dir: Path) -> None:
     if not Path(LOCAL_MODELS_DIR).exists():
         raise ValueError(f"Local models dir ({LOCAL_MODELS_DIR}) does not exist")
 
-    logging.info("Preparing StreamDiffusion assets in %s", models_dir)
-    _compile_dependencies(models_dir, ENGINES_DIR)
+    logging.info("Preparing StreamDiffusion assets in %s", MODELS_DIR)
+    _compile_dependencies()
     jobs = list(_build_matrix())
     logging.info("Compilation plan has %d build(s)", len(jobs))
     for idx, job in enumerate(jobs, start=1):
@@ -104,17 +107,17 @@ def prepare_streamdiffusion_models(models_dir: Path) -> None:
             job.width,
             job.height,
         )
-        _compile_build(job, engines_dir)
+        _compile_build(job, Path(ENGINES_DIR))
     logging.info("StreamDiffusion model preparation complete.")
 
 
-def _compile_dependencies(models_dir: Path) -> None:
-    _build_depth_anything(models_dir)
-    _build_pose_engines(models_dir)
+def _compile_dependencies() -> None:
+    _build_depth_anything()
+    _build_pose_engines()
     _build_raft_engine()
 
 
-def _build_depth_anything(models_dir: Path) -> None:
+def _build_depth_anything() -> None:
     engine_path = Path(ENGINES_DIR) / "depth-anything" / "depth_anything_v2_vits.engine"
     if engine_path.exists():
         logging.info("Depth-Anything engine already present: %s", engine_path)
@@ -122,7 +125,7 @@ def _build_depth_anything(models_dir: Path) -> None:
 
     logging.info("Building Depth-Anything TensorRT engine...")
     repo_dir = _ensure_repo(DEPTH_EXPORT_REPO)
-    onnx_path = _download_asset(DEPTH_ONNX_MODEL, models_dir)
+    onnx_path = _download_asset(DEPTH_ONNX_MODEL)
     engine_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [
@@ -139,9 +142,10 @@ def _build_depth_anything(models_dir: Path) -> None:
     logging.info("Depth-Anything engine written to %s", engine_path)
 
 
-def _build_pose_engines(models_dir: Path, engines_dir: Path) -> None:
+def _build_pose_engines() -> None:
     repo_dir = _ensure_repo(POSE_EXPORT_REPO)
     requirements = repo_dir / "requirements.txt"
+    marker = repo_dir / ".requirements_installed"
     if requirements.exists() and not marker.exists():
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "-r", str(requirements)],
@@ -150,8 +154,9 @@ def _build_pose_engines(models_dir: Path, engines_dir: Path) -> None:
         )
         marker.touch()
 
+    engines_dir = Path(ENGINES_DIR)
     for asset in POSE_ASSETS:
-        onnx_path = _download_asset(asset, models_dir)
+        onnx_path = _download_asset(asset)
         engine_path = engines_dir / "pose" / asset.engine_name
         if engine_path.exists():
             logging.info("Pose engine already present: %s", engine_path)
@@ -176,7 +181,8 @@ def _build_pose_engines(models_dir: Path, engines_dir: Path) -> None:
         logging.info("Pose engine written to %s", engine_path)
 
 
-def _build_raft_engine(engines_dir: Path) -> None:
+def _build_raft_engine() -> None:
+    engines_dir = Path(ENGINES_DIR)
     engine_path = engines_dir / "temporal_net" / "raft_small_min_384x384_max_1024x1024.engine"
     if engine_path.exists():
         logging.info("RAFT engine already present: %s", engine_path)
@@ -366,12 +372,12 @@ def _controlnet_templates() -> Dict[str, ControlNetConfig]:
     return templates
 
 
-def _download_asset(asset: HfAsset, models_dir: Path) -> Path:
+def _download_asset(asset: HfAsset) -> Path:
     return Path(
         hf_hub_download(
             repo_id=asset.repo_id,
             filename=asset.filename,
-            cache_dir=str(models_dir),
+            cache_dir=str(MODELS_DIR),
         )
     )
 

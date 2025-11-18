@@ -106,7 +106,5 @@ class ComfyUI(Pipeline):
             logging.info("ComfyUI pipeline stopped")
 
     @classmethod
-    def prepare_models(cls, models_dir: Path):
-        logging.info(
-            "ComfyUI prepare_models is currently a no-op (models_dir=%s)", models_dir
-        )
+    def prepare_models(cls):
+        logging.info("ComfyUI prepare_models is currently a no-op")

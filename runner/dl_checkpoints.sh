@@ -227,7 +227,7 @@ function run_pipeline_prepare() {
     -e HF_TOKEN="${HF_TOKEN:-}" \
     "$image" bash -c "set -euo pipefail && \
       $CONDA_PYTHON -m pip install --no-cache-dir hf_transfer==0.1.4 && \
-      $CONDA_PYTHON -m app.tools.prepare_models --pipeline ${pipeline} --models-dir /models && \
+      $CONDA_PYTHON -m app.tools.prepare_models --pipeline ${pipeline} && \
       chown -R $(id -u):$(id -g) /models"
 }
 

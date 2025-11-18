@@ -37,9 +37,8 @@ class Scope(Pipeline):
         logging.info("Stopping pipeline")
 
     @classmethod
-    def prepare_models(cls, models_dir: Path):
-        logging.info("Preparing Scope models in %s", models_dir)
-        models_dir.mkdir(parents=True, exist_ok=True)
+    def prepare_models(cls):
+        logging.info("Preparing Scope models")
         try:
             from lib.schema import HealthResponse  # type: ignore
 

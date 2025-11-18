@@ -2,7 +2,10 @@
 Common entrypoint to prepare pipeline-specific models and TensorRT engines.
 
 Usage (inside container):
-    python -m app.tools.prepare_models --pipeline streamdiffusion --models-dir /models
+    python -m app.tools.prepare_models --pipeline streamdiffusion
+
+The models directory is configured via HUGGINGFACE_HUB_CACHE environment variable
+(set in the Docker image).
 """
 
 from __future__ import annotations
@@ -12,7 +15,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import cast
 
 from ..live.pipelines.loader import load_pipeline
 
@@ -24,12 +26,6 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Pipeline name accepted by loader.load_pipeline "
         "(e.g. streamdiffusion, scope, comfyui).",
-    )
-    parser.add_argument(
-        "--models-dir",
-        type=Path,
-        default=Path("/models"),
-        help="Directory where downloaded assets and engines should be stored.",
     )
     parser.add_argument(
         "--verbose",
@@ -50,16 +46,16 @@ def configure_logging(verbose: bool) -> None:
 def main() -> None:
     args = parse_args()
     configure_logging(args.verbose)
-    models_dir = cast(Path, args.models_dir).resolve()
-    if not models_dir.exists():
-        raise ValueError(f"Models dir {models_dir} does not exist")
 
-    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(models_dir))
-    os.environ.setdefault("HF_HOME", str(models_dir))
+    # Models directory is configured via HUGGINGFACE_HUB_CACHE env var (set in Docker image)
+    models_dir = Path(os.environ.get("HUGGINGFACE_HUB_CACHE", "/models"))
+    if not models_dir.exists():
+        raise ValueError(f"Models dir {models_dir} does not exist (check HUGGINGFACE_HUB_CACHE env var)")
+
     logging.info("Loading pipeline '%s' for model preparation", args.pipeline)
     pipeline = load_pipeline(args.pipeline)
     try:
-        pipeline.prepare_models(models_dir)
+        pipeline.prepare_models()
     finally:
         del pipeline
     logging.info("Model preparation finished successfully.")

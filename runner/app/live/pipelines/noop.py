@@ -27,5 +27,5 @@ class Noop(Pipeline):
     logging.info("Stopping pipeline")
 
   @classmethod
-  def prepare_models(cls, models_dir: Path):
-    logging.info("Noop pipeline does not require model preparation (%s)", models_dir)
+  def prepare_models(cls):
+    logging.info("Noop pipeline does not require model preparation")

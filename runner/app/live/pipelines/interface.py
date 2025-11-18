@@ -110,6 +110,6 @@ class Pipeline(ABC):
 
     @classmethod
     @abstractmethod
-    def prepare_models(cls, models_dir: Path):
+    def prepare_models(cls):
         """Download and/or compile any assets required for this pipeline."""
         pass
