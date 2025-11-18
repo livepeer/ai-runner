@@ -34,4 +34,6 @@ class Scope(Pipeline):
 
     async def stop(self):
         logging.info("Stopping pipeline")
+        # clear the frame queue
+        self.frame_queue = asyncio.Queue()
 
