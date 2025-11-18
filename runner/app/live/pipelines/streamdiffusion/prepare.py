@@ -221,9 +221,9 @@ def _ensure_repo(repo: GitRepo) -> Path:
 def _build_matrix() -> Iterator[BuildJob]:
     for model_id, model_type in MODEL_ID_TO_TYPE.items():
         ipa_types: Sequence[Optional[str]]
-        ipa_types = ["regular"]
+        ipa_types = [None]
         if model_type in IPADAPTER_SUPPORTED_TYPES:
-            ipa_types.append("faceid")
+            ipa_types = ["regular", "faceid"]
 
         for ipa_type in ipa_types:
             params = _create_params(model_id, model_type, ipa_type)
