@@ -12,6 +12,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from typing import cast
 
 from ..live.pipelines.loader import load_pipeline
 
@@ -49,8 +50,9 @@ def configure_logging(verbose: bool) -> None:
 def main() -> None:
     args = parse_args()
     configure_logging(args.verbose)
-    models_dir = args.models_dir.resolve()
-    models_dir.mkdir(parents=True, exist_ok=True)
+    models_dir = cast(Path, args.models_dir).resolve()
+    if not models_dir.exists():
+        raise ValueError(f"Models dir {models_dir} does not exist")
 
     os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(models_dir))
     os.environ.setdefault("HF_HOME", str(models_dir))

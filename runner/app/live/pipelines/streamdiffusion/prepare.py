@@ -24,11 +24,8 @@ from .params import (
     ProcessingConfig,
     SingleProcessorConfig,
 )
-from . import params as streamdiffusion_params
-from .pipeline import load_streamdiffusion_sync
-
-ENGINE_SUBDIR = "StreamDiffusion--engines"
-ENGINE_CWD_SUBDIR = "cwd_models"
+from . import params
+from .pipeline import load_streamdiffusion_sync, ENGINES_DIR, LOCAL_MODELS_DIR
 
 MIN_TIMESTEPS = 1
 MAX_TIMESTEPS = 4
@@ -36,6 +33,7 @@ MAX_TIMESTEPS = 4
 MIN_RESOLUTION = 384
 MAX_RESOLUTION = 1024
 
+BASE_GIT_REPOS_DIR = Path("/workspace")
 
 @dataclass(frozen=True)
 class GitRepo:
@@ -44,7 +42,7 @@ class GitRepo:
 
 
 @dataclass(frozen=True)
-class OnnxAsset:
+class HfAsset:
     repo_id: str
     filename: str
 
@@ -62,12 +60,12 @@ POSE_EXPORT_REPO = GitRepo(
     commit="873de560bb05bf3331e4121f393b83ecc04c324a",
 )
 
-DEPTH_ASSET = OnnxAsset(
+DEPTH_ONNX_MODEL = HfAsset(
     repo_id="yuvraj108c/Depth-Anything-2-Onnx",
     filename="depth_anything_v2_vits.onnx",
 )
-POSE_ASSETS: Sequence[OnnxAsset] = (
-    OnnxAsset(
+POSE_ASSETS: Sequence[HfAsset] = (
+    HfAsset(
         repo_id="yuvraj108c/yolo-nas-pose-onnx",
         filename="yolo_nas_pose_l_0.5.onnx",
     ),
@@ -84,16 +82,15 @@ class BuildJob:
 
 
 def prepare_streamdiffusion_models(models_dir: Path) -> None:
-    streamdiffusion_params._is_building_tensorrt_engines = True
-    models_dir = models_dir.resolve()
-    engines_dir = models_dir / ENGINE_SUBDIR
-    engines_dir.mkdir(parents=True, exist_ok=True)
-    (engines_dir / ENGINE_CWD_SUBDIR).mkdir(exist_ok=True)
+    params._is_building_tensorrt_engines = True
 
-    _configure_hf_cache(models_dir)
+    if not Path(ENGINES_DIR).exists():
+        raise ValueError(f"Engines dir ({ENGINES_DIR}) does not exist")
+    if not Path(LOCAL_MODELS_DIR).exists():
+        raise ValueError(f"Local models dir ({LOCAL_MODELS_DIR}) does not exist")
 
     logging.info("Preparing StreamDiffusion assets in %s", models_dir)
-    _compile_dependencies(models_dir, engines_dir)
+    _compile_dependencies(models_dir, ENGINES_DIR)
     jobs = list(_build_matrix())
     logging.info("Compilation plan has %d build(s)", len(jobs))
     for idx, job in enumerate(jobs, start=1):
@@ -111,27 +108,21 @@ def prepare_streamdiffusion_models(models_dir: Path) -> None:
     logging.info("StreamDiffusion model preparation complete.")
 
 
-def _configure_hf_cache(models_dir: Path) -> None:
-    models_dir.mkdir(parents=True, exist_ok=True)
-    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(models_dir))
-    os.environ.setdefault("HF_HOME", str(models_dir))
+def _compile_dependencies(models_dir: Path) -> None:
+    _build_depth_anything(models_dir)
+    _build_pose_engines(models_dir)
+    _build_raft_engine()
 
 
-def _compile_dependencies(models_dir: Path, engines_dir: Path) -> None:
-    _build_depth_anything(models_dir, engines_dir)
-    _build_pose_engines(models_dir, engines_dir)
-    _build_raft_engine(engines_dir)
-
-
-def _build_depth_anything(models_dir: Path, engines_dir: Path) -> None:
-    engine_path = engines_dir / "depth-anything" / "depth_anything_v2_vits.engine"
+def _build_depth_anything(models_dir: Path) -> None:
+    engine_path = Path(ENGINES_DIR) / "depth-anything" / "depth_anything_v2_vits.engine"
     if engine_path.exists():
         logging.info("Depth-Anything engine already present: %s", engine_path)
         return
 
     logging.info("Building Depth-Anything TensorRT engine...")
-    repo_dir = _ensure_repo(DEPTH_EXPORT_REPO, engines_dir / ENGINE_CWD_SUBDIR)
-    onnx_path = _download_asset(DEPTH_ASSET, models_dir)
+    repo_dir = _ensure_repo(DEPTH_EXPORT_REPO)
+    onnx_path = _download_asset(DEPTH_ONNX_MODEL, models_dir)
     engine_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [
@@ -149,9 +140,8 @@ def _build_depth_anything(models_dir: Path, engines_dir: Path) -> None:
 
 
 def _build_pose_engines(models_dir: Path, engines_dir: Path) -> None:
-    repo_dir = _ensure_repo(POSE_EXPORT_REPO, engines_dir / ENGINE_CWD_SUBDIR)
+    repo_dir = _ensure_repo(POSE_EXPORT_REPO)
     requirements = repo_dir / "requirements.txt"
-    marker = repo_dir / ".requirements_installed"
     if requirements.exists() and not marker.exists():
         subprocess.run(
             [sys.executable, "-m", "pip", "install", "-r", str(requirements)],
@@ -211,17 +201,14 @@ def _build_raft_engine(engines_dir: Path) -> None:
     logging.info("RAFT engine written to %s", engine_path)
 
 
-def _ensure_repo(repo: GitRepo, base_dir: Path) -> Path:
-    repo_dir = base_dir / Path(repo.url).name.replace(".git", "")
+def _ensure_repo(repo: GitRepo) -> Path:
+    repo_name = Path(repo.url).name.replace(".git", "")
+    repo_dir = BASE_GIT_REPOS_DIR / repo_name
     if not repo_dir.exists():
         subprocess.run(
             ["git", "clone", repo.url, str(repo_dir)],
             check=True,
         )
-    subprocess.run(
-        ["git", "-C", str(repo_dir), "fetch", "origin"],
-        check=True,
-    )
     subprocess.run(
         ["git", "-C", str(repo_dir), "checkout", repo.commit],
         check=True,
@@ -379,7 +366,7 @@ def _controlnet_templates() -> Dict[str, ControlNetConfig]:
     return templates
 
 
-def _download_asset(asset: OnnxAsset, models_dir: Path) -> Path:
+def _download_asset(asset: HfAsset, models_dir: Path) -> Path:
     return Path(
         hf_hub_download(
             repo_id=asset.repo_id,
