@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import gc
-import json
 import logging
 import os
 import shutil
@@ -9,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Sequence
+from typing import Dict, Iterator, Optional, Sequence
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -23,12 +22,20 @@ from .params import (
     IPAdapterConfig,
     ProcessingConfig,
     SingleProcessorConfig,
+    ModelType,
 )
 from . import params
 from .pipeline import load_streamdiffusion_sync, ENGINES_DIR, LOCAL_MODELS_DIR
 
 MIN_TIMESTEPS = 1
 MAX_TIMESTEPS = 4
+
+# Optimal number of timesteps for t_index_list per model type
+OPT_TIMESTEPS_BY_TYPE: Dict[ModelType, int] = {
+    "sd15": 3,
+    "sd21": 3,
+    "sdxl": 2,
+}
 
 MIN_RESOLUTION = 384
 MAX_RESOLUTION = 1024
@@ -49,10 +56,6 @@ class HfAsset:
     repo_id: str
     filename: str
 
-    @property
-    def engine_name(self) -> str:
-        return Path(self.filename).with_suffix(".engine").name
-
 
 DEPTH_EXPORT_REPO = GitRepo(
     url="https://github.com/yuvraj108c/ComfyUI-Depth-Anything-Tensorrt.git",
@@ -72,24 +75,21 @@ POSE_ASSETS: Sequence[HfAsset] = (
         repo_id="yuvraj108c/yolo-nas-pose-onnx",
         filename="yolo_nas_pose_l_0.5.onnx",
     ),
+    # might want to add other confidence thresholds later
 )
 
 
 @dataclass(frozen=True)
 class BuildJob:
-    model_id: str
-    model_type: str
-    ipadapter_type: Optional[str]
-    width: int
-    height: int
+    params: StreamDiffusionParams
 
 
 def prepare_streamdiffusion_models() -> None:
     params._is_building_tensorrt_engines = True
 
-    if not Path(ENGINES_DIR).exists():
+    if not ENGINES_DIR.exists():
         raise ValueError(f"Engines dir ({ENGINES_DIR}) does not exist")
-    if not Path(LOCAL_MODELS_DIR).exists():
+    if not LOCAL_MODELS_DIR.exists():
         raise ValueError(f"Local models dir ({LOCAL_MODELS_DIR}) does not exist")
 
     logging.info("Preparing StreamDiffusion assets in %s", MODELS_DIR)
@@ -98,16 +98,15 @@ def prepare_streamdiffusion_models() -> None:
     logging.info("Compilation plan has %d build(s)", len(jobs))
     for idx, job in enumerate(jobs, start=1):
         logging.info(
-            "[%s/%s] Compiling model=%s type=%s ipadapter=%s %sx%s",
+            "[%s/%s] Compiling model=%s ipadapter=%s %sx%s",
             idx,
             len(jobs),
-            job.model_id,
-            job.model_type,
-            job.ipadapter_type or "disabled",
-            job.width,
-            job.height,
+            job.params.model_id,
+            job.params.ip_adapter.type if job.params.ip_adapter and job.params.ip_adapter.enabled else "disabled",
+            job.params.width,
+            job.params.height,
         )
-        _compile_build(job, Path(ENGINES_DIR))
+        _compile_build(job)
     logging.info("StreamDiffusion model preparation complete.")
 
 
@@ -118,10 +117,11 @@ def _compile_dependencies() -> None:
 
 
 def _build_depth_anything() -> None:
-    engine_path = Path(ENGINES_DIR) / "depth-anything" / "depth_anything_v2_vits.engine"
+    engine_path = ENGINES_DIR / "depth-anything" / "depth_anything_v2_vits.engine"
     if engine_path.exists():
         logging.info("Depth-Anything engine already present: %s", engine_path)
         return
+    engine_path = engine_path.resolve()
 
     logging.info("Building Depth-Anything TensorRT engine...")
     repo_dir = _ensure_repo(DEPTH_EXPORT_REPO)
@@ -145,19 +145,16 @@ def _build_depth_anything() -> None:
 def _build_pose_engines() -> None:
     repo_dir = _ensure_repo(POSE_EXPORT_REPO)
     requirements = repo_dir / "requirements.txt"
-    marker = repo_dir / ".requirements_installed"
-    if requirements.exists() and not marker.exists():
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", str(requirements)],
-            cwd=repo_dir,
-            check=True,
-        )
-        marker.touch()
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-r", str(requirements)],
+        cwd=repo_dir,
+        check=True,
+    )
 
-    engines_dir = Path(ENGINES_DIR)
     for asset in POSE_ASSETS:
         onnx_path = _download_asset(asset)
-        engine_path = engines_dir / "pose" / asset.engine_name
+        engine_name = Path(asset.filename).with_suffix(".engine").name
+        engine_path = ENGINES_DIR / "pose" / engine_name
         if engine_path.exists():
             logging.info("Pose engine already present: %s", engine_path)
             continue
@@ -182,8 +179,7 @@ def _build_pose_engines() -> None:
 
 
 def _build_raft_engine() -> None:
-    engines_dir = Path(ENGINES_DIR)
-    engine_path = engines_dir / "temporal_net" / "raft_small_min_384x384_max_1024x1024.engine"
+    engine_path = ENGINES_DIR / "temporal_net" / "raft_small_min_384x384_max_1024x1024.engine"
     if engine_path.exists():
         logging.info("RAFT engine already present: %s", engine_path)
         return
@@ -223,44 +219,32 @@ def _ensure_repo(repo: GitRepo) -> Path:
 
 
 def _build_matrix() -> Iterator[BuildJob]:
-    control_keys = set(CONTROLNETS_BY_TYPE.keys())
     for model_id, model_type in MODEL_ID_TO_TYPE.items():
-        ip_types: Sequence[Optional[str]]
+        ipa_types: Sequence[Optional[str]]
+        ipa_types = ["regular"]
         if model_type in IPADAPTER_SUPPORTED_TYPES:
-            ip_types = ("regular", "faceid")
-        else:
-            ip_types = (None,)
+            ipa_types.append("faceid")
 
-        for ip_type in ip_types:
-            if ip_type == "faceid" and model_type not in IPADAPTER_SUPPORTED_TYPES:
-                continue
-            if model_type not in control_keys:
-                logging.warning("Unknown controlnet set for model type %s", model_type)
-            base = _base_params(model_type, ip_type)
-            yield BuildJob(
-                model_id=model_id,
-                model_type=model_type,
-                ipadapter_type=ip_type,
-                width=base.width,
-                height=base.height,
-            )
+        for ipa_type in ipa_types:
+            params = _create_params(model_id, model_type, ipa_type)
+            yield BuildJob(params=params)
 
 
-def _compile_build(job: BuildJob, engines_dir: Path) -> None:
-    params = _params_for_job(job)
-    controlnet_ids = [cn.model_id for cn in params.controlnets] if params.controlnets else []
+def _compile_build(job: BuildJob) -> None:
+    controlnet_ids = [cn.model_id for cn in job.params.controlnets] if job.params.controlnets else []
     print(
-        f"→ Building TensorRT engines | model={job.model_id} type={job.model_type} "
-        f"ipadapter={job.ipadapter_type or 'disabled'} size={params.width}x{params.height} "
-        f"timesteps={params.t_index_list} batch_min={MIN_TIMESTEPS} batch_max={MAX_TIMESTEPS} "
+        f"→ Building TensorRT engines | model={job.params.model_id} "
+        f"ipadapter={job.params.ip_adapter.type if job.params.ip_adapter and job.params.ip_adapter.enabled else 'disabled'} "
+        f"size={job.params.width}x{job.params.height} "
+        f"timesteps={job.params.t_index_list} batch_min={MIN_TIMESTEPS} batch_max={MAX_TIMESTEPS} "
         f"controlnets={controlnet_ids}"
     )
     try:
         pipe = load_streamdiffusion_sync(
-            params=params,
+            params=job.params,
             min_batch_size=MIN_TIMESTEPS,
             max_batch_size=MAX_TIMESTEPS,
-            engine_dir=str(engines_dir),
+            engine_dir=ENGINES_DIR,
             build_engines=True,
         )
         # Explicitly drop the wrapper to keep GPU memory low between builds.
@@ -271,105 +255,47 @@ def _compile_build(job: BuildJob, engines_dir: Path) -> None:
             torch.cuda.empty_cache()
 
 
-def _params_for_job(job: BuildJob) -> StreamDiffusionParams:
-    base = _base_params(job.model_type, job.ipadapter_type)
-    ip_adapter = _ipadapter_for_job(job, base)
+def _create_params(model_id: str, model_type: ModelType, ipa_type: Optional[str]) -> StreamDiffusionParams:
+    controlnets = []
+    controlnet_ids = CONTROLNETS_BY_TYPE.get(model_type)
+    if controlnet_ids:
+        for cn_model_id in controlnet_ids:
+            preprocessor = "passthrough" if "TemporalNet" not in cn_model_id else "temporal_net_tensorrt"
+            config = ControlNetConfig(
+                model_id=cn_model_id,
+                conditioning_scale=0.5,
+                preprocessor=preprocessor,
+                preprocessor_params={},
+                enabled=True,
+                control_guidance_start=0.0,
+                control_guidance_end=1.0,
+            )
+            controlnets.append(config)
 
-    return base.model_copy(
-        update={
-            "model_id": job.model_id,
-            "controlnets": _controlnets_for_type(job.model_type),
-            "ip_adapter": ip_adapter,
-            "image_postprocessing": ProcessingConfig(
-                processors=[SingleProcessorConfig(type="realesrgan_trt")]
-            ),
-        },
-        deep=True,
+    # Create IPAdapter config if specified
+    ip_adapter = None
+    if ipa_type:
+        ip_adapter = IPAdapterConfig(
+            type=ipa_type,
+            enabled=True,
+        )
+
+    # Create t_index_list based on number of timesteps. Only the size matters...
+    opt_timesteps = OPT_TIMESTEPS_BY_TYPE.get(model_type, 3)
+    t_index_list = list(range(1, 50, 50 // opt_timesteps))[:opt_timesteps]
+
+    return StreamDiffusionParams(
+        model_id=model_id,
+        width=512,
+        height=512,
+        acceleration="tensorrt",
+        t_index_list=t_index_list,
+        controlnets=controlnets,
+        ip_adapter=ip_adapter,
+        image_postprocessing=ProcessingConfig(
+            processors=[SingleProcessorConfig(type="realesrgan_trt")]
+        ),
     )
-
-
-def _base_params(model_type: str, ip_type: Optional[str]) -> StreamDiffusionParams:
-    if model_type == "sd21":
-        return StreamDiffusionParams()
-
-    template_file = {
-        "sd15": "sd15_default_params.json",
-        "sdxl": "sdxl_faceid_default_params.json" if ip_type == "faceid" else "sdxl_default_params.json",
-    }.get(model_type)
-
-    if not template_file:
-        return StreamDiffusionParams()
-
-    template_path = Path(__file__).with_name(template_file)
-    with template_path.open("r", encoding="utf-8") as fp:
-        data = json.load(fp)
-    return StreamDiffusionParams(**data)
-
-
-def _ipadapter_for_job(
-    job: BuildJob, base: StreamDiffusionParams
-) -> Optional[IPAdapterConfig]:
-    if not job.ipadapter_type:
-        return None
-
-    base_cfg = base.ip_adapter or IPAdapterConfig()
-    return base_cfg.model_copy(
-        update={
-            "type": job.ipadapter_type,
-            "enabled": True,
-        },
-        deep=True,
-    )
-
-
-def _controlnets_for_type(model_type: str) -> Optional[List[ControlNetConfig]]:
-    ids = CONTROLNETS_BY_TYPE.get(model_type)
-    if not ids:
-        return None
-
-    templates = _controlnet_templates()
-    configs: List[ControlNetConfig] = []
-    for cn_id in ids:
-        template = templates.get(cn_id)
-        if not template:
-            raise ValueError(f"No ControlNet template registered for {cn_id}")
-        configs.append(template.model_copy(deep=True))
-    return configs
-
-
-_CONTROLNET_TEMPLATE_CACHE: Optional[Dict[str, ControlNetConfig]] = None
-
-
-def _controlnet_templates() -> Dict[str, ControlNetConfig]:
-    global _CONTROLNET_TEMPLATE_CACHE
-    if _CONTROLNET_TEMPLATE_CACHE is not None:
-        return _CONTROLNET_TEMPLATE_CACHE
-
-    templates: Dict[str, ControlNetConfig] = {}
-
-    def _ingest_params(params: StreamDiffusionParams):
-        if not params.controlnets:
-            return
-        for cfg in params.controlnets:
-            templates.setdefault(cfg.model_id, cfg)
-
-    _ingest_params(StreamDiffusionParams())
-
-    template_files = [
-        "sd15_default_params.json",
-        "sdxl_default_params.json",
-        "sdxl_faceid_default_params.json",
-    ]
-    for filename in template_files:
-        path = Path(__file__).with_name(filename)
-        if not path.exists():
-            continue
-        with path.open("r", encoding="utf-8") as fp:
-            data = json.load(fp)
-        _ingest_params(StreamDiffusionParams(**data))
-
-    _CONTROLNET_TEMPLATE_CACHE = templates
-    return templates
 
 
 def _download_asset(asset: HfAsset) -> Path:

@@ -24,9 +24,9 @@ from .params import (
     LCM_LORAS_BY_TYPE
 )
 
-ENGINES_DIR = "./engines"
+ENGINES_DIR = Path("./engines")
 # this one is used only for realesrgan_trt which has ./models hardcoded
-LOCAL_MODELS_DIR = "./models"
+LOCAL_MODELS_DIR = Path("./models")
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -396,7 +396,7 @@ def load_streamdiffusion_sync(
     params: StreamDiffusionParams,
     min_batch_size=1,
     max_batch_size=4,
-    engine_dir=ENGINES_DIR,
+    engine_dir: str | Path = ENGINES_DIR,
     build_engines=False,
 ) -> StreamDiffusionWrapper:
     pipe = StreamDiffusionWrapper(
