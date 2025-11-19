@@ -74,6 +74,19 @@ async def image_to_video(
         UploadFile,
         File(description="Uploaded image to generate a video from."),
     ],
+    prompt: Annotated[
+        str,
+        Form(description="Text prompt(s) to guide video generation for prompt accepting models.")
+    ] = "",
+    negative_prompt: Annotated[
+        str,
+        Form(
+            description=(
+                "Text prompt(s) to guide what to exclude from video generation for prompt accepting models. "
+                "Ignored if guidance_scale < 1."
+            )
+        ),
+    ] = "",
     model_id: Annotated[
         str, Form(description="Hugging Face model ID used for video generation.")
     ] = "",
@@ -123,6 +136,9 @@ async def image_to_video(
             )
         ),
     ] = 25,  # NOTE: Hardcoded due to varying pipeline values.
+    num_frames: Annotated[
+        int, Form(description="The number of video frames to generate.")
+    ] = 25, # NOTE: Added `25` as default value to consider for `stable-video-diffusion-img2vid-xt` model having smaller default value than LTX-V in its pipeline.
     pipeline: Pipeline = Depends(get_pipeline),
     token: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
 ):
@@ -159,6 +175,9 @@ async def image_to_video(
     try:
         batch_frames, has_nsfw_concept = pipeline(
             image=Image.open(image.file).convert("RGB"),
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            num_frames=num_frames,
             height=height,
             width=width,
             fps=fps,
