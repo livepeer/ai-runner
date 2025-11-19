@@ -42,6 +42,7 @@ ENV HF_HUB_OFFLINE=1
 
 # Create symlink for where StreamDiffusion builds TensorRT engines at runtime
 RUN ln -s /models/StreamDiffusion--engines ./engines
+# this is required for faceid ipadapter, whose dependency instals on a fixed path
 RUN mkdir -p /root && ln -s /models/insightface /root/.insightface
 # this one is used only for realesrgan_trt which has ./models hardcoded
-RUN ln -s /models/StreamDiffusion--engines/cwd_models ./models
+RUN ln -s /models/StreamDiffusion--models ./models

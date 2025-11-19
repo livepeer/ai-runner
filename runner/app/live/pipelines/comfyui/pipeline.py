@@ -1,13 +1,14 @@
-import os
-import torch
 import asyncio
 import logging
+import os
+from pathlib import Path
 
+import torch
 from comfystream.client import ComfyStreamClient
 
-from .interface import Pipeline
-from .comfyui_params import ComfyUIParams
-from ..trickle import VideoFrame, VideoOutput
+from ..interface import Pipeline
+from .params import ComfyUIParams
+from ...trickle import VideoFrame, VideoOutput
 
 
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"
@@ -41,14 +42,11 @@ class ComfyUI(Pipeline):
         logging.info("Pipeline initialization and warmup complete")
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        tensor = frame.tensor
-        if tensor.is_cuda:
-            # Clone the tensor to be able to send it on comfystream internal queue
-            tensor = tensor.clone()
-        frame.side_data.input = tensor
+        frame.side_data.input = frame.tensor
         frame.side_data.skipped = True
+        out_frame = VideoOutput(frame.replace_tensor(torch.zeros()), request_id)
+        await self.video_incoming_frames.put(out_frame)
         self.client.put_video_input(frame)
-        await self.video_incoming_frames.put(VideoOutput(frame, request_id))
 
     async def get_processed_video_frame(self):
         result_tensor = await self.client.get_video_output()
@@ -58,7 +56,21 @@ class ComfyUI(Pipeline):
         return out.replace_tensor(result_tensor)
 
     async def update_params(self, **params):
+        update_task = asyncio.create_task(self._do_update_params(**params))
+
+        try:
+            await asyncio.wait_for(asyncio.shield(update_task), timeout=2.0)
+        except asyncio.TimeoutError:
+            logging.info("Update taking a while, returning task for loading overlay")
+            return update_task
+
+    async def _do_update_params(self, **params):
+        """Perform the actual parameter update with logging and param setting."""
         new_params = ComfyUIParams(**params)
+        if new_params == self.params:
+            logging.info("No parameters changed")
+            return
+
         logging.info(f"Updating ComfyUI Pipeline Prompt: {new_params.prompt}")
         # TODO: currently its a single prompt, but need to support multiple prompts
         try:
@@ -92,3 +104,7 @@ class ComfyUI(Pipeline):
         finally:
             self.client = None
             logging.info("ComfyUI pipeline stopped")
+
+    @classmethod
+    def prepare_models(cls):
+        logging.info("ComfyUI prepare_models is currently a no-op")

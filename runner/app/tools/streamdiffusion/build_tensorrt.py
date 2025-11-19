@@ -1,9 +1,9 @@
 import argparse
 from typing import List
 
-from ...live.pipelines import streamdiffusion_params
-from ...live.pipelines.streamdiffusion_params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig, ProcessingConfig, SingleProcessorConfig
-from ...live.pipelines.streamdiffusion import load_streamdiffusion_sync
+from ...live.pipelines.streamdiffusion import params as streamdiffusion_params
+from ...live.pipelines.streamdiffusion.params import StreamDiffusionParams, ControlNetConfig, IPAdapterConfig, ProcessingConfig, SingleProcessorConfig
+from ...live.pipelines.streamdiffusion.pipeline import load_streamdiffusion_sync
 
 streamdiffusion_params._is_building_tensorrt_engines = True
 

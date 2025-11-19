@@ -6,11 +6,14 @@ from .interface import Pipeline, BaseParams
 
 def load_pipeline(name: str) -> Pipeline:
     if name == "streamdiffusion" or name.startswith("streamdiffusion-"):
-        from .streamdiffusion import StreamDiffusion
+        from .streamdiffusion.pipeline import StreamDiffusion
         return StreamDiffusion()
     if name == "comfyui":
-        from .comfyui import ComfyUI
+        from .comfyui.pipeline import ComfyUI
         return ComfyUI()
+    elif name == "scope":
+        from .scope.pipeline import Scope
+        return Scope()
     elif name == "noop":
         from .noop import Noop
         return Noop()
@@ -24,12 +27,16 @@ def parse_pipeline_params(name: str, params: dict) -> BaseParams:
     """
     if name == "streamdiffusion" or name.startswith("streamdiffusion-"):
         with _no_expensive_imports():
-            from .streamdiffusion_params import StreamDiffusionParams
+            from .streamdiffusion.params import StreamDiffusionParams
             return StreamDiffusionParams(**params)
     if name == "comfyui":
         with _no_expensive_imports():
-            from .comfyui_params import ComfyUIParams
+            from .comfyui.params import ComfyUIParams
             return ComfyUIParams(**params)
+    if name == "scope":
+        with _no_expensive_imports():
+            from .scope.params import ScopeParams
+            return ScopeParams(**params)
     if name == "noop":
         return BaseParams(**params)
     raise ValueError(f"Unknown pipeline: {name}")

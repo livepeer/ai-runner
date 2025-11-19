@@ -7,7 +7,7 @@ PR #808 expands what the StreamDiffusion pipeline can do. This document captures
 ### Schema Changes at a Glance
 - Four new "processor" blocks now exist on the pipeline params: `image_preprocessing`, `image_postprocessing`, `latent_preprocessing`, `latent_postprocessing`. Each block shares the same `ProcessingConfig` shape:
 
-  ```84:118:runner/app/live/pipelines/streamdiffusion_params.py
+  ```84:118:runner/app/live/pipelines/streamdiffusion/params.py
   class SingleProcessorConfig(BaseModel, Generic[ProcessorTypeT]):
       type: ProcessorTypeT
       enabled: bool = True
@@ -232,4 +232,4 @@ Most fields shown above can be updated during a stream; notable exceptions:
 - RealESRGAN (`realesrgan_trt`) requires a restart to change because it affects resolution.
 - `skip_diffusion` is evaluated at pipeline creation time; switching modes mid-stream triggers a pipeline reload.
 
-Refer back to [`StreamDiffusionParams`](https://github.com/livepeer/ai-runner/blob/main/runner/app/live/pipelines/streamdiffusion_params.py) for the authoritative list of runtime-updateable attributes.
+Refer back to [`StreamDiffusionParams`](https://github.com/livepeer/ai-runner/blob/main/runner/app/live/pipelines/streamdiffusion/params.py) for the authoritative list of runtime-updateable attributes.

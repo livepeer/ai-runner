@@ -1,5 +1,6 @@
-import logging
 import asyncio
+import logging
+from pathlib import Path
 
 from .interface import Pipeline
 from ..trickle import VideoFrame, VideoOutput
@@ -24,3 +25,7 @@ class Noop(Pipeline):
 
   async def stop(self):
     logging.info("Stopping pipeline")
+
+  @classmethod
+  def prepare_models(cls):
+    logging.info("Noop pipeline does not require model preparation")

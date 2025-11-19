@@ -1,6 +1,9 @@
 from asyncio import Task
 from abc import ABC, abstractmethod
+from pathlib import Path
+
 from pydantic import BaseModel, Field
+
 from ..trickle import VideoFrame, VideoOutput, DEFAULT_WIDTH, DEFAULT_HEIGHT
 
 
@@ -103,4 +106,10 @@ class Pipeline(ABC):
 
         Called once when the pipeline is no longer needed.
         """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def prepare_models(cls):
+        """Download and/or compile any assets required for this pipeline."""
         pass

@@ -3,6 +3,7 @@ import logging
 import asyncio
 import base64
 import re
+from pathlib import Path
 from typing import Dict, List, Optional, Any, cast
 
 import torch
@@ -11,10 +12,10 @@ from PIL import Image
 from io import BytesIO
 import aiohttp
 
-from .interface import Pipeline
-from ..trickle import VideoFrame, VideoOutput
+from ..interface import Pipeline
+from ...trickle import VideoFrame, VideoOutput
 
-from .streamdiffusion_params import (
+from .params import (
     StreamDiffusionParams,
     IPAdapterConfig,
     ProcessingConfig,
@@ -23,6 +24,9 @@ from .streamdiffusion_params import (
     LCM_LORAS_BY_TYPE
 )
 
+ENGINES_DIR = Path("./engines")
+# this one is used only for realesrgan_trt which has ./models hardcoded
+LOCAL_MODELS_DIR = Path("./models")
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -258,6 +262,12 @@ class StreamDiffusion(Pipeline):
             self.params = None
             self.frame_queue = asyncio.Queue()
 
+    @classmethod
+    def prepare_models(cls):
+        from .prepare import prepare_streamdiffusion_models
+
+        prepare_streamdiffusion_models()
+
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
     """Prepare ControlNet configurations for wrapper"""
@@ -386,7 +396,7 @@ def load_streamdiffusion_sync(
     params: StreamDiffusionParams,
     min_batch_size=1,
     max_batch_size=4,
-    engine_dir="engines",
+    engine_dir: str | Path = ENGINES_DIR,
     build_engines=False,
 ) -> StreamDiffusionWrapper:
     pipe = StreamDiffusionWrapper(
