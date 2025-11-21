@@ -190,7 +190,7 @@ function download_live_models() {
     prepare_scope_models
     ;;
   "all")
-    printf "\Preparing all live models...\n"
+    printf "\nPreparing all live models...\n"
     prepare_streamdiffusion_models
     download_comfyui_live_models
     prepare_scope_models
@@ -223,10 +223,9 @@ function run_pipeline_prepare() {
   docker run --rm --name "ai-runner-${pipeline}-prepare" -v ./models:/models "${docker_run_flags[@]}" \
     -l "$label" \
     -e HF_HUB_OFFLINE=0 \
-    -e HF_HUB_ENABLE_HF_TRANSFER \
+    -e HF_XET_HIGH_PERFORMANCE=1 \
     -e HF_TOKEN="${HF_TOKEN:-}" \
     "$image" bash -c "set -euo pipefail && \
-      $CONDA_PYTHON -m pip install --no-cache-dir hf_transfer==0.1.4 && \
       $CONDA_PYTHON -m app.tools.prepare_models --pipeline ${pipeline} && \
       chown -R $(id -u):$(id -g) /models"
 }
