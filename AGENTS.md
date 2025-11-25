@@ -65,8 +65,6 @@
 
 **AI Runner** is the containerized inference runtime for the Livepeer AI network. For live video-to-video processing, it receives video streams, applies real-time AI transformations (e.g., style transfer, diffusion effects), and outputs the transformed stream with minimal latency.
 
-**Goal for Refactoring**: Separate the live pipeline implementations (`runner/app/live/pipelines/`) into their own repository while keeping the core runtime (`process/`, `streamer/`, `trickle/`, `api/`) in this repository.
-
 ---
 
 ## 🏗️ Tech Stack
@@ -494,44 +492,6 @@ threading.Thread(target=lambda: stdout.close(), daemon=True).start()
 
 ---
 
-## 🚀 Refactoring Goals
-
-### Current Coupling
-
-The `runner/app/live/pipelines/` directory contains:
-1. **Interface** (`interface.py`, `loader.py`) - Should stay in core
-2. **Implementations** (`streamdiffusion/`, `comfyui/`, `scope/`, `noop.py`) - Should be extractable
-
-### Separation Strategy
-
-1. **Define clear interface** - `Pipeline` ABC is already well-defined
-2. **Parameter schemas** - Each pipeline has its own `*Params` class
-3. **Model preparation** - `prepare_models()` classmethod for setup
-4. **Dynamic loading** - `loader.py` currently hard-codes pipelines
-
-### Future Architecture
-
-```
-ai-runner (this repo)
-├── runner/app/live/
-│   ├── infer.py          # Stays
-│   ├── process/          # Stays
-│   ├── streamer/         # Stays
-│   ├── trickle/          # Stays
-│   ├── api/              # Stays
-│   └── pipelines/
-│       ├── interface.py  # Stays (defines Pipeline ABC)
-│       └── loader.py     # Modified to load from external repos
-
-ai-pipelines (new repo)
-├── streamdiffusion/
-├── comfyui/
-├── scope/
-└── noop.py
-```
-
----
-
 ## 📋 Acceptance Criteria for Changes
 
 ### Adding a New Pipeline
@@ -578,14 +538,13 @@ ai-pipelines (new repo)
 - Initial AGENTS.md created for agent-assisted development
 - Documented two-level process architecture
 - Mapped all key files and their responsibilities
-- Identified refactoring goals for pipeline extraction
 
 ---
 
-**Project Status**: Active development - preparing for pipeline extraction refactor
+**Project Status**: Active development
 
 **Maintainer Guidelines**:
-- **AGENTS.md** → High-level architecture, navigation, refactoring context
+- **AGENTS.md** → High-level architecture, navigation, current implementation state
 - **`docs/` folder** → Detailed implementation guides
 - Update this file when making architectural changes
 - Keep focus on what agents need to know for safe code modifications
