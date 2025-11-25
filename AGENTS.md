@@ -50,6 +50,8 @@
 | Runtime overview | `docs/live-ai-runtime-overview.md` |
 | Local development | `docs/live-ai-local-dev.md` |
 | Container setup | `docs/runner-docker.md` |
+| Docker image hierarchy | This file → "Docker Image Hierarchy" section |
+| External pipeline development | `docs/external-pipelines.md` |
 | FastAPI entrypoint | `runner/app/main.py` |
 | Live pipeline wrapper | `runner/app/pipelines/live_video_to_video.py` |
 | Infer process | `runner/app/live/infer.py` |
@@ -57,7 +59,9 @@
 | Streaming protocols | `runner/app/live/streamer/` |
 | Frame encoding/decoding | `runner/app/live/trickle/` |
 | Pipeline implementations | `runner/app/live/pipelines/` |
+| Pipeline plugin loader | `runner/app/live/pipelines/loader.py` |
 | HTTP API (internal) | `runner/app/live/api/api.py` |
+| Package dependencies | `runner/pyproject.toml` |
 
 ---
 
@@ -75,6 +79,76 @@
 - **Streaming**: Trickle protocol (low-latency HTTP-based streaming)
 - **Media**: FFmpeg (via PyAV), tensor-based frame processing
 - **Container**: Docker with NVIDIA GPU support
+
+---
+
+## 🐳 Docker Image Hierarchy
+
+Docker images follow a **three-layer hierarchy** for build efficiency and separation of concerns:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Dockerfile.live-app__PIPELINE__  (or Dockerfile.live-app-noop)    │
+│  - Installs ai-runner-base package (pyproject.toml)                │
+│  - Copies app code                                                  │
+│  - Registers entry points for pipeline discovery                   │
+└─────────────────────────────────┬───────────────────────────────────┘
+                                  │ FROM
+┌─────────────────────────────────▼───────────────────────────────────┐
+│  Dockerfile.live-base-{pipeline}  (streamdiffusion, comfyui, scope)│
+│  - Installs conda + Python environment                             │
+│  - Installs PyTorch with CUDA support (from pytorch.org URL)       │
+│  - Installs pipeline-specific libs (StreamDiffusion, ComfyUI, etc) │
+└─────────────────────────────────┬───────────────────────────────────┘
+                                  │ FROM
+┌─────────────────────────────────▼───────────────────────────────────┐
+│  Dockerfile.live-base                                               │
+│  - nvidia/cuda base image                                           │
+│  - System deps (build-essential, etc)                               │
+│  - pyenv for Python version management                              │
+│  - FFmpeg with NVIDIA hardware acceleration                         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Image Files (`runner/docker/`)
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile.live-base` | Base image: CUDA, pyenv, FFmpeg with NVENC/NVDEC |
+| `Dockerfile.live-base-streamdiffusion` | Adds conda, PyTorch (cu128), StreamDiffusion lib |
+| `Dockerfile.live-base-comfyui` | Based on comfyui-base, adds FFmpeg |
+| `Dockerfile.live-base-scope` | Adds conda, scope dependencies |
+| `Dockerfile.live-app__PIPELINE__` | App layer for streamdiffusion/comfyui/scope (uses conda) |
+| `Dockerfile.live-app-noop` | App layer for noop pipeline (uses pyenv, no CUDA) |
+
+### Key Design Decisions
+
+1. **PyTorch is NOT in pyproject.toml** - It's installed in base images with CUDA-specific builds from `download.pytorch.org/whl/cu128`
+
+2. **Dependencies in pyproject.toml** - All runtime deps (aiohttp, fastapi, etc.) are defined in `runner/pyproject.toml` with exact versions
+
+3. **Entry points for pipeline discovery** - Pipelines register via `[project.entry-points."ai_runner.pipelines"]` in pyproject.toml
+
+4. **Layer caching strategy** - App Dockerfiles copy pyproject.toml first, install deps, then copy app code to maximize cache hits
+
+5. **Conda vs pyenv**:
+   - `live-base-streamdiffusion/comfyui/scope` → Use conda (`comfystream` environment)
+   - `live-base` (for noop) → Uses pyenv
+
+### Building Images
+
+```bash
+# Build base image
+docker build -f docker/Dockerfile.live-base -t livepeer/ai-runner:live-base .
+
+# Build pipeline base (example: streamdiffusion)
+docker build -f docker/Dockerfile.live-base-streamdiffusion -t livepeer/ai-runner:live-base-streamdiffusion .
+
+# Build app image
+docker build -f docker/Dockerfile.live-app__PIPELINE__ \
+  --build-arg PIPELINE=streamdiffusion \
+  -t livepeer/ai-runner:live-app-streamdiffusion .
+```
 
 ---
 
@@ -246,6 +320,8 @@ async def main(...):
 **Pipeline Interface** (`interface.py`):
 ```python
 class Pipeline(ABC):
+    Params: type[BaseParams] = BaseParams  # Link to params class
+
     async def initialize(self, **params): ...
     async def put_video_frame(self, frame: VideoFrame, request_id: str): ...
     async def get_processed_video_frame(self) -> VideoOutput: ...
@@ -254,6 +330,8 @@ class Pipeline(ABC):
     @classmethod
     def prepare_models(cls): ...
 ```
+
+**Plugin System**: Pipelines are discovered via Python entry points (`ai_runner.pipelines`). See `docs/external-pipelines.md` for creating external pipelines.
 
 ---
 
@@ -496,11 +574,19 @@ threading.Thread(target=lambda: stdout.close(), daemon=True).start()
 
 ### Adding a New Pipeline
 
+**Built-in pipelines** (in this repo):
 1. Create new directory under `runner/app/live/pipelines/`
-2. Implement `Pipeline` ABC (initialize, put_video_frame, get_processed_video_frame, update_params, stop, prepare_models)
+2. Implement `Pipeline` ABC with `Params` class attribute pointing to your params class
 3. Create `*Params` class extending `BaseParams`
-4. Add to `loader.py` (load_pipeline and parse_pipeline_params)
-5. Add Docker configuration if needed (`docker/Dockerfile.live-app-*`)
+4. Register entry point in `runner/pyproject.toml` under `[project.entry-points."ai_runner.pipelines"]`
+5. Add Docker configuration if needed (`docker/Dockerfile.live-base-*`)
+
+**External pipelines** (separate repos):
+1. Create a Python package with `Pipeline` implementation
+2. Set `Params` class attribute on your Pipeline class
+3. Register entry point in your `pyproject.toml`
+4. Install via `pip install` or `uv pip install`
+5. See `docs/external-pipelines.md` for complete guide
 
 ### Modifying Process Architecture
 
@@ -532,6 +618,13 @@ threading.Thread(target=lambda: stdout.close(), daemon=True).start()
 **Last Updated**: 2025-11-25
 
 **Recent Changes**:
+- Added pipeline plugin system using Python entry points (`ai_runner.pipelines`)
+- Pipelines now have `Params` class attribute linking to their params class
+- Created `runner/pyproject.toml` for package definition and dependencies
+- Removed `requirements.live-ai.txt` (deps now in pyproject.toml)
+- Updated Dockerfiles to use pyproject.toml for dependency installation
+- Added Docker Image Hierarchy section documenting the three-layer build structure
+- Created `docs/external-pipelines.md` for external pipeline development guide
 - Deprecated ZeroMQ protocol references (was only used for local development)
 - Clarified that Trickle is the only streaming protocol
 - Added "Stream Start Flow" section explaining how streams are initiated via API
