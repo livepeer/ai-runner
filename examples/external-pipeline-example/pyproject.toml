@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "example-pipeline"
+version = "0.1.0"
+description = "Example external pipeline for AI Runner"
+requires-python = ">=3.10"
+dependencies = [
+    "ai-runner-base>=0.1.0",
+]
+
+[project.entry-points."ai_runner.pipelines"]
+example-pipeline = "example_pipeline.pipeline:ExamplePipeline"
+
+[tool.setuptools]
+packages = ["example_pipeline"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+

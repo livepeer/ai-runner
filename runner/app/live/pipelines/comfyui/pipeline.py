@@ -16,6 +16,7 @@ WARMUP_RUNS = 1
 
 
 class ComfyUI(Pipeline):
+    Params = ComfyUIParams
     def __init__(self):
         comfy_ui_workspace = os.getenv(COMFY_UI_WORKSPACE_ENV)
         self.client = ComfyStreamClient(cwd=comfy_ui_workspace)

@@ -53,6 +53,9 @@ class Pipeline(ABC):
       exceptions propagate for optimal error reporting.
     """
 
+    # Each pipeline should set this to their params class
+    Params: type[BaseParams] = BaseParams
+
     def __init__(self):
         pass
 
