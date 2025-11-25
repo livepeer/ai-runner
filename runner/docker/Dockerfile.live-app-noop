@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
-# Install latest stable Go version and system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     libcairo2-dev \
@@ -14,44 +14,44 @@ RUN pyenv install $PYTHON_VERSION && \
     pyenv global $PYTHON_VERSION && \
     pyenv rehash
 
-# Upgrade pip and install required packages
-ARG PIP_VERSION=23.3.2
+# Upgrade pip
+RUN pip install --no-cache-dir --upgrade pip==23.3.2 setuptools==69.5.1 wheel==0.43.0
 
 ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 
-RUN ls /usr/local/lib && ls /usr/local/lib/pkgconfig && ls -lha /usr/local/bin && echo $PKG_CONFIG_PATH
-
-# Install any additional Python packages
-RUN pip install --no-cache-dir \
-    uvicorn==0.34.0 \
-    fastapi==0.111.0 \
-    numpy==1.26.4 \
-    torch==2.5.1 \
-    diffusers==0.30.0 \
-    transformers==4.43.3 \
-    aiohttp==3.10.9 \
-    pyzmq==26.2.0 \
-    nvidia-ml-py==12.560.30 \
-    opencv-python==4.10.0.84 \
-    --no-binary=av \
-    av==14.0.1 \
-    psutil==6.0.0 \
-    prometheus_client>=0.21.1
-
 # Set environment variables
-ENV MAX_WORKERS=1
-ENV HUGGINGFACE_HUB_CACHE=/models
-ENV DIFFUSERS_CACHE=/models
-ENV MODEL_DIR=/models
+ENV MAX_WORKERS=1 \
+    HUGGINGFACE_HUB_CACHE=/models \
+    DIFFUSERS_CACHE=/models \
+    MODEL_DIR=/models
 
-# Copy application files
+WORKDIR /app
+
+# Install PyTorch first (CPU version for noop - no CUDA needed for pass-through)
+RUN pip install --no-cache-dir torch==2.5.1
+
+# Copy only pyproject.toml and create minimal app structure for dependency installation
+COPY pyproject.toml /app/pyproject.toml
+RUN mkdir -p /app/app && touch /app/app/__init__.py
+
+# Install dependencies from pyproject.toml (without the actual app code)
+# --no-build-isolation ensures we use the installed torch for any build steps
+RUN pip install --no-cache-dir --no-build-isolation .
+
+# Now copy actual application files (changes here won't invalidate dependency cache)
 COPY app/ /app/app
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 
-ARG VERSION="undefined"
-ENV VERSION=${VERSION}
+# Re-install package to register with actual code (uses cached deps, just updates package)
+RUN pip install --no-cache-dir --no-build-isolation --no-deps .
 
-WORKDIR /app
+# Keep these args/envs last to maximize cache reuse
+ARG GIT_SHA
+ARG VERSION="undefined"
+
+ENV GIT_SHA="${GIT_SHA}" \
+    VERSION="${VERSION}" \
+    PIPELINE="noop"
 
 CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

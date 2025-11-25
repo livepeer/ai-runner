@@ -5,7 +5,7 @@ FROM ${BASE_IMAGE}
 # Need to repeat it here since one above is in a different stage
 ARG PIPELINE=comfyui
 
-# Install latest stable Go version and system dependencies
+# Install system dependencies
 RUN apt update && apt install -yqq \
     wget \
     libcairo2-dev \
@@ -13,21 +13,30 @@ RUN apt update && apt install -yqq \
     pkg-config \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
-RUN --mount=type=bind,source=requirements.live-ai.txt,target=/tmp/requirements.txt \
-    pip install --root-user-action ignore --requirement /tmp/requirements.txt
-
 # Set environment variables
 ENV MAX_WORKERS=1 \
     HUGGINGFACE_HUB_CACHE=/models \
     DIFFUSERS_CACHE=/models \
     MODEL_DIR=/models
 
-# Copy application files
+WORKDIR /app
+
+# Copy only pyproject.toml and create minimal app structure for dependency installation
+COPY pyproject.toml /app/pyproject.toml
+RUN mkdir -p /app/app && touch /app/app/__init__.py
+
+# Install dependencies from pyproject.toml
+# PyTorch is already installed in base image with CUDA support - pip will detect it's satisfied
+# --no-build-isolation ensures we use the installed torch for any build steps
+RUN PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 pip install --root-user-action ignore --no-cache-dir --no-build-isolation .
+
+# Now copy actual application files (changes here won't invalidate dependency cache)
 COPY app/ /app/app
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 
-WORKDIR /app
+# Re-install package to register with actual code (uses cached deps, just updates package)
+RUN PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 pip install --root-user-action ignore --no-cache-dir --no-build-isolation --no-deps .
 
 # Keep these args/envs last to maximize cache reuse when only runtime envs change
 ARG GIT_SHA

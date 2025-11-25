@@ -21,24 +21,26 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 
+# Core runtime dependencies - PyTorch is NOT included here as it's provided
+# by base Docker images with CUDA-specific builds (see Dockerfile.live-base-*)
 dependencies = [
-    "aiohttp>=3.10.0",
-    "fastapi>=0.111.0",
-    "python-multipart>=0.0.9",
-    "uvicorn>=0.34.0",
-    "Pillow>=10.3.0",
-    "numpy>=1.26.4",
-    "pyzmq>=26.2.0",
-    "psutil>=6.0.0",
-    "watchdog>=5.0.0",
-    "prometheus_client>=0.21.0",
-    "nvidia-ml-py>=12.560.0",
-    "pynvml>=12.0.0",
-    "opencv-python>=4.10.0",
-    "av>=14.4.0",
-    "peft>=0.17.0",
-    "pydantic>=2.11.0",
-    "torch>=2.0.0",
+    "aiohttp==3.10.9",
+    "fastapi==0.111.0",
+    "python-multipart==0.0.9",
+    "uvicorn==0.34.0",
+    "Pillow==10.3.0",
+    "numpy==1.26.4",
+    "pyzmq==26.2.0",
+    "psutil==6.0.0",
+    "watchdog==5.0.2",
+    "prometheus_client==0.21.1",
+    "nvidia-ml-py==12.560.30",
+    "pynvml==12.0.0",
+    "opencv-python==4.10.0.84",
+    "av==14.4.0",
+    "peft==0.17.0",
+    "pydantic==2.11.7",
+    "pytorch-triton==3.3.0",
 ]
 
 [project.optional-dependencies]
@@ -70,4 +72,3 @@ target-version = ['py310', 'py311']
 [tool.ruff]
 line-length = 100
 target-version = "py310"
-
