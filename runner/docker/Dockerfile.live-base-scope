@@ -1,22 +1,24 @@
 ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
-# Install Python 3.10 via pyenv
+# Install Python 3.10 via pyenv (needed for --system installs)
 ARG PYTHON_VERSION=3.10
-ENV PIP_PREFER_BINARY=1
-
 RUN pyenv install $PYTHON_VERSION && \
     pyenv global $PYTHON_VERSION && \
     pyenv rehash
 
 # Install uv
-RUN pip install --no-cache-dir uv==0.9.9
-
-# Install Scope lib using uv (now pip will use uv pip via BASH_ENV)
-ARG SCOPE_VERSION=734057a4701975941a45e8ca8342b495a762ba2f
-RUN pip install --no-cache git+https://github.com/daydreamlive/scope.git@${SCOPE_VERSION}
+ARG UV_VERSION=0.9.9
+ENV UV_NO_MODIFY_PATH=1
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
 
 WORKDIR /app
+
+# Install Scope lib using uv with --system flag to install system-wide
+# This way regular python/pip will work without needing wrapper tricks
+ARG SCOPE_VERSION=734057a4701975941a45e8ca8342b495a762ba2f
+RUN uv pip install --system --no-cache git+https://github.com/daydreamlive/scope.git@${SCOPE_VERSION}
 
 # Configure Scope models directory
 ENV DAYDREAM_SCOPE_MODELS_DIR="/models/Scope--models"
@@ -24,18 +26,3 @@ ENV DAYDREAM_SCOPE_MODELS_DIR="/models/Scope--models"
 # Disable HF hub connectivity to avoid internet access during runtime.
 # This is manually disabled on the script to download models (dl_checkpoints.sh)
 ENV HF_HUB_OFFLINE=1
-
-# Set up uv wrapper similar to comfyui's conda activation
-# This makes 'pip' and 'python' commands automatically use 'uv pip' and 'uv run python'
-# so they use the venv that uv manages (where packages are installed)
-RUN echo 'pip() { uv pip "$@"; }' > /uv_pip_wrapper.sh && \
-    echo 'python() {' >> /uv_pip_wrapper.sh && \
-    echo '  if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then' >> /uv_pip_wrapper.sh && \
-    echo '    shift; shift; uv pip "$@"' >> /uv_pip_wrapper.sh && \
-    echo '  else' >> /uv_pip_wrapper.sh && \
-    echo '    uv run python "$@"' >> /uv_pip_wrapper.sh && \
-    echo '  fi' >> /uv_pip_wrapper.sh && \
-    echo '}' >> /uv_pip_wrapper.sh && \
-    chmod +x /uv_pip_wrapper.sh
-ENV BASH_ENV=/uv_pip_wrapper.sh
-SHELL ["/bin/bash", "-c"]
