@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-runner-base"
+version = "0.1.0"
+description = "Base runtime for AI Runner pipelines"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Livepeer", email = "dev@livepeer.org"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+# Core runtime dependencies - PyTorch is NOT included here as it's provided
+# by base Docker images with CUDA-specific builds (see Dockerfile.live-base-*)
+dependencies = [
+    "aiohttp==3.10.9",
+    "fastapi==0.111.0",
+    "python-multipart==0.0.9",
+    "uvicorn==0.34.0",
+    "Pillow==10.3.0",
+    "numpy==1.26.4",
+    "pyzmq==26.2.0",
+    "psutil==6.0.0",
+    "watchdog==5.0.2",
+    "prometheus_client==0.21.1",
+    "nvidia-ml-py==12.560.30",
+    "pynvml==12.0.0",
+    "opencv-python==4.10.0.84",
+    "av==14.4.0",
+    "peft==0.17.0",
+    "pydantic==2.11.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.yaml", "*.yml"]
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[project.entry-points."ai_runner.pipeline"]
+streamdiffusion = "app.live.pipelines.streamdiffusion.pipeline:StreamDiffusion"
+comfyui = "app.live.pipelines.comfyui.pipeline:ComfyUI"
+scope = "app.live.pipelines.scope.pipeline:Scope"
+noop = "app.live.pipelines.noop:Noop"
+
+# Params entry points - lightweight imports for parameter parsing
+# If not specified, falls back to BaseParams
+[project.entry-points."ai_runner.pipeline_params"]
+streamdiffusion = "app.live.pipelines.streamdiffusion.params:StreamDiffusionParams"
+comfyui = "app.live.pipelines.comfyui.params:ComfyUIParams"
+scope = "app.live.pipelines.scope.params:ScopeParams"
+# noop uses BaseParams (no entry point needed)
+
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311']
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
