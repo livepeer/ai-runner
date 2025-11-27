@@ -23,7 +23,7 @@ class ScopeParams(BaseParams):
     prompts: List[PromptConfig] = Field(
         default_factory=lambda: [
             PromptConfig(
-                text="A flying dragon soaring towards the camera, wings spread wide, scales glistening",
+                text="A 3D animated scene. A **panda** walks along a path towards the camera in a park on a spring day.",
                 weight=100,
             )
         ]
