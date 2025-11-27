@@ -8,7 +8,6 @@ PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
 AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion}
 AI_RUNNER_SCOPE_IMAGE=${AI_RUNNER_SCOPE_IMAGE:-livepeer/ai-runner:live-app-scope}
-CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 PIPELINE=${PIPELINE:-all}
 
 # Select a single NVIDIA GPU interactively and export NVIDIA_VISIBLE_DEVICES.
@@ -221,7 +220,7 @@ function run_pipeline_prepare() {
   docker image tag "$image" "livepeer/ai-runner:live-app-$pipeline"
 
   # NOTE: We use the legacy HF_HUB_ENABLE_HF_TRANSFER env var and install hf_transfer package
-  # because the container image has huggingface_hub==0.35.0 (from conda), which doesn't support
+  # because the container image has huggingface_hub==0.35.0 (from docker), which doesn't support
   # the newer HF_XET_HIGH_PERFORMANCE feature (introduced in v1.0+). The hf_transfer package
   # provides fast downloads compatible with older huggingface_hub versions.
   # TODO: Migrate container's huggingface_hub to v1.0+ and switch to HF_XET_HIGH_PERFORMANCE
@@ -231,8 +230,8 @@ function run_pipeline_prepare() {
     -e HF_HUB_ENABLE_HF_TRANSFER=1 \
     -e HF_TOKEN="${HF_TOKEN:-}" \
     "$image" bash -c "set -euo pipefail && \
-      $CONDA_PYTHON -m pip install --no-cache-dir hf_transfer==0.1.4 && \
-      $CONDA_PYTHON -m app.tools.prepare_models --pipeline ${pipeline} && \
+      python -m pip install --no-cache-dir hf_transfer==0.1.4 && \
+      python -m app.tools.prepare_models --pipeline ${pipeline} && \
       chown -R $(id -u):$(id -g) /models"
 }
 
@@ -258,7 +257,7 @@ function download_comfyui_live_models() {
   docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream && \
-                 $CONDA_PYTHON src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
+                 python src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
                  chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI setup_models.py"
@@ -310,8 +309,8 @@ function build_comfyui_tensorrt() {
   # Depth-Anything-Tensorrt
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
-                $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
-                $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
+                python /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
+                python /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI Depth-Anything-Tensorrt"
@@ -321,7 +320,7 @@ function build_comfyui_tensorrt() {
   # Dreamshaper-8-Dmd-1kstep
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
-                $CONDA_PYTHON ./build_trt.py \
+                python ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
                  chown -R $(id -u):$(id -g) /models" ||
@@ -333,7 +332,7 @@ function build_comfyui_tensorrt() {
   # Dreamshaper-8-Dmd-1kstep static dynamic 488x704
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
-                $CONDA_PYTHON ./build_trt.py \
+                python ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/dynamic-dreamshaper8_SD15_\$dyn-b-1-4-2-h-448-704-512-w-448-704-512_00001_.engine \
                 --width 512 \
@@ -351,7 +350,7 @@ function build_comfyui_tensorrt() {
   # FasterLivePortrait
   FASTERLIVEPORTRAIT_DIR="/workspace/ComfyUI/models/liveportrait_onnx"
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
-    bash -c "conda run -n comfystream --no-capture-output /workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
+    bash -c "/workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
              $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR && \
                 chown -R $(id -u):$(id -g) /models" ||
     (

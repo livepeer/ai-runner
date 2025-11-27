@@ -14,11 +14,10 @@ RUN apt update && apt install -yqq \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
 RUN --mount=type=bind,source=requirements.live-ai.txt,target=/tmp/requirements.txt \
-    conda run -n comfystream pip install --root-user-action ignore --requirement /tmp/requirements.txt
+    pip install --root-user-action ignore --requirement /tmp/requirements.txt
 
 # due to installation from requirements.txt the numpy version should be 1.26.4 for compatibility
-RUN conda run -n comfystream pip install --no-cache-dir \
-    numpy==1.26.4 --no-deps
+RUN pip install --no-cache-dir numpy==1.26.4 --no-deps
 
 # the new hardware capability for 5090 is only available in v.3.3 which is not installed by default
 RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
@@ -48,4 +47,4 @@ ENV GIT_SHA="${GIT_SHA}" \
     PIPELINE="${PIPELINE}" \
     INFERPY_INITIAL_PARAMS="${INFERPY_INITIAL_PARAMS}"
 
-CMD [ "/workspace/miniconda3/envs/comfystream/bin/uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000" ]
+CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
