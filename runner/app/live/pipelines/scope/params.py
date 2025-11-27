@@ -17,7 +17,7 @@ class ScopeParams(BaseParams):
     Scope pipeline parameters for longlive text-to-video generation.
     """
 
-    pipeline: Literal["longlive"]
+    pipeline: Literal["longlive"] = "longlive"
     """The scope pipeline to use. Currently only 'longlive' is supported."""
 
     prompts: List[PromptConfig] = Field(
