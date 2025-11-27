@@ -127,7 +127,7 @@ Docker images follow a **three-layer hierarchy** for build efficiency and separa
 
 2. **Dependencies in pyproject.toml** - All runtime deps (aiohttp, fastapi, etc.) are defined in `runner/pyproject.toml` with exact versions
 
-3. **Entry points for pipeline discovery** - Pipelines register via `[project.entry-points."ai_runner.pipelines"]` in pyproject.toml
+3. **Entry points for pipeline discovery** - Pipelines register via `[project.entry-points."ai_runner.pipeline"]` in pyproject.toml
 
 4. **Layer caching strategy** - App Dockerfiles copy pyproject.toml first, install deps, then copy app code to maximize cache hits
 
@@ -320,8 +320,6 @@ async def main(...):
 **Pipeline Interface** (`interface.py`):
 ```python
 class Pipeline(ABC):
-    Params: type[BaseParams] = BaseParams  # Link to params class
-
     async def initialize(self, **params): ...
     async def put_video_frame(self, frame: VideoFrame, request_id: str): ...
     async def get_processed_video_frame(self) -> VideoOutput: ...
@@ -331,7 +329,11 @@ class Pipeline(ABC):
     def prepare_models(cls): ...
 ```
 
-**Plugin System**: Pipelines are discovered via Python entry points (`ai_runner.pipelines`). See `docs/external-pipelines.md` for creating external pipelines.
+**Plugin System**: Pipelines are discovered via Python entry points. Two entry point groups are used:
+- `ai_runner.pipeline` - Pipeline class (loaded when pipeline is instantiated)
+- `ai_runner.pipeline_params` - Params class (loaded for lightweight parameter parsing, optional - falls back to BaseParams if not specified)
+
+This avoids importing the pipeline class (and heavy dependencies like torch) when just parsing parameters. See `docs/external-pipelines.md` for details.
 
 ---
 
@@ -575,18 +577,19 @@ threading.Thread(target=lambda: stdout.close(), daemon=True).start()
 ### Adding a New Pipeline
 
 **Built-in pipelines** (in this repo):
-1. Create new directory under `runner/app/live/pipelines/`
-2. Implement `Pipeline` ABC with `Params` class attribute pointing to your params class
-3. Create `*Params` class extending `BaseParams`
-4. Register entry point in `runner/pyproject.toml` under `[project.entry-points."ai_runner.pipelines"]`
+1. Create new directory under `runner/app/live/pipelines/{name}/`
+2. Create `pipeline.py` with your `Pipeline` subclass
+3. Create `params.py` with your `*Params` class extending `BaseParams`
+4. Register entry point in `runner/pyproject.toml` under `[project.entry-points."ai_runner.pipeline"]`
 5. Add Docker configuration if needed (`docker/Dockerfile.live-base-*`)
 
 **External pipelines** (separate repos):
-1. Create a Python package with `Pipeline` implementation
-2. Set `Params` class attribute on your Pipeline class
-3. Register entry point in your `pyproject.toml`
-4. Install via `pip install` or `uv pip install`
-5. See `docs/external-pipelines.md` for complete guide
+1. Create a Python package with `pipeline.py` and `params.py` modules
+2. Register both entry points in your `pyproject.toml`:
+   - `ai_runner.pipeline` → your Pipeline class
+   - `ai_runner.pipeline_params` → your Params class (optional - falls back to BaseParams)
+3. Install via `pip install` or `uv pip install`
+4. See `docs/external-pipelines.md` for complete guide
 
 ### Modifying Process Architecture
 
@@ -618,8 +621,8 @@ threading.Thread(target=lambda: stdout.close(), daemon=True).start()
 **Last Updated**: 2025-11-25
 
 **Recent Changes**:
-- Added pipeline plugin system using Python entry points (`ai_runner.pipelines`)
-- Pipelines now have `Params` class attribute linking to their params class
+- Added pipeline plugin system using Python entry points (`ai_runner.pipeline`)
+- Pipelines use two entry point groups: `ai_runner.pipeline` and `ai_runner.pipeline_params`
 - Created `runner/pyproject.toml` for package definition and dependencies
 - Removed `requirements.live-ai.txt` (deps now in pyproject.toml)
 - Updated Dockerfiles to use pyproject.toml for dependency installation

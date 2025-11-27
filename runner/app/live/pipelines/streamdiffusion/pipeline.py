@@ -33,7 +33,6 @@ ENGINES_DIR = Path("./engines")
 LOCAL_MODELS_DIR = Path("./models")
 
 class StreamDiffusion(Pipeline):
-    Params = StreamDiffusionParams
     def __init__(self):
         super().__init__()
         self.pipe: Optional[StreamDiffusionWrapper] = None

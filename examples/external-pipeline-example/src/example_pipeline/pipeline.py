@@ -2,17 +2,14 @@
 
 import asyncio
 import logging
-from typing import Optional
 
 from app.live.pipelines.interface import Pipeline
 from app.live.pipelines.trickle import VideoFrame, VideoOutput
-from .params import ExamplePipelineParams
 
 logger = logging.getLogger(__name__)
 
 
 class ExamplePipeline(Pipeline):
-    Params = ExamplePipelineParams
     """Example pipeline that passes through frames unchanged."""
 
     def __init__(self):

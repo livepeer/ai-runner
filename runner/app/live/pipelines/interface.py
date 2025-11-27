@@ -51,10 +51,9 @@ class Pipeline(ABC):
     Notes:
     - Error handling is done by the caller, so the implementation can let
       exceptions propagate for optimal error reporting.
+    - Parameters are discovered via the `ai_runner.pipeline_params` entry point group.
+      If no params entry point exists, the loader falls back to `BaseParams`.
     """
-
-    # Each pipeline should set this to their params class
-    Params: type[BaseParams] = BaseParams
 
     def __init__(self):
         pass

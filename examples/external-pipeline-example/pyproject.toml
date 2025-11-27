@@ -11,8 +11,11 @@ dependencies = [
     "ai-runner-base>=0.1.0",
 ]
 
-[project.entry-points."ai_runner.pipelines"]
+[project.entry-points."ai_runner.pipeline"]
 example-pipeline = "example_pipeline.pipeline:ExamplePipeline"
+
+[project.entry-points."ai_runner.pipeline_params"]
+example-pipeline = "example_pipeline.params:ExamplePipelineParams"
 
 [tool.setuptools]
 packages = ["example_pipeline"]

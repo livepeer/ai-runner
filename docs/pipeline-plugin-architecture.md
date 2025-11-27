@@ -8,7 +8,7 @@ This document describes the architecture for making AI Runner pipelines pluggabl
 
 ### 1. Entry Points for Discovery
 
-We use Python entry points (`ai_runner.pipelines`) to discover pipelines at runtime. Each pipeline class has a `Params` class attribute that links to its params class. This allows:
+We use Python entry points (`ai_runner.pipeline` and `ai_runner.pipeline_params`) to discover pipelines at runtime. This allows:
 
 - **Zero code changes** in ai-runner when adding new pipelines
 - **Dynamic discovery** - pipelines are found automatically when installed
@@ -41,7 +41,7 @@ External pipelines depend on `ai-runner-base` and implement the `Pipeline` inter
 1. Runner starts with PIPELINE=my-pipeline
 2. PipelineProcess.start("my-pipeline") is called
 3. In spawned process, loader.py discovers entry points:
-   - Checks installed packages for "ai_runner.pipelines" entry points
+   - Checks installed packages for "ai_runner.pipeline" entry points
    - Finds "my-pipeline" entry point
    - Loads the pipeline class
 4. Pipeline is instantiated and initialized
@@ -52,18 +52,14 @@ External pipelines depend on `ai-runner-base` and implement the `Pipeline` inter
 Pipelines register themselves in `pyproject.toml`:
 
 ```toml
-[project.entry-points."ai_runner.pipelines"]
+[project.entry-points."ai_runner.pipeline"]
 my-pipeline = "my_pipeline.pipeline:MyPipeline"
+
+[project.entry-points."ai_runner.pipeline_params"]
+my-pipeline = "my_pipeline.params:MyPipelineParams"
 ```
 
-The params class is linked via the `Params` class attribute:
-
-```python
-class MyPipeline(Pipeline):
-    Params = MyPipelineParams
-```
-
-The params entry point can be:
+The params entry point points directly to the params class:
 - A factory function: `def create_params(params: dict) -> BaseParams`
 - A Pydantic class: The loader will instantiate it with `**params`
 

@@ -10,7 +10,6 @@ from omegaconf import OmegaConf
 from scope.core.pipelines.interface import Pipeline as ScopePipeline
 
 from ..interface import Pipeline
-from .params import ScopeParams
 from ...trickle import VideoFrame, VideoOutput
 from .params import ScopeParams
 
@@ -19,8 +18,6 @@ MODELS_DIR = Path(os.environ.get("DAYDREAM_SCOPE_MODELS_DIR", "/models/Scope--mo
 
 
 class Scope(Pipeline):
-    Params = ScopeParams
-
     def __init__(self):
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
         self.pipe: Optional[ScopePipeline] = None
