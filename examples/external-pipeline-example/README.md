@@ -39,7 +39,7 @@ PIPELINE=example-pipeline MODEL_ID=example-pipeline python -m app.main
 
 1. **Entry Points** - Registered in `pyproject.toml`:
    ```toml
-   [project.entry-points."ai_runner.pipelines"]
+   [project.entry-points."ai_runner.pipeline"]
    example-pipeline = "example_pipeline.pipeline:ExamplePipeline"
    ```
 

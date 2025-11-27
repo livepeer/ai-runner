@@ -2,13 +2,10 @@ import asyncio
 import logging
 
 from ..interface import Pipeline
-from .params import ScopeParams
 from ...trickle import VideoFrame, VideoOutput
 
 
 class Scope(Pipeline):
-    Params = ScopeParams
-
     def __init__(self):
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
 

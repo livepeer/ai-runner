@@ -2,67 +2,78 @@ import sys
 import time
 import logging
 from contextlib import contextmanager
-from typing import Optional, Type
-from importlib.metadata import entry_points
+from importlib.metadata import entry_points, EntryPoint
+from typing import Optional
 
 from .interface import Pipeline, BaseParams
 
 logger = logging.getLogger(__name__)
 
-# Cache for discovered entry points
-_pipeline_entry_points: Optional[dict[str, Type[Pipeline]]] = None
+# Cache for discovered entry points (store EntryPoint objects, not loaded classes)
+_pipeline_entry_points: Optional[dict[str, EntryPoint]] = None
+_params_entry_points: Optional[dict[str, EntryPoint]] = None
 
 
-def _discover_entry_points():
-    """Discover pipeline entry points from installed packages."""
-    global _pipeline_entry_points
+def _discover_entry_points() -> tuple[dict[str, EntryPoint], dict[str, EntryPoint]]:
+    """Discover pipeline and params entry points from installed packages.
 
-    if _pipeline_entry_points is not None:
-        return _pipeline_entry_points
+    Returns tuple of (pipeline_eps, params_eps) - EntryPoint objects for lazy loading.
+    """
+    global _pipeline_entry_points, _params_entry_points
+
+    if _pipeline_entry_points is not None and _params_entry_points is not None:
+        return _pipeline_entry_points, _params_entry_points
 
     _pipeline_entry_points = {}
+    _params_entry_points = {}
 
     try:
-        # Discover pipeline entry points
-        for ep in entry_points(group="ai_runner.pipelines"):
-            try:
-                pipeline_class = ep.load()
-                _pipeline_entry_points[ep.name] = pipeline_class
-                logger.info(f"Discovered pipeline entry point: {ep.name} from {ep.value}")
-            except Exception as e:
-                logger.warning(f"Failed to load pipeline entry point {ep.name}: {e}")
+        for ep in entry_points(group="ai_runner.pipeline"):
+            _pipeline_entry_points[ep.name] = ep
+            logger.info(f"Discovered pipeline: {ep.name} -> {ep.value}")
+
+        for ep in entry_points(group="ai_runner.pipeline_params"):
+            _params_entry_points[ep.name] = ep
+            logger.info(f"Discovered params: {ep.name} -> {ep.value}")
     except Exception as e:
         logger.warning(f"Error discovering entry points: {e}")
-        # Fall back to empty dict if entry_points() fails (Python < 3.10)
         if _pipeline_entry_points is None:
             _pipeline_entry_points = {}
+        if _params_entry_points is None:
+            _params_entry_points = {}
 
-    return _pipeline_entry_points
+    return _pipeline_entry_points, _params_entry_points
+
+
+def _get_pipeline_entry_point(name: str) -> Optional[EntryPoint]:
+    """Get pipeline entry point by name, trying exact match then base name for variants."""
+    base_name = name.split("-")[0] if "-" in name else name
+    pipeline_eps, _ = _discover_entry_points()
+    return pipeline_eps.get(name) or pipeline_eps.get(base_name)
+
+
+def _get_params_entry_point(name: str) -> Optional[EntryPoint]:
+    """Get params entry point by name, trying exact match then base name for variants."""
+    base_name = name.split("-")[0] if "-" in name else name
+    _, params_eps = _discover_entry_points()
+    return params_eps.get(name) or params_eps.get(base_name)
 
 
 def load_pipeline(name: str) -> Pipeline:
-    """
-    Load a pipeline by name from entry points.
+    """Load a pipeline by name from entry points.
 
     For names like "streamdiffusion-sd15", it will try:
     1. Entry point "streamdiffusion-sd15" (exact match)
     2. Entry point "streamdiffusion" (base name for variants)
     """
-    # Normalize pipeline name (for variants like "streamdiffusion-sd15")
-    base_name = name.split("-")[0] if "-" in name else name
+    ep = _get_pipeline_entry_point(name)
 
-    pipeline_eps = _discover_entry_points()
+    if ep:
+        logger.info(f"Loading pipeline '{name}' from entry point: {ep.value}")
+        pipeline_class = ep.load()
+        return pipeline_class()
 
-    # Try exact match first
-    if name in pipeline_eps:
-        logger.info(f"Loading pipeline '{name}' from entry point")
-        return pipeline_eps[name]()
-
-    # Try base name for variants
-    if base_name in pipeline_eps:
-        logger.info(f"Loading pipeline '{name}' using base entry point '{base_name}'")
-        return pipeline_eps[base_name]()
-
+    pipeline_eps, _ = _discover_entry_points()
     raise ValueError(
         f"Unknown pipeline: {name}. "
         f"Available pipelines: {', '.join(sorted(pipeline_eps.keys()))}"
@@ -70,36 +81,35 @@ def load_pipeline(name: str) -> Pipeline:
 
 
 def parse_pipeline_params(name: str, params: dict) -> BaseParams:
+    """Parse pipeline parameters WITHOUT importing the pipeline class.
+
+    This function may be called from outside the pipeline process, so we need
+    to ensure no expensive libraries (torch, etc.) are imported.
+
+    Uses the `ai_runner.pipeline_params` entry point group for explicit params discovery.
+    Falls back to `BaseParams` if no params entry point exists for this pipeline.
     """
-    Parse pipeline parameters. This function may be called from outside the
-    pipeline process, so we need to ensure no expensive libraries are imported.
+    # First check if pipeline exists at all
+    pipeline_ep = _get_pipeline_entry_point(name)
+    if not pipeline_ep:
+        pipeline_eps, _ = _discover_entry_points()
+        raise ValueError(
+            f"Unknown pipeline: {name}. "
+            f"Available pipelines: {', '.join(sorted(pipeline_eps.keys()))}"
+        )
 
-    Gets the params class from the Pipeline class itself (via Pipeline.Params).
-    """
-    # Normalize pipeline name
-    base_name = name.split("-")[0] if "-" in name else name
+    # Try to get params entry point
+    params_ep = _get_params_entry_point(name)
 
-    # Get pipeline class from entry points
-    pipeline_eps = _discover_entry_points()
-
-    pipeline_class: Optional[Type[Pipeline]] = None
-
-    # Try exact match first
-    if name in pipeline_eps:
-        pipeline_class = pipeline_eps[name]
-    # Try base name for variants
-    elif base_name in pipeline_eps:
-        pipeline_class = pipeline_eps[base_name]
-
-    if pipeline_class:
+    if params_ep:
         with _no_expensive_imports():
-            params_class = pipeline_class.Params
+            logger.debug(f"Loading params for '{name}' from entry point: {params_ep.value}")
+            params_class = params_ep.load()
             return params_class(**params)
-
-    raise ValueError(
-        f"Unknown pipeline: {name}. "
-        f"Available pipelines: {', '.join(sorted(pipeline_eps.keys()))}"
-    )
+    else:
+        # No params entry point - use BaseParams
+        logger.debug(f"No params entry point for '{name}', using BaseParams")
+        return BaseParams(**params)
 
 
 @contextmanager

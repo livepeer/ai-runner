@@ -20,7 +20,7 @@ You want to make it so that developers of specific pipelines (like `scope` and `
 **How It Works:**
 1. Pipelines register entry points in their `pyproject.toml`:
    ```toml
-   [project.entry-points."ai_runner.pipelines"]
+   [project.entry-points."ai_runner.pipeline"]
    my-pipeline = "my_pipeline.pipeline:MyPipeline"
    ```
 2. Runner discovers pipelines automatically when installed
