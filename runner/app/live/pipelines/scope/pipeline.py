@@ -1,6 +1,8 @@
 import asyncio
 import logging
 import os
+import time
+from fractions import Fraction
 from pathlib import Path
 from typing import Optional
 
@@ -32,12 +34,23 @@ class Scope(Pipeline):
             logging.warning("Pipeline not initialized, dropping frame")
             return
 
-        # Generate frames (blocks during inference)
+        # Measure generation time to calculate FPS
+        start_time = time.time()
         output = await asyncio.to_thread(self._generate_sync)
+        generation_time = time.time() - start_time
 
         # Queue each generated frame individually
         # output shape is (T, H, W, C) where T is number of frames
         num_frames = output.shape[0]
+
+        # Calculate time per frame (in seconds)
+        time_per_frame = generation_time / num_frames if num_frames > 0 else 1.0 / 16.0
+
+        # Convert time per frame to timestamp increment in time_base units
+        # timestamp_increment = time_per_frame / time_base
+        timestamp_increment = int(time_per_frame * frame.time_base.denominator / frame.time_base.numerator)
+        current_timestamp = frame.timestamp
+
         for i in range(num_frames):
             # Extract single frame and add batch dimension: (H, W, C) -> (1, H, W, C)
             frame_tensor = output[i : i + 1]
@@ -46,8 +59,20 @@ class Scope(Pipeline):
             # The scope pipeline outputs in [0, 255] float range
             frame_tensor = (frame_tensor / 127.5) - 1.0
 
-            video_output = VideoOutput(frame, request_id).replace_tensor(frame_tensor)
+            # Create new frame with incremented timestamp
+            new_frame = VideoFrame(
+                frame_tensor,
+                current_timestamp,
+                frame.time_base,
+                frame.log_timestamps.copy(),
+            )
+            new_frame.side_data = frame.side_data
+
+            video_output = VideoOutput(new_frame, request_id)
             await self.frame_queue.put(video_output)
+
+            # Increment timestamp for next frame
+            current_timestamp += timestamp_increment
 
     def _generate_sync(self) -> torch.Tensor:
         """Synchronous generation using the longlive pipeline."""
