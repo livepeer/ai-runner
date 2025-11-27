@@ -450,7 +450,7 @@ done
 
 echo "Starting livepeer AI subnet model downloader..."
 echo "Creating 'models' directory in the current working directory..."
-mkdir -p models/checkpoints models/StreamDiffusion--engines models/insightface models/StreamDiffusion--models models/ComfyUI--{models,output}
+mkdir -p models/checkpoints models/StreamDiffusion--engines models/insightface models/StreamDiffusion--models models/ComfyUI--{models,output} models/Scope--models
 
 echo "Checking if 'hf' Hugging Face CLI is installed..."
 if ! command -v hf >/dev/null 2>&1; then

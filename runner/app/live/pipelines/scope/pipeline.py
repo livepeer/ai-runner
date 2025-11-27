@@ -1,52 +1,160 @@
 import asyncio
 import logging
+import os
+from pathlib import Path
+from typing import Optional
+
+import torch
+from omegaconf import OmegaConf
 
 from ..interface import Pipeline
 from ...trickle import VideoFrame, VideoOutput
+from .params import ScopeParams
+
+# Models directory configured via DAYDREAM_SCOPE_MODELS_DIR env var
+MODELS_DIR = Path(os.environ.get("DAYDREAM_SCOPE_MODELS_DIR", "/models/Scope--models"))
 
 
 class Scope(Pipeline):
     def __init__(self):
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
+        self.pipe = None
+        self.params: Optional[ScopeParams] = None
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
-        await self.frame_queue.put(VideoOutput(frame, request_id))
+        """
+        Generate frames on each input frame trigger.
+
+        Input frame content is ignored - we use it as a trigger for continuous generation.
+        Each call generates a batch of frames which are all queued individually.
+        """
+        if self.pipe is None:
+            logging.warning("Pipeline not initialized, dropping frame")
+            return
+
+        # Generate frames (blocks during inference)
+        output = await asyncio.to_thread(self._generate_sync)
+
+        # Queue each generated frame individually
+        # output shape is (T, H, W, C) where T is number of frames
+        num_frames = output.shape[0]
+        for i in range(num_frames):
+            # Extract single frame and add batch dimension: (H, W, C) -> (1, H, W, C)
+            frame_tensor = output[i : i + 1]
+
+            # Convert from [0, 255] range to [-1, 1] range expected by encoder
+            # The scope pipeline outputs in [0, 255] float range
+            frame_tensor = (frame_tensor / 127.5) - 1.0
+
+            video_output = VideoOutput(frame, request_id).replace_tensor(frame_tensor)
+            await self.frame_queue.put(video_output)
+
+    def _generate_sync(self) -> torch.Tensor:
+        """Synchronous generation using the longlive pipeline."""
+        assert self.pipe is not None
+        assert self.params is not None
+
+        # Convert params to scope format
+        prompts = [{"text": p.text, "weight": p.weight} for p in self.params.prompts]
+
+        # Generate frames - returns (T, H, W, C) tensor
+        output = self.pipe(prompts=prompts)
+        return output
 
     async def get_processed_video_frame(self) -> VideoOutput:
-        out = await self.frame_queue.get()
-        return out.replace_tensor(out.tensor.clone())
+        return await self.frame_queue.get()
 
     async def initialize(self, **params):
         logging.info(f"Initializing Scope pipeline with params: {params}")
-        # Verify scope packages are available at runtime
-        try:
-            from lib.schema import HealthResponse
-            # Test that the import works by checking the class exists
-            assert HealthResponse is not None
-            logging.info("Successfully imported scope packages (lib.schema.HealthResponse)")
-        except ImportError as e:
-            logging.error(f"Failed to import scope packages during initialization: {e}")
-            raise RuntimeError(f"Scope packages not available: {e}")
+
+        self.params = ScopeParams(**params)
+
+        # Load the pipeline based on the pipeline type
+        if self.params.pipeline == "longlive":
+            await asyncio.to_thread(self._load_longlive_pipeline)
+        else:
+            raise ValueError(f"Unsupported pipeline: {self.params.pipeline}")
+
         logging.info("Pipeline initialization complete")
 
+    def _load_longlive_pipeline(self):
+        """Load the LongLive pipeline synchronously."""
+        from scope.core.pipelines import LongLivePipeline  # type: ignore
+
+        assert self.params is not None
+
+        logging.info(f"Loading LongLive pipeline from {MODELS_DIR}")
+
+        config = OmegaConf.create(
+            {
+                "model_dir": str(MODELS_DIR),
+                "generator_path": str(
+                    MODELS_DIR / "LongLive-1.3B" / "models" / "longlive_base.pt"
+                ),
+                "lora_path": str(MODELS_DIR / "LongLive-1.3B" / "models" / "lora.pt"),
+                "text_encoder_path": str(
+                    MODELS_DIR / "WanVideo_comfy" / "umt5-xxl-enc-fp8_e4m3fn.safetensors"
+                ),
+                "tokenizer_path": str(
+                    MODELS_DIR / "Wan2.1-T2V-1.3B" / "google" / "umt5-xxl"
+                ),
+                "height": self.params.height,
+                "width": self.params.width,
+                "seed": self.params.seed,
+            }
+        )
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.pipe = LongLivePipeline(config, device=device, dtype=torch.bfloat16)
+        logging.info("LongLive pipeline loaded successfully")
+
     async def update_params(self, **params):
+        """Update pipeline parameters."""
         logging.info(f"Updating params: {params}")
+        new_params = ScopeParams(**params)
+
+        # Check if we need to reload the pipeline
+        needs_reload = (
+            self.params is None
+            or new_params.pipeline != self.params.pipeline
+            or new_params.width != self.params.width
+            or new_params.height != self.params.height
+        )
+
+        if needs_reload:
+            logging.info("Parameters require pipeline reload")
+            return asyncio.create_task(self._reload_pipeline(new_params))
+
+        # Update params without reloading
+        self.params = new_params
+        return None
+
+    async def _reload_pipeline(self, new_params: ScopeParams):
+        """Reload the pipeline with new parameters."""
+        self.pipe = None
+        self.params = new_params
+
+        if new_params.pipeline == "longlive":
+            await asyncio.to_thread(self._load_longlive_pipeline)
+        else:
+            raise ValueError(f"Unsupported pipeline: {new_params.pipeline}")
 
     async def stop(self):
         logging.info("Stopping pipeline")
-        # clear the frame queue
+        self.pipe = None
+        self.params = None
         self.frame_queue = asyncio.Queue()
 
     @classmethod
     def prepare_models(cls):
+        """Download all scope models."""
         logging.info("Preparing Scope models")
-        try:
-            from lib.schema import HealthResponse  # type: ignore
+        logging.info(f"Models directory: {MODELS_DIR}")
 
-            assert HealthResponse is not None
-        except ImportError as exc:
-            raise RuntimeError(
-                "Scope Python dependencies are not installed inside this image."
-            ) from exc
+        # Import and call scope's download function directly
+        from scope.server.download_models import download_models  # type: ignore
+
+        download_models()  # Downloads all scope pipelines
+
         logging.info("Scope model preparation complete")
 

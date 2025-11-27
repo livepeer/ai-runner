@@ -47,6 +47,9 @@ WORKDIR /app
 # Add Scope repository to Python path so lib module can be imported
 ENV PYTHONPATH="/workspace/scope:${PYTHONPATH:-}"
 
+# Configure Scope models directory
+ENV DAYDREAM_SCOPE_MODELS_DIR="/models/Scope--models"
+
 # Disable HF hub connectivity to avoid internet access during runtime.
 # This is manually disabled on the script to download models (dl_checkpoints.sh)
 ENV HF_HUB_OFFLINE=1
