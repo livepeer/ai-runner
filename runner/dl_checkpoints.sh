@@ -288,14 +288,9 @@ function build_tensorrt_models() {
     printf "\nBuilding ComfyUI TensorRT models only...\n"
     build_comfyui_tensorrt
     ;;
-  "scope")
-    printf "\nPreparing Scope models only...\n"
-    prepare_scope_models
-    ;;
   "all")
     printf "\nBuilding all TensorRT models...\n"
     build_comfyui_tensorrt
-    prepare_scope_models
     ;;
   *)
     printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, scope, all\n" "$PIPELINE"
@@ -307,27 +302,6 @@ function build_tensorrt_models() {
 function prepare_scope_models() {
   printf "\nPreparing Scope models...\n"
   run_pipeline_prepare "scope" "$AI_RUNNER_SCOPE_IMAGE"
-}
-
-function prepare_scope_models() {
-  printf "\nPreparing Scope models...\n"
-
-  if [ "$PULL_IMAGES" = true ]; then
-    docker pull $AI_RUNNER_SCOPE_IMAGE
-  fi
-
-  # ai-worker references the live-app tag, so replicate it locally for consistency.
-  docker image tag $AI_RUNNER_SCOPE_IMAGE livepeer/ai-runner:live-app-scope
-
-  docker run --rm -v ./models:/models "${docker_run_flags[@]}" \
-    -l Scope-Prepare-Models -e HF_HUB_OFFLINE=0 \
-    --name scope-prepare-models $AI_RUNNER_SCOPE_IMAGE \
-    bash -c "$CONDA_PYTHON -m app.tools.scope.prepare_models --models-dir /models && \
-             chown -R $(id -u):$(id -g) /models" ||
-    (
-      echo "failed Scope model preparation"
-      exit 1
-    )
 }
 
 function build_comfyui_tensorrt() {
