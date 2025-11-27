@@ -55,9 +55,9 @@ class Scope(Pipeline):
             # Extract single frame and add batch dimension: (H, W, C) -> (1, H, W, C)
             frame_tensor = output[i : i + 1]
 
-            # Convert from [0, 255] range to [-1, 1] range expected by encoder
-            # The scope pipeline outputs in [0, 255] float range
-            frame_tensor = (frame_tensor / 127.5) - 1.0
+            # Convert from [0, 1] range to [-1, 1] range expected by encoder
+            # The scope pipeline outputs in [0, 1] float range
+            frame_tensor = frame_tensor * 2.0 - 1.0
 
             # Create new frame with incremented timestamp
             new_frame = VideoFrame(
