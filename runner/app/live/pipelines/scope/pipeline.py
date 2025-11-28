@@ -2,12 +2,12 @@ import asyncio
 import logging
 import os
 import time
-from fractions import Fraction
 from pathlib import Path
 from typing import Optional
 
 import torch
 from omegaconf import OmegaConf
+from scope.core.pipelines.interface import Pipeline as ScopePipeline
 
 from ..interface import Pipeline
 from ...trickle import VideoFrame, VideoOutput
@@ -20,7 +20,7 @@ MODELS_DIR = Path(os.environ.get("DAYDREAM_SCOPE_MODELS_DIR", "/models/Scope--mo
 class Scope(Pipeline):
     def __init__(self):
         self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
-        self.pipe = None
+        self.pipe: Optional[ScopePipeline] = None
         self.params: Optional[ScopeParams] = None
 
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
@@ -96,42 +96,12 @@ class Scope(Pipeline):
 
         # Load the pipeline based on the pipeline type
         if self.params.pipeline == "longlive":
-            await asyncio.to_thread(self._load_longlive_pipeline)
+            self.pipe = await asyncio.to_thread(_load_longlive_pipeline, self.params)
         else:
             raise ValueError(f"Unsupported pipeline: {self.params.pipeline}")
 
         logging.info("Pipeline initialization complete")
 
-    def _load_longlive_pipeline(self):
-        """Load the LongLive pipeline synchronously."""
-        from scope.core.pipelines import LongLivePipeline  # type: ignore
-
-        assert self.params is not None
-
-        logging.info(f"Loading LongLive pipeline from {MODELS_DIR}")
-
-        config = OmegaConf.create(
-            {
-                "model_dir": str(MODELS_DIR),
-                "generator_path": str(
-                    MODELS_DIR / "LongLive-1.3B" / "models" / "longlive_base.pt"
-                ),
-                "lora_path": str(MODELS_DIR / "LongLive-1.3B" / "models" / "lora.pt"),
-                "text_encoder_path": str(
-                    MODELS_DIR / "WanVideo_comfy" / "umt5-xxl-enc-fp8_e4m3fn.safetensors"
-                ),
-                "tokenizer_path": str(
-                    MODELS_DIR / "Wan2.1-T2V-1.3B" / "google" / "umt5-xxl"
-                ),
-                "height": self.params.height,
-                "width": self.params.width,
-                "seed": self.params.seed,
-            }
-        )
-
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.pipe = LongLivePipeline(config, device=device, dtype=torch.bfloat16)
-        logging.info("LongLive pipeline loaded successfully")
 
     async def update_params(self, **params):
         """Update pipeline parameters."""
@@ -160,7 +130,7 @@ class Scope(Pipeline):
         self.params = new_params
 
         if new_params.pipeline == "longlive":
-            await asyncio.to_thread(self._load_longlive_pipeline)
+            self.pipe = await asyncio.to_thread(_load_longlive_pipeline, new_params)
         else:
             raise ValueError(f"Unsupported pipeline: {new_params.pipeline}")
 
@@ -183,3 +153,40 @@ class Scope(Pipeline):
 
         logging.info("Scope model preparation complete")
 
+
+def _load_longlive_pipeline(params: ScopeParams) -> ScopePipeline:
+    """Load the LongLive pipeline synchronously.
+
+    Args:
+        params: ScopeParams instance with pipeline configuration
+
+    Returns:
+        Pipeline instance from scope.core.pipelines
+    """
+    from scope.core.pipelines import LongLivePipeline  # type: ignore
+
+    logging.info(f"Loading LongLive pipeline from {MODELS_DIR}")
+
+    config = OmegaConf.create(
+        {
+            "model_dir": str(MODELS_DIR),
+            "generator_path": str(
+                MODELS_DIR / "LongLive-1.3B" / "models" / "longlive_base.pt"
+            ),
+            "lora_path": str(MODELS_DIR / "LongLive-1.3B" / "models" / "lora.pt"),
+            "text_encoder_path": str(
+                MODELS_DIR / "WanVideo_comfy" / "umt5-xxl-enc-fp8_e4m3fn.safetensors"
+            ),
+            "tokenizer_path": str(
+                MODELS_DIR / "Wan2.1-T2V-1.3B" / "google" / "umt5-xxl"
+            ),
+            "height": params.height,
+            "width": params.width,
+            "seed": params.seed,
+        }
+    )
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    pipe = LongLivePipeline(config, device=device, dtype=torch.bfloat16)
+    logging.info("LongLive pipeline loaded successfully")
+    return pipe
