@@ -76,7 +76,11 @@ class Scope(Pipeline):
         assert self.params is not None
 
         # Convert params to scope format
-        prompts = [{"text": p.text, "weight": p.weight} for p in self.params.prompts]
+        prompts = [
+            {"text": p, "weight": 100} if isinstance(p, str)
+            else {"text": p.text, "weight": p.weight}
+            for p in self.params.prompts
+        ]
 
         # Generate frames - returns (T, H, W, C) tensor
         output = self.pipe(prompts=prompts)

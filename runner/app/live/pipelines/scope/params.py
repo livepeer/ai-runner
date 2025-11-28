@@ -1,4 +1,4 @@
-from typing import List, Literal
+from typing import List, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -20,7 +20,7 @@ class ScopeParams(BaseParams):
     pipeline: Literal["longlive"] = "longlive"
     """The scope pipeline to use. Currently only 'longlive' is supported."""
 
-    prompts: List[PromptConfig] = Field(
+    prompts: List[Union[str, PromptConfig]] = Field(
         default_factory=lambda: [
             PromptConfig(
                 text="A 3D animated scene. A **panda** walks along a path towards the camera in a park on a spring day.",
