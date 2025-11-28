@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from ..interface import BaseParams
 
 
-class PromptConfig(BaseModel):
+class WeightedPrompt(BaseModel):
     """Configuration for a single prompt with weight."""
 
     text: str
@@ -20,9 +20,9 @@ class ScopeParams(BaseParams):
     pipeline: Literal["longlive"] = "longlive"
     """The scope pipeline to use. Currently only 'longlive' is supported."""
 
-    prompts: List[Union[str, PromptConfig]] = Field(
+    prompts: List[Union[str, WeightedPrompt]] = Field(
         default_factory=lambda: [
-            PromptConfig(
+            WeightedPrompt(
                 text="A 3D animated scene. A **panda** walks along a path towards the camera in a park on a spring day.",
                 weight=100,
             )
