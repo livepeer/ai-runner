@@ -21,7 +21,7 @@ RUN apt update && apt install -yqq --no-install-recommends wget curl ca-certific
     apt clean && rm -rf /var/lib/apt/lists/*
 
 # Install Scope lib into the comfystream environment
-ARG SCOPE_VERSION=main
+ARG SCOPE_VERSION=734057a4701975941a45e8ca8342b495a762ba2f
 RUN conda run -n comfystream uv pip install --no-cache git+https://github.com/daydreamlive/scope.git@${SCOPE_VERSION}
 
 WORKDIR /app
