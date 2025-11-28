@@ -147,7 +147,7 @@ class Scope(Pipeline):
         logging.info(f"Models directory: {MODELS_DIR}")
 
         # Import and call scope's download function directly
-        from scope.server.download_models import download_models  # type: ignore
+        from scope.server.download_models import download_models
 
         download_models()  # Downloads all scope pipelines
 
@@ -163,7 +163,7 @@ def _load_longlive_pipeline(params: ScopeParams) -> ScopePipeline:
     Returns:
         Pipeline instance from scope.core.pipelines
     """
-    from scope.core.pipelines import LongLivePipeline  # type: ignore
+    from scope.core.pipelines import LongLivePipeline
 
     logging.info(f"Loading LongLive pipeline from {MODELS_DIR}")
 
