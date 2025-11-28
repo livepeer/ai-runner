@@ -20,7 +20,7 @@ RUN --mount=type=bind,source=requirements.live-ai.txt,target=/tmp/requirements.t
 RUN pip install --no-cache-dir numpy==1.26.4 --no-deps
 
 # the new hardware capability for 5090 is only available in v.3.3 which is not installed by default
-RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
+RUN pip install --no-cache-dir --force-reinstall \
     pytorch_triton==3.3.0 \
     --index-url https://download.pytorch.org/whl/cu128
 
