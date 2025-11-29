@@ -1,4 +1,4 @@
-name: Build comfyui ai-runner images
+name: Building realtime AI comfyui docker image
 
 on:
   pull_request:

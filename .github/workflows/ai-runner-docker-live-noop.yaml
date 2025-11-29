@@ -1,4 +1,4 @@
-name: Build ai-runner noop docker image
+name: Building realtime AI noop docker image
 
 on:
   pull_request:

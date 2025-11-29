@@ -1,4 +1,4 @@
-name: Build scope ai-runner images
+name: Building realtime AI scope docker image
 
 on:
   pull_request:
