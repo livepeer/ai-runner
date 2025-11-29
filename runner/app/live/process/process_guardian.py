@@ -173,8 +173,8 @@ class ProcessGuardian:
 
         # Special case: pipeline loading
         if not is_pipeline_ready:
-            if time_since_pipeline_load > 120:
-                logging.error(f"Pipeline loading timed out after 120s. state={self.status.model_dump_json()}")
+            if time_since_pipeline_load > 180:
+                logging.error(f"Pipeline loading timed out after 180s. state={self.status.model_dump_json()}")
                 return PipelineState.ERROR
             return PipelineState.LOADING
 
