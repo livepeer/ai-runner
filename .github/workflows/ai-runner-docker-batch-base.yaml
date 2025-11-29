@@ -1,4 +1,4 @@
-name: Build ai-runner base Docker image
+name: Building batch AI base docker image
 
 on:
   pull_request:
@@ -91,3 +91,4 @@ jobs:
 
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
+
