@@ -1,4 +1,4 @@
-name: Building realtime AI streamdiffusion docker image
+name: Build realtime AI streamdiffusion docker image
 
 on:
   pull_request:
