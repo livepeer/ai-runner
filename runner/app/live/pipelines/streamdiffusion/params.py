@@ -100,7 +100,7 @@ class SingleProcessorConfig(BaseModel, Generic[ProcessorTypeT]):
     # Library has an "order" field, but we simply populate it with the index of the processor in the list
     # order: int
 
-    params: ProcessorParams = {}
+    params: ProcessorParams = Field(default_factory=dict)
     """Parameters for the preprocessor."""
 
 class ProcessingConfig(BaseModel, Generic[ProcessorTypeT]):
@@ -113,7 +113,7 @@ class ProcessingConfig(BaseModel, Generic[ProcessorTypeT]):
     enabled: bool = True
     """Whether this preprocessing is active."""
 
-    processors: List[SingleProcessorConfig[ProcessorTypeT]] = []
+    processors: List[SingleProcessorConfig[ProcessorTypeT]] = Field(default_factory=list)
     """List of processors to apply."""
 
 class ControlNetConfig(BaseModel):
@@ -163,7 +163,7 @@ class ControlNetConfig(BaseModel):
     preprocessor: ImageProcessorName = "passthrough"
     """Preprocessor to apply to input frames before feeding to the ControlNet. Common options include 'pose_tensorrt', 'soft_edge', 'canny', 'depth_tensorrt', 'passthrough'. If None, no preprocessing is applied."""
 
-    preprocessor_params: ProcessorParams = {}
+    preprocessor_params: ProcessorParams = Field(default_factory=dict)
     """Additional parameters for the preprocessor. For example, canny edge detection uses 'low_threshold' and 'high_threshold' values."""
 
     enabled: bool = True
@@ -225,7 +225,7 @@ class CachedAttentionConfig(BaseModel):
     class Config:
         extra = "forbid"
 
-    enabled: bool = False
+    enabled: bool = True
     """Enable cached attention to reuse key/value tensors across frames."""
 
     max_frames: int = Field(
@@ -294,7 +294,7 @@ class StreamDiffusionParams(BaseParams):
         description='Builds the full denoising schedule (the "grid" of possible refinement steps). Changing it changes what each step number (t_index_list value) means. Keep it fixed for a session and only adjust if you\'re deliberately redefining the schedule; if you do, proportionally remap your t_index_list. Range: 1–100 with default being 50.'
     )
 
-    t_index_list: List[int] = [12, 20, 32]
+    t_index_list: List[int] = Field(default_factory=lambda: [12, 20, 32])
     """The ordered list of step indices from the num_inference_steps schedule to execute per frame. Each index is one model pass, so latency scales with the list length. Higher indices (e.g., 40–49 on a 50-step grid) mainly polish and preserve structure (lower flicker), while lower indices (<20) rewrite structure (more flicker, creative). Values must be non-decreasing, and each between 0 and num_inference_steps."""
 
     # LoRA settings
@@ -347,11 +347,11 @@ class StreamDiffusionParams(BaseParams):
     """Maximum number of consecutive frames that can be skipped by the similarity filter."""
 
     # ControlNet settings
-    controlnets: List[ControlNetConfig] = []
+    controlnets: List[ControlNetConfig] = Field(default_factory=list)
     """List of ControlNet configurations for guided generation. Each ControlNet provides different types of conditioning (pose, edges, depth, etc.)."""
 
     # IPAdapter settings
-    ip_adapter: IPAdapterConfig = IPAdapterConfig(enabled=False)
+    ip_adapter: IPAdapterConfig = Field(default_factory=lambda: IPAdapterConfig(enabled=False))
     """IPAdapter configuration for style transfer."""
 
     ip_adapter_style_image_url: str = "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"
@@ -371,41 +371,8 @@ class StreamDiffusionParams(BaseParams):
     latent_postprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
     """List of latent postprocessor configurations for latent processing."""
 
-    cached_attention: CachedAttentionConfig = Field(default_factory=CachedAttentionConfig)
+    cached_attention: CachedAttentionConfig = Field(default_factory=lambda: CachedAttentionConfig(enabled=False))
     """Cached attention configuration."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def _coerce_cached_attention(cls, data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Fold legacy cached-attention fields into the structured config while maintaining backwards compatibility.
-        """
-        if not isinstance(data, dict):
-            return data
-
-        legacy_keys = ("use_cached_attn", "cache_maxframes", "cache_interval")
-        has_legacy = any(key in data for key in legacy_keys)
-
-        # Support previous schema that used `stream_v2v`
-        legacy_block = data.pop("stream_v2v", None)
-
-        if "cached_attention" not in data:
-            if legacy_block is not None:
-                data["cached_attention"] = legacy_block
-            elif has_legacy:
-                defaults = CachedAttentionConfig()
-                data["cached_attention"] = CachedAttentionConfig(
-                    enabled=data.pop("use_cached_attn", False),
-                    max_frames=data.pop("cache_maxframes", defaults.max_frames),
-                    interval_sec=data.pop("cache_interval", defaults.interval_sec),
-                ).model_dump()
-        else:
-            legacy_block = None
-
-        for key in legacy_keys:
-            data.pop(key, None)
-
-        return data
 
     def get_output_resolution(self) -> tuple[int, int]:
         """
