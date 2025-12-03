@@ -120,8 +120,8 @@ class PipelineStreamer(StreamerCallbacks):
         return False
 
     async def report_status_loop(self):
-        last_status_timestamp = time.time()
-        next_report = last_status_timestamp + STATUS_REPORT_INTERVAL
+        next_report = time.time() + STATUS_REPORT_INTERVAL
+        last_status_timestamp = 0.0
         while not self.stop_event.is_set():
             current_time = time.time()
             if next_report <= current_time:
@@ -133,7 +133,7 @@ class PipelineStreamer(StreamerCallbacks):
                 current_time = time.time()
 
             status = self.process.get_status(clear_transient=True).model_dump()
-            status["last_status_timestamp"] = last_status_timestamp
+            status["last_status_timestamp"] = last_status_timestamp or status["start_time"]
             last_status_timestamp = current_time
 
             await self.emit_monitoring_event(status, timestamp=current_time)
