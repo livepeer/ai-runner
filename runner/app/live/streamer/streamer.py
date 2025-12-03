@@ -120,7 +120,8 @@ class PipelineStreamer(StreamerCallbacks):
         return False
 
     async def report_status_loop(self):
-        next_report = time.time() + status_report_interval
+        last_status_timestamp = time.time()
+        next_report = last_status_timestamp + status_report_interval
         while not self.stop_event.is_set():
             current_time = time.time()
             if next_report <= current_time:
@@ -129,13 +130,18 @@ class PipelineStreamer(StreamerCallbacks):
             else:
                 await asyncio.sleep(next_report - current_time)
                 next_report += status_report_interval
+                current_time = time.time()
 
-            status = self.process.get_status(clear_transient=True)
-            await self.emit_monitoring_event(status.model_dump())
+            status = self.process.get_status(clear_transient=True).model_dump()
+            if last_status_timestamp:
+                status["last_status_timestamp"] = last_status_timestamp
+            last_status_timestamp = current_time
 
-    async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
+            await self.emit_monitoring_event(status, timestamp=current_time)
+
+    async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events", timestamp: float | None = None):
         """Protected method to emit monitoring event with lock"""
-        event["timestamp"] = timestamp_to_ms(time.time())
+        event["timestamp"] = timestamp_to_ms(timestamp or time.time())
         logging.info(f"Emitting monitoring event: {event}")
         async with self.emit_event_lock:
             try:
