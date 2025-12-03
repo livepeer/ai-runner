@@ -1,4 +1,4 @@
-## 2025-12-03 StreamDiffusion Cached Attention Update
+## 2025-12-03 StreamDiffusion Cached Attention Update (PR [#860](https://github.com/livepeer/ai-runner/pull/860))
 
 This note captures the schema and runtime changes that ship cached attention (formerly streamv2v) support in the StreamDiffusion pipeline.
 
