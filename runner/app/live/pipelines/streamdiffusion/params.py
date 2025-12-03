@@ -214,13 +214,41 @@ class IPAdapterConfig(BaseModel):
     """Whether this IPAdapter is active"""
 
 
+class StreamV2VConfig(BaseModel):
+    """
+    StreamV2V configuration for cached attention support.
+    """
+
+    class Config:
+        extra = "forbid"
+
+    enabled: bool = False
+    """Enable StreamV2V cached attention."""
+
+    cache_maxframes: int = Field(
+        default=2,
+        ge=1,
+        le=4,
+        description="Number of historical K/V frames to retain. Limited to 4 by the TensorRT engine exports.",
+    )
+    """Number of frames retained in the attention cache."""
+
+    cache_interval: int = Field(
+        default=1,
+        ge=1,
+        le=8,
+        description="How often (in frames) to refresh the cache. Higher values reduce updates but may lower temporal coherence.",
+    )
+    """Frame cadence for refreshing the cached attention tensors."""
+
+
 class StreamDiffusionParams(BaseParams):
     """
     StreamDiffusion pipeline parameters.
 
     **Dynamically updatable parameters** (no reload required):
     - prompt, guidance_scale, delta, num_inference_steps, t_index_list, seed,
-      controlnets.conditioning_scale
+      controlnets.conditioning_scale, stream_v2v.cache_maxframes, stream_v2v.cache_interval
 
     All other parameters require a full pipeline reload when changed.
     """
@@ -339,6 +367,34 @@ class StreamDiffusionParams(BaseParams):
     latent_postprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
     """List of latent postprocessor configurations for latent processing."""
 
+    stream_v2v: StreamV2VConfig = Field(default_factory=StreamV2VConfig)
+    """StreamV2V (cached attention) configuration."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_stream_v2v(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Fold legacy top-level streamv2v fields into the structured config while maintaining backwards compatibility.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        legacy_keys = ("use_cached_attn", "cache_maxframes", "cache_interval")
+        has_legacy = any(key in data for key in legacy_keys)
+
+        if "stream_v2v" not in data and has_legacy:
+            defaults = StreamV2VConfig()
+            data["stream_v2v"] = StreamV2VConfig(
+                enabled=data.pop("use_cached_attn", False),
+                cache_maxframes=data.pop("cache_maxframes", defaults.cache_maxframes),
+                cache_interval=data.pop("cache_interval", defaults.cache_interval),
+            )
+        else:
+            for key in legacy_keys:
+                data.pop(key, None)
+
+        return data
+
     def get_output_resolution(self) -> tuple[int, int]:
         """
         Get the output resolution as a (width, height) tuple, accounting for upscale processors
@@ -412,5 +468,20 @@ class StreamDiffusionParams(BaseParams):
                 raise ValueError(
                     f"SDXL models support a maximum of 3 enabled ControlNets, found {len(enabled_cns)}."
                 )
+
+        return model
+
+    @model_validator(mode="after")
+    @staticmethod
+    def check_stream_v2v(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
+        cfg = model.stream_v2v
+        if not cfg or not cfg.enabled:
+            return model
+
+        if model.acceleration != "tensorrt":
+            raise ValueError("StreamV2V is only supported when acceleration='tensorrt'")
+
+        if model.width != 512 or model.height != 512:
+            raise ValueError("StreamV2V currently supports only 512x512 resolution")
 
         return model

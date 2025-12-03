@@ -20,6 +20,7 @@ PR #808 expands what the StreamDiffusion pipeline can do. This document captures
 
 - ControlNets gained support for the TemporalNet v2 models, plus a backend-populated `conditioning_channels` field. **Clients should omit `conditioning_channels`**—they are well-defined per model and the runner fills it automatically (6 channels for TemporalNet, 3 for the rest).
 - `skip_diffusion` is now exposed so a request can run just the processors (e.g. depth-only stream, run a pure upscale) without invoking the diffusion/denoising step.
+- StreamV2V cached attention is exposed through a structured `stream_v2v` block that replaces the raw `use_cached_attn`, `cache_maxframes`, and `cache_interval` flags. Legacy field names are still accepted and are automatically folded into the structured config for backwards compatibility.
 
 ---
 
@@ -187,6 +188,26 @@ Any ControlNets or diffusion-only parameters are ignored when `skip_diffusion` i
 ```
 
 ### SDXL Turbo with TemporalNet only
+### StreamV2V Cached Attention
+StreamV2V keeps a rolling cache of key/value tensors so attention layers can reuse context from previous frames. This dramatically increases temporal coherence with minimal latency impact.
+
+- Enabling StreamV2V requires TensorRT acceleration and a 512×512 base resolution. The runner enforces these constraints at validation time.
+- Configure it via the nested `stream_v2v` block:
+
+```json
+"stream_v2v": {
+  "enabled": true,
+  "cache_maxframes": 2,
+  "cache_interval": 1
+}
+```
+
+- `cache_maxframes` controls how many historical frames each attention layer keeps (1–4 supported by the engine exporter).
+- `cache_interval` determines how often the cache refreshes. Setting it >1 lowers cache updates at the cost of responsiveness.
+- Changing `enabled` requires a full pipeline reload, but `cache_maxframes` and `cache_interval` can be tuned mid-stream.
+
+Legacy payloads that still send the old `use_cached_attn`, `cache_maxframes`, or `cache_interval` top-level fields continue to work—the runner automatically folds them into the new structured config.
+
 
 ```json
 {

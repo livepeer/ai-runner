@@ -23,6 +23,7 @@ from .params import (
     ProcessingConfig,
     SingleProcessorConfig,
     ModelType,
+    StreamV2VConfig,
 )
 from . import params
 from .pipeline import load_streamdiffusion_sync, ENGINES_DIR, LOCAL_MODELS_DIR
@@ -226,8 +227,14 @@ def _build_matrix() -> Iterator[BuildJob]:
             ipa_types = ["regular", "faceid"]
 
         for ipa_type in ipa_types:
-            params = _create_params(model_id, model_type, ipa_type)
-            yield BuildJob(params=params)
+            for enable_stream_v2v in (False, True):
+                params = _create_params(
+                    model_id,
+                    model_type,
+                    ipa_type,
+                    enable_stream_v2v=enable_stream_v2v,
+                )
+                yield BuildJob(params=params)
 
 
 def _compile_build(job: BuildJob) -> None:
@@ -236,6 +243,7 @@ def _compile_build(job: BuildJob) -> None:
         f"→ Building TensorRT engines | model={job.params.model_id} "
         f"ipadapter={job.params.ip_adapter.type if job.params.ip_adapter and job.params.ip_adapter.enabled else 'disabled'} "
         f"size={job.params.width}x{job.params.height} "
+        f"stream_v2v={'on' if job.params.stream_v2v.enabled else 'off'} "
         f"timesteps={job.params.t_index_list} batch_min={MIN_TIMESTEPS} batch_max={MAX_TIMESTEPS} "
         f"controlnets={controlnet_ids}"
     )
@@ -255,7 +263,13 @@ def _compile_build(job: BuildJob) -> None:
             torch.cuda.empty_cache()
 
 
-def _create_params(model_id: str, model_type: ModelType, ipa_type: Optional[str]) -> StreamDiffusionParams:
+def _create_params(
+    model_id: str,
+    model_type: ModelType,
+    ipa_type: Optional[str],
+    *,
+    enable_stream_v2v: bool = False,
+) -> StreamDiffusionParams:
     controlnets = []
     controlnet_ids = CONTROLNETS_BY_TYPE.get(model_type)
     if controlnet_ids:
@@ -284,6 +298,12 @@ def _create_params(model_id: str, model_type: ModelType, ipa_type: Optional[str]
     opt_timesteps = OPT_TIMESTEPS_BY_TYPE.get(model_type, 3)
     t_index_list = list(range(1, 50, 50 // opt_timesteps))[:opt_timesteps]
 
+    stream_v2v = StreamV2VConfig(
+        enabled=enable_stream_v2v,
+        cache_maxframes=2,
+        cache_interval=1,
+    )
+
     return StreamDiffusionParams(
         model_id=model_id,
         width=512,
@@ -295,6 +315,7 @@ def _create_params(model_id: str, model_type: ModelType, ipa_type: Optional[str]
         image_postprocessing=ProcessingConfig(
             processors=[SingleProcessorConfig(type="realesrgan_trt")]
         ),
+        stream_v2v=stream_v2v,
     )
 
 

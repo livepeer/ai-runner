@@ -21,7 +21,8 @@ from .params import (
     ProcessingConfig,
     get_model_type,
     IPADAPTER_SUPPORTED_TYPES,
-    LCM_LORAS_BY_TYPE
+    LCM_LORAS_BY_TYPE,
+    StreamV2VConfig,
 )
 
 ENGINES_DIR = Path("./engines")
@@ -169,6 +170,7 @@ class StreamDiffusion(Pipeline):
             'use_safety_checker', 'safety_checker_threshold', 'controlnets',
             'image_preprocessing', 'image_postprocessing', 'latent_preprocessing', 'latent_postprocessing',
             'ip_adapter', 'ip_adapter_style_image_url',
+            'stream_v2v',
         }
 
         update_kwargs = {}
@@ -210,6 +212,21 @@ class StreamDiffusion(Pipeline):
                 update_kwargs['latent_preprocessing_config'] = _prepare_processing_config(new_params.latent_preprocessing)['processors']
             elif key == 'latent_postprocessing':
                 update_kwargs['latent_postprocessing_config'] = _prepare_processing_config(new_params.latent_postprocessing)['processors']
+            elif key == 'stream_v2v':
+                curr_cfg = curr_params.get('stream_v2v') or StreamV2VConfig().model_dump()
+                enabled_changed = curr_cfg.get('enabled') != new_value['enabled']
+                if enabled_changed:
+                    return False
+
+                stream_updates = {}
+                if new_value['cache_maxframes'] != curr_cfg.get('cache_maxframes'):
+                    stream_updates['cache_maxframes'] = new_value['cache_maxframes']
+                if new_value['cache_interval'] != curr_cfg.get('cache_interval'):
+                    stream_updates['cache_interval'] = new_value['cache_interval']
+
+                if stream_updates and new_value['enabled']:
+                    update_kwargs.update(stream_updates)
+                continue
             else:
                 update_kwargs[key] = new_value
 
@@ -434,6 +451,9 @@ def load_streamdiffusion_sync(
         latent_postprocessing_config=_prepare_processing_config(params.latent_postprocessing),
         use_safety_checker=params.use_safety_checker,
         safety_checker_threshold=params.safety_checker_threshold,
+        use_cached_attn=params.stream_v2v.enabled,
+        cache_maxframes=params.stream_v2v.cache_maxframes,
+        cache_interval=params.stream_v2v.cache_interval,
     )
 
     pipe.prepare(
