@@ -1,4 +1,4 @@
-## StreamDiffusion Schema Update (PR [#808](https://github.com/livepeer/ai-runner/pull/808))
+## 2025-11-25 StreamDiffusion Schema Update (PR [#808](https://github.com/livepeer/ai-runner/pull/808))
 
 PR #808 expands what the StreamDiffusion pipeline can do. This document captures the schema additions and how to exercise the new processors and execution modes from the params schema.
 
@@ -20,7 +20,7 @@ PR #808 expands what the StreamDiffusion pipeline can do. This document captures
 
 - ControlNets gained support for the TemporalNet v2 models, plus a backend-populated `conditioning_channels` field. **Clients should omit `conditioning_channels`**—they are well-defined per model and the runner fills it automatically (6 channels for TemporalNet, 3 for the rest).
 - `skip_diffusion` is now exposed so a request can run just the processors (e.g. depth-only stream, run a pure upscale) without invoking the diffusion/denoising step.
-- Cached attention (StreamV2V) is exposed through a structured `cached_attention` block that replaces the raw `use_cached_attn`, `cache_maxframes`, and `cache_interval` flags. Legacy field names are still accepted and are automatically folded into the structured config for backwards compatibility.
+- Cached attention (StreamV2V) is exposed through a structured `stream_v2v` block that replaces the raw `use_cached_attn`, `cache_maxframes`, and `cache_interval` flags. Legacy field names are still accepted and are automatically folded into the structured config for backwards compatibility.
 
 ---
 
