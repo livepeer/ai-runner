@@ -39,6 +39,9 @@ LCM_LORAS_BY_TYPE: Dict[ModelType, str] = {
     "sd15": "latent-consistency/lcm-lora-sdv1-5",
 }
 
+CACHED_ATTENTION_MIN_FRAMES = 1
+CACHED_ATTENTION_MAX_FRAMES = 4
+
 MODEL_ID_TO_TYPE: Dict[str, ModelType] = {
     "stabilityai/sd-turbo": "sd21",
     "stabilityai/sdxl-turbo": "sdxl",
@@ -214,13 +217,42 @@ class IPAdapterConfig(BaseModel):
     """Whether this IPAdapter is active"""
 
 
+class CachedAttentionConfig(BaseModel):
+    """
+    Cached attention (StreamV2V) configuration.
+    """
+
+    class Config:
+        extra = "forbid"
+
+    enabled: bool = False
+    """Enable cached attention to reuse key/value tensors across frames."""
+
+    max_frames: int = Field(
+        default=2,
+        ge=CACHED_ATTENTION_MIN_FRAMES,
+        le=CACHED_ATTENTION_MAX_FRAMES,
+        description="Number of historical K/V frames to retain. Limited by TensorRT engine exports.",
+    )
+    """Number of frames retained in the attention cache."""
+
+    interval_sec: float = Field(
+        default=1.0,
+        ge=0.01,
+        le=10.0,
+        description="How often (in seconds) to refresh the cache.",
+    )
+    """Cadence (seconds) for refreshing cached key/value tensors."""
+
+
+
 class StreamDiffusionParams(BaseParams):
     """
     StreamDiffusion pipeline parameters.
 
     **Dynamically updatable parameters** (no reload required):
     - prompt, guidance_scale, delta, num_inference_steps, t_index_list, seed,
-      controlnets.conditioning_scale
+      controlnets.conditioning_scale, cached_attention.max_frames, cached_attention.interval_sec
 
     All other parameters require a full pipeline reload when changed.
     """
@@ -339,6 +371,42 @@ class StreamDiffusionParams(BaseParams):
     latent_postprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
     """List of latent postprocessor configurations for latent processing."""
 
+    cached_attention: CachedAttentionConfig = Field(default_factory=CachedAttentionConfig)
+    """Cached attention configuration."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_cached_attention(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Fold legacy cached-attention fields into the structured config while maintaining backwards compatibility.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        legacy_keys = ("use_cached_attn", "cache_maxframes", "cache_interval")
+        has_legacy = any(key in data for key in legacy_keys)
+
+        # Support previous schema that used `stream_v2v`
+        legacy_block = data.pop("stream_v2v", None)
+
+        if "cached_attention" not in data:
+            if legacy_block is not None:
+                data["cached_attention"] = legacy_block
+            elif has_legacy:
+                defaults = CachedAttentionConfig()
+                data["cached_attention"] = CachedAttentionConfig(
+                    enabled=data.pop("use_cached_attn", False),
+                    max_frames=data.pop("cache_maxframes", defaults.max_frames),
+                    interval_sec=data.pop("cache_interval", defaults.interval_sec),
+                ).model_dump()
+        else:
+            legacy_block = None
+
+        for key in legacy_keys:
+            data.pop(key, None)
+
+        return data
+
     def get_output_resolution(self) -> tuple[int, int]:
         """
         Get the output resolution as a (width, height) tuple, accounting for upscale processors
@@ -412,5 +480,20 @@ class StreamDiffusionParams(BaseParams):
                 raise ValueError(
                     f"SDXL models support a maximum of 3 enabled ControlNets, found {len(enabled_cns)}."
                 )
+
+        return model
+
+    @model_validator(mode="after")
+    @staticmethod
+    def check_cached_attention(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
+        cfg = model.cached_attention
+        if not cfg or not cfg.enabled:
+            return model
+
+        if model.acceleration != "tensorrt":
+            raise ValueError("Cached attention is only supported when acceleration='tensorrt'")
+
+        if model.width != 512 or model.height != 512:
+            raise ValueError("Cached attention currently supports only 512x512 resolution")
 
         return model

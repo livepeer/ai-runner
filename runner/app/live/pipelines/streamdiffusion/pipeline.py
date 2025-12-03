@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import base64
+import math
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any, cast
@@ -21,7 +22,10 @@ from .params import (
     ProcessingConfig,
     get_model_type,
     IPADAPTER_SUPPORTED_TYPES,
-    LCM_LORAS_BY_TYPE
+    LCM_LORAS_BY_TYPE,
+    CachedAttentionConfig,
+    CACHED_ATTENTION_MIN_FRAMES,
+    CACHED_ATTENTION_MAX_FRAMES,
 )
 
 ENGINES_DIR = Path("./engines")
@@ -169,6 +173,7 @@ class StreamDiffusion(Pipeline):
             'use_safety_checker', 'safety_checker_threshold', 'controlnets',
             'image_preprocessing', 'image_postprocessing', 'latent_preprocessing', 'latent_postprocessing',
             'ip_adapter', 'ip_adapter_style_image_url',
+            'cached_attention',
         }
 
         update_kwargs = {}
@@ -210,6 +215,21 @@ class StreamDiffusion(Pipeline):
                 update_kwargs['latent_preprocessing_config'] = _prepare_processing_config(new_params.latent_preprocessing)['processors']
             elif key == 'latent_postprocessing':
                 update_kwargs['latent_postprocessing_config'] = _prepare_processing_config(new_params.latent_postprocessing)['processors']
+            elif key == 'cached_attention':
+                curr_cfg = curr_params.get('cached_attention') or CachedAttentionConfig().model_dump()
+                enabled_changed = curr_cfg.get('enabled') != new_value['enabled']
+                if enabled_changed:
+                    return False
+
+                stream_updates = {}
+                if new_value['max_frames'] != curr_cfg.get('max_frames'):
+                    stream_updates['cache_maxframes'] = new_value['max_frames']
+                if new_value['interval_sec'] != curr_cfg.get('interval_sec'):
+                    stream_updates['cache_interval'] = _interval_sec_to_ticks(new_value['interval_sec'])
+
+                if stream_updates and new_value['enabled']:
+                    update_kwargs.update(stream_updates)
+                continue
             else:
                 update_kwargs[key] = new_value
 
@@ -392,6 +412,19 @@ def _prepare_processing_config(cfg: Optional[ProcessingConfig[Any]]) -> Dict[str
         "processors": processors,
     }
 
+
+def _interval_sec_to_ticks(value: float) -> int:
+    try:
+        interval = float(value)
+    except (TypeError, ValueError):
+        interval = 1.0
+
+    if not math.isfinite(interval) or interval <= 0:
+        return 1
+
+    return max(1, int(round(interval)))
+
+
 def load_streamdiffusion_sync(
     params: StreamDiffusionParams,
     min_batch_size=1,
@@ -434,6 +467,11 @@ def load_streamdiffusion_sync(
         latent_postprocessing_config=_prepare_processing_config(params.latent_postprocessing),
         use_safety_checker=params.use_safety_checker,
         safety_checker_threshold=params.safety_checker_threshold,
+        use_cached_attn=params.cached_attention.enabled,
+        cache_maxframes=params.cached_attention.max_frames,
+        cache_interval=_interval_sec_to_ticks(params.cached_attention.interval_sec),
+        min_cache_maxframes=CACHED_ATTENTION_MIN_FRAMES,
+        max_cache_maxframes=CACHED_ATTENTION_MAX_FRAMES,
     )
 
     pipe.prepare(

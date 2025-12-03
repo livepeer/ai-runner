@@ -23,6 +23,9 @@ from .params import (
     ProcessingConfig,
     SingleProcessorConfig,
     ModelType,
+    CachedAttentionConfig,
+    CACHED_ATTENTION_MIN_FRAMES,
+    CACHED_ATTENTION_MAX_FRAMES,
 )
 from . import params
 from .pipeline import load_streamdiffusion_sync, ENGINES_DIR, LOCAL_MODELS_DIR
@@ -226,8 +229,14 @@ def _build_matrix() -> Iterator[BuildJob]:
             ipa_types = ["regular", "faceid"]
 
         for ipa_type in ipa_types:
-            params = _create_params(model_id, model_type, ipa_type)
-            yield BuildJob(params=params)
+            for enable_cached_attn in (False, True):
+                params = _create_params(
+                    model_id,
+                    model_type,
+                    ipa_type,
+                    enable_cached_attn=enable_cached_attn,
+                )
+                yield BuildJob(params=params)
 
 
 def _compile_build(job: BuildJob) -> None:
@@ -236,6 +245,7 @@ def _compile_build(job: BuildJob) -> None:
         f"→ Building TensorRT engines | model={job.params.model_id} "
         f"ipadapter={job.params.ip_adapter.type if job.params.ip_adapter and job.params.ip_adapter.enabled else 'disabled'} "
         f"size={job.params.width}x{job.params.height} "
+        f"cached_attention={'on' if job.params.cached_attention.enabled else 'off'} "
         f"timesteps={job.params.t_index_list} batch_min={MIN_TIMESTEPS} batch_max={MAX_TIMESTEPS} "
         f"controlnets={controlnet_ids}"
     )
@@ -255,7 +265,13 @@ def _compile_build(job: BuildJob) -> None:
             torch.cuda.empty_cache()
 
 
-def _create_params(model_id: str, model_type: ModelType, ipa_type: Optional[str]) -> StreamDiffusionParams:
+def _create_params(
+    model_id: str,
+    model_type: ModelType,
+    ipa_type: Optional[str],
+    *,
+    enable_cached_attn: bool = False,
+) -> StreamDiffusionParams:
     controlnets = []
     controlnet_ids = CONTROLNETS_BY_TYPE.get(model_type)
     if controlnet_ids:
@@ -284,6 +300,12 @@ def _create_params(model_id: str, model_type: ModelType, ipa_type: Optional[str]
     opt_timesteps = OPT_TIMESTEPS_BY_TYPE.get(model_type, 3)
     t_index_list = list(range(1, 50, 50 // opt_timesteps))[:opt_timesteps]
 
+    cached_attention = CachedAttentionConfig(
+        enabled=enable_cached_attn,
+        max_frames=2,
+        interval_sec=1,
+    )
+
     return StreamDiffusionParams(
         model_id=model_id,
         width=512,
@@ -295,6 +317,7 @@ def _create_params(model_id: str, model_type: ModelType, ipa_type: Optional[str]
         image_postprocessing=ProcessingConfig(
             processors=[SingleProcessorConfig(type="realesrgan_trt")]
         ),
+        cached_attention=cached_attention,
     )
 
 

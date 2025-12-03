@@ -1,4 +1,4 @@
-## StreamDiffusion Schema Update (PR [#808](https://github.com/livepeer/ai-runner/pull/808))
+## 2025-11-25 StreamDiffusion Schema Update (PR [#808](https://github.com/livepeer/ai-runner/pull/808))
 
 PR #808 expands what the StreamDiffusion pipeline can do. This document captures the schema additions and how to exercise the new processors and execution modes from the params schema.
 
@@ -20,6 +20,7 @@ PR #808 expands what the StreamDiffusion pipeline can do. This document captures
 
 - ControlNets gained support for the TemporalNet v2 models, plus a backend-populated `conditioning_channels` field. **Clients should omit `conditioning_channels`**—they are well-defined per model and the runner fills it automatically (6 channels for TemporalNet, 3 for the rest).
 - `skip_diffusion` is now exposed so a request can run just the processors (e.g. depth-only stream, run a pure upscale) without invoking the diffusion/denoising step.
+- Cached attention (StreamV2V) is exposed through a structured `stream_v2v` block that replaces the raw `use_cached_attn`, `cache_maxframes`, and `cache_interval` flags. Legacy field names are still accepted and are automatically folded into the structured config for backwards compatibility.
 
 ---
 
@@ -187,6 +188,29 @@ Any ControlNets or diffusion-only parameters are ignored when `skip_diffusion` i
 ```
 
 ### SDXL Turbo with TemporalNet only
+### Cached Attention
+Cached attention keeps a rolling cache of key/value tensors so attention layers can reuse context from previous frames. This dramatically increases temporal coherence with minimal latency impact.
+
+- Enabling cached attention requires TensorRT acceleration and a 512×512 base resolution. The runner enforces these constraints at validation time.
+- Configure it via the nested `cached_attention` block:
+
+```json
+"cached_attention": {
+  "enabled": true,
+  "max_frames": 2,
+  "interval_sec": 1,
+  "min_max_frames": 1,
+  "max_max_frames": 4
+}
+```
+
+- `max_frames` controls how many historical frames each attention layer keeps (1–4 supported by the engine exporter).
+- `interval_sec` determines how often (in seconds) the cache refreshes. Setting it >1 lowers cache updates at the cost of responsiveness.
+- `min_max_frames`/`max_max_frames` describe the TensorRT profile used when compiling engines; updating them requires a rebuild, but they allow tailoring engines for custom cache depths.
+- Changing `enabled`, `min_max_frames`, or `max_max_frames` requires a full pipeline reload. `max_frames` and `interval_sec` can be tuned mid-stream.
+
+Legacy payloads that still send the old `stream_v2v` block or the top-level `use_cached_attn`, `cache_maxframes`, or `cache_interval` flags continue to work—the runner automatically folds them into the new structured config.
+
 
 ```json
 {
