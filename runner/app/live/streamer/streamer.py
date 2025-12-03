@@ -133,8 +133,7 @@ class PipelineStreamer(StreamerCallbacks):
                 current_time = time.time()
 
             status = self.process.get_status(clear_transient=True).model_dump()
-            if last_status_timestamp:
-                status["last_status_timestamp"] = last_status_timestamp
+            status["last_status_timestamp"] = last_status_timestamp
             last_status_timestamp = current_time
 
             await self.emit_monitoring_event(status, timestamp=current_time)
