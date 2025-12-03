@@ -55,8 +55,6 @@ cached_attention:
   enabled: true
   max_frames: 2
   interval_sec: 1
-  min_max_frames: 1
-  max_max_frames: 4
 
 # IPAdapter configuration for style conditioning
 ipadapters:

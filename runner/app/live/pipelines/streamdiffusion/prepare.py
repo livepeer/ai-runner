@@ -24,6 +24,8 @@ from .params import (
     SingleProcessorConfig,
     ModelType,
     CachedAttentionConfig,
+    CACHED_ATTENTION_MIN_FRAMES,
+    CACHED_ATTENTION_MAX_FRAMES,
 )
 from . import params
 from .pipeline import load_streamdiffusion_sync, ENGINES_DIR, LOCAL_MODELS_DIR
@@ -302,8 +304,6 @@ def _create_params(
         enabled=enable_cached_attn,
         max_frames=2,
         interval_sec=1,
-        min_max_frames=1,
-        max_max_frames=4,
     )
 
     return StreamDiffusionParams(

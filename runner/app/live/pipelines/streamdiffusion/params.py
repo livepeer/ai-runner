@@ -39,6 +39,9 @@ LCM_LORAS_BY_TYPE: Dict[ModelType, str] = {
     "sd15": "latent-consistency/lcm-lora-sdv1-5",
 }
 
+CACHED_ATTENTION_MIN_FRAMES = 1
+CACHED_ATTENTION_MAX_FRAMES = 4
+
 MODEL_ID_TO_TYPE: Dict[str, ModelType] = {
     "stabilityai/sd-turbo": "sd21",
     "stabilityai/sdxl-turbo": "sdxl",
@@ -227,8 +230,8 @@ class CachedAttentionConfig(BaseModel):
 
     max_frames: int = Field(
         default=2,
-        ge=1,
-        le=4,
+        ge=CACHED_ATTENTION_MIN_FRAMES,
+        le=CACHED_ATTENTION_MAX_FRAMES,
         description="Number of historical K/V frames to retain. Limited by TensorRT engine exports.",
     )
     """Number of frames retained in the attention cache."""
@@ -241,31 +244,6 @@ class CachedAttentionConfig(BaseModel):
     )
     """Cadence (seconds) for refreshing cached key/value tensors."""
 
-    min_max_frames: int = Field(
-        default=1,
-        ge=1,
-        le=4,
-        description="Minimum max-frame profile compiled into the TensorRT engine.",
-    )
-    """Lower bound used when compiling the TensorRT profile."""
-
-    max_max_frames: int = Field(
-        default=4,
-        ge=1,
-        le=16,
-        description="Maximum max-frame profile compiled into the TensorRT engine.",
-    )
-    """Upper bound used when compiling the TensorRT profile."""
-
-    @model_validator(mode="after")
-    def validate_ranges(self) -> "CachedAttentionConfig":
-        if self.min_max_frames > self.max_max_frames:
-            raise ValueError("min_max_frames cannot be greater than max_max_frames")
-        if not (self.min_max_frames <= self.max_frames <= self.max_max_frames):
-            raise ValueError(
-                f"max_frames ({self.max_frames}) must be within [{self.min_max_frames}, {self.max_max_frames}]"
-            )
-        return self
 
 
 class StreamDiffusionParams(BaseParams):
@@ -420,8 +398,6 @@ class StreamDiffusionParams(BaseParams):
                     enabled=data.pop("use_cached_attn", False),
                     max_frames=data.pop("cache_maxframes", defaults.max_frames),
                     interval_sec=data.pop("cache_interval", defaults.interval_sec),
-                    min_max_frames=defaults.min_max_frames,
-                    max_max_frames=defaults.max_max_frames,
                 ).model_dump()
         else:
             legacy_block = None

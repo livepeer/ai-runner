@@ -24,6 +24,8 @@ from .params import (
     IPADAPTER_SUPPORTED_TYPES,
     LCM_LORAS_BY_TYPE,
     CachedAttentionConfig,
+    CACHED_ATTENTION_MIN_FRAMES,
+    CACHED_ATTENTION_MAX_FRAMES,
 )
 
 ENGINES_DIR = Path("./engines")
@@ -217,12 +219,6 @@ class StreamDiffusion(Pipeline):
                 curr_cfg = curr_params.get('cached_attention') or CachedAttentionConfig().model_dump()
                 enabled_changed = curr_cfg.get('enabled') != new_value['enabled']
                 if enabled_changed:
-                    return False
-
-                if (
-                    new_value['min_max_frames'] != curr_cfg.get('min_max_frames')
-                    or new_value['max_max_frames'] != curr_cfg.get('max_max_frames')
-                ):
                     return False
 
                 stream_updates = {}
@@ -474,8 +470,8 @@ def load_streamdiffusion_sync(
         use_cached_attn=params.cached_attention.enabled,
         cache_maxframes=params.cached_attention.max_frames,
         cache_interval=_interval_sec_to_ticks(params.cached_attention.interval_sec),
-        min_cache_maxframes=params.cached_attention.min_max_frames,
-        max_cache_maxframes=params.cached_attention.max_max_frames,
+        min_cache_maxframes=CACHED_ATTENTION_MIN_FRAMES,
+        max_cache_maxframes=CACHED_ATTENTION_MAX_FRAMES,
     )
 
     pipe.prepare(
