@@ -23,7 +23,7 @@ from .params import (
     ProcessingConfig,
     SingleProcessorConfig,
     ModelType,
-    StreamV2VConfig,
+    CachedAttentionConfig,
 )
 from . import params
 from .pipeline import load_streamdiffusion_sync, ENGINES_DIR, LOCAL_MODELS_DIR
@@ -227,12 +227,12 @@ def _build_matrix() -> Iterator[BuildJob]:
             ipa_types = ["regular", "faceid"]
 
         for ipa_type in ipa_types:
-            for enable_stream_v2v in (False, True):
+            for enable_cached_attn in (False, True):
                 params = _create_params(
                     model_id,
                     model_type,
                     ipa_type,
-                    enable_stream_v2v=enable_stream_v2v,
+                    enable_cached_attn=enable_cached_attn,
                 )
                 yield BuildJob(params=params)
 
@@ -243,7 +243,7 @@ def _compile_build(job: BuildJob) -> None:
         f"→ Building TensorRT engines | model={job.params.model_id} "
         f"ipadapter={job.params.ip_adapter.type if job.params.ip_adapter and job.params.ip_adapter.enabled else 'disabled'} "
         f"size={job.params.width}x{job.params.height} "
-        f"stream_v2v={'on' if job.params.stream_v2v.enabled else 'off'} "
+        f"cached_attention={'on' if job.params.cached_attention.enabled else 'off'} "
         f"timesteps={job.params.t_index_list} batch_min={MIN_TIMESTEPS} batch_max={MAX_TIMESTEPS} "
         f"controlnets={controlnet_ids}"
     )
@@ -268,7 +268,7 @@ def _create_params(
     model_type: ModelType,
     ipa_type: Optional[str],
     *,
-    enable_stream_v2v: bool = False,
+    enable_cached_attn: bool = False,
 ) -> StreamDiffusionParams:
     controlnets = []
     controlnet_ids = CONTROLNETS_BY_TYPE.get(model_type)
@@ -298,10 +298,12 @@ def _create_params(
     opt_timesteps = OPT_TIMESTEPS_BY_TYPE.get(model_type, 3)
     t_index_list = list(range(1, 50, 50 // opt_timesteps))[:opt_timesteps]
 
-    stream_v2v = StreamV2VConfig(
-        enabled=enable_stream_v2v,
-        cache_maxframes=2,
-        cache_interval=1,
+    cached_attention = CachedAttentionConfig(
+        enabled=enable_cached_attn,
+        max_frames=2,
+        interval_sec=1,
+        min_max_frames=1,
+        max_max_frames=4,
     )
 
     return StreamDiffusionParams(
@@ -315,7 +317,7 @@ def _create_params(
         image_postprocessing=ProcessingConfig(
             processors=[SingleProcessorConfig(type="realesrgan_trt")]
         ),
-        stream_v2v=stream_v2v,
+        cached_attention=cached_attention,
     )
 
 

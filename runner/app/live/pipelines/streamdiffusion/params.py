@@ -214,32 +214,58 @@ class IPAdapterConfig(BaseModel):
     """Whether this IPAdapter is active"""
 
 
-class StreamV2VConfig(BaseModel):
+class CachedAttentionConfig(BaseModel):
     """
-    StreamV2V configuration for cached attention support.
+    Cached attention (StreamV2V) configuration.
     """
 
     class Config:
         extra = "forbid"
 
     enabled: bool = False
-    """Enable StreamV2V cached attention."""
+    """Enable cached attention to reuse key/value tensors across frames."""
 
-    cache_maxframes: int = Field(
+    max_frames: int = Field(
         default=2,
         ge=1,
         le=4,
-        description="Number of historical K/V frames to retain. Limited to 4 by the TensorRT engine exports.",
+        description="Number of historical K/V frames to retain. Limited by TensorRT engine exports.",
     )
     """Number of frames retained in the attention cache."""
 
-    cache_interval: int = Field(
+    interval_sec: float = Field(
+        default=1.0,
+        ge=0.01,
+        le=10.0,
+        description="How often (in seconds) to refresh the cache.",
+    )
+    """Cadence (seconds) for refreshing cached key/value tensors."""
+
+    min_max_frames: int = Field(
         default=1,
         ge=1,
-        le=8,
-        description="How often (in frames) to refresh the cache. Higher values reduce updates but may lower temporal coherence.",
+        le=4,
+        description="Minimum max-frame profile compiled into the TensorRT engine.",
     )
-    """Frame cadence for refreshing the cached attention tensors."""
+    """Lower bound used when compiling the TensorRT profile."""
+
+    max_max_frames: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description="Maximum max-frame profile compiled into the TensorRT engine.",
+    )
+    """Upper bound used when compiling the TensorRT profile."""
+
+    @model_validator(mode="after")
+    def validate_ranges(self) -> "CachedAttentionConfig":
+        if self.min_max_frames > self.max_max_frames:
+            raise ValueError("min_max_frames cannot be greater than max_max_frames")
+        if not (self.min_max_frames <= self.max_frames <= self.max_max_frames):
+            raise ValueError(
+                f"max_frames ({self.max_frames}) must be within [{self.min_max_frames}, {self.max_max_frames}]"
+            )
+        return self
 
 
 class StreamDiffusionParams(BaseParams):
@@ -248,7 +274,7 @@ class StreamDiffusionParams(BaseParams):
 
     **Dynamically updatable parameters** (no reload required):
     - prompt, guidance_scale, delta, num_inference_steps, t_index_list, seed,
-      controlnets.conditioning_scale, stream_v2v.cache_maxframes, stream_v2v.cache_interval
+      controlnets.conditioning_scale, cached_attention.max_frames, cached_attention.interval_sec
 
     All other parameters require a full pipeline reload when changed.
     """
@@ -367,14 +393,14 @@ class StreamDiffusionParams(BaseParams):
     latent_postprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
     """List of latent postprocessor configurations for latent processing."""
 
-    stream_v2v: StreamV2VConfig = Field(default_factory=StreamV2VConfig)
-    """StreamV2V (cached attention) configuration."""
+    cached_attention: CachedAttentionConfig = Field(default_factory=CachedAttentionConfig)
+    """Cached attention configuration."""
 
     @model_validator(mode="before")
     @classmethod
-    def _coerce_stream_v2v(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _coerce_cached_attention(cls, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Fold legacy top-level streamv2v fields into the structured config while maintaining backwards compatibility.
+        Fold legacy cached-attention fields into the structured config while maintaining backwards compatibility.
         """
         if not isinstance(data, dict):
             return data
@@ -382,16 +408,26 @@ class StreamDiffusionParams(BaseParams):
         legacy_keys = ("use_cached_attn", "cache_maxframes", "cache_interval")
         has_legacy = any(key in data for key in legacy_keys)
 
-        if "stream_v2v" not in data and has_legacy:
-            defaults = StreamV2VConfig()
-            data["stream_v2v"] = StreamV2VConfig(
-                enabled=data.pop("use_cached_attn", False),
-                cache_maxframes=data.pop("cache_maxframes", defaults.cache_maxframes),
-                cache_interval=data.pop("cache_interval", defaults.cache_interval),
-            )
+        # Support previous schema that used `stream_v2v`
+        legacy_block = data.pop("stream_v2v", None)
+
+        if "cached_attention" not in data:
+            if legacy_block is not None:
+                data["cached_attention"] = legacy_block
+            elif has_legacy:
+                defaults = CachedAttentionConfig()
+                data["cached_attention"] = CachedAttentionConfig(
+                    enabled=data.pop("use_cached_attn", False),
+                    max_frames=data.pop("cache_maxframes", defaults.max_frames),
+                    interval_sec=data.pop("cache_interval", defaults.interval_sec),
+                    min_max_frames=defaults.min_max_frames,
+                    max_max_frames=defaults.max_max_frames,
+                ).model_dump()
         else:
-            for key in legacy_keys:
-                data.pop(key, None)
+            legacy_block = None
+
+        for key in legacy_keys:
+            data.pop(key, None)
 
         return data
 
@@ -473,15 +509,15 @@ class StreamDiffusionParams(BaseParams):
 
     @model_validator(mode="after")
     @staticmethod
-    def check_stream_v2v(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
-        cfg = model.stream_v2v
+    def check_cached_attention(model: "StreamDiffusionParams") -> "StreamDiffusionParams":
+        cfg = model.cached_attention
         if not cfg or not cfg.enabled:
             return model
 
         if model.acceleration != "tensorrt":
-            raise ValueError("StreamV2V is only supported when acceleration='tensorrt'")
+            raise ValueError("Cached attention is only supported when acceleration='tensorrt'")
 
         if model.width != 512 or model.height != 512:
-            raise ValueError("StreamV2V currently supports only 512x512 resolution")
+            raise ValueError("Cached attention currently supports only 512x512 resolution")
 
         return model
