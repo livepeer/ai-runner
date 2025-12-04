@@ -220,16 +220,13 @@ class StreamDiffusion(Pipeline):
                 enabled_changed = curr_cfg.get('enabled') != new_value['enabled']
                 if enabled_changed:
                     return False
+                elif not new_value['enabled']:
+                    continue
 
-                stream_updates = {}
                 if new_value['max_frames'] != curr_cfg.get('max_frames'):
-                    stream_updates['cache_maxframes'] = new_value['max_frames']
-                if new_value['interval_sec'] != curr_cfg.get('interval_sec'):
-                    stream_updates['cache_interval'] = _interval_sec_to_ticks(new_value['interval_sec'])
-
-                if stream_updates and new_value['enabled']:
-                    update_kwargs.update(stream_updates)
-                continue
+                    update_kwargs['cache_maxframes'] = new_value['max_frames']
+                if new_value['interval'] != curr_cfg.get('interval'):
+                    update_kwargs['cache_interval'] = new_value['interval']
             else:
                 update_kwargs[key] = new_value
 
@@ -413,18 +410,6 @@ def _prepare_processing_config(cfg: Optional[ProcessingConfig[Any]]) -> Dict[str
     }
 
 
-def _interval_sec_to_ticks(value: float) -> int:
-    try:
-        interval = float(value)
-    except (TypeError, ValueError):
-        interval = 1.0
-
-    if not math.isfinite(interval) or interval <= 0:
-        return 1
-
-    return max(1, int(round(interval)))
-
-
 def load_streamdiffusion_sync(
     params: StreamDiffusionParams,
     min_batch_size=1,
@@ -469,7 +454,7 @@ def load_streamdiffusion_sync(
         safety_checker_threshold=params.safety_checker_threshold,
         use_cached_attn=params.cached_attention.enabled,
         cache_maxframes=params.cached_attention.max_frames,
-        cache_interval=_interval_sec_to_ticks(params.cached_attention.interval_sec),
+        cache_interval=params.cached_attention.interval,
         min_cache_maxframes=CACHED_ATTENTION_MIN_FRAMES,
         max_cache_maxframes=CACHED_ATTENTION_MAX_FRAMES,
     )

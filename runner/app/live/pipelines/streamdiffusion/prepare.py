@@ -303,7 +303,7 @@ def _create_params(
     cached_attention = CachedAttentionConfig(
         enabled=enable_cached_attn,
         max_frames=2,
-        interval_sec=1,
+        interval=1,
     )
 
     return StreamDiffusionParams(

@@ -229,20 +229,20 @@ class CachedAttentionConfig(BaseModel):
     """Enable cached attention to reuse key/value tensors across frames."""
 
     max_frames: int = Field(
-        default=2,
+        default=1,
         ge=CACHED_ATTENTION_MIN_FRAMES,
         le=CACHED_ATTENTION_MAX_FRAMES,
         description="Number of historical K/V frames to retain. Limited by TensorRT engine exports.",
     )
     """Number of frames retained in the attention cache."""
 
-    interval_sec: float = Field(
-        default=1.0,
-        ge=0.01,
-        le=10.0,
-        description="How often (in seconds) to refresh the cache.",
+    interval: int = Field(
+        default=1,
+        ge=1,
+        le=1440, # 1 minute @ 24 FPS
+        description="How often (in number of frames) to refresh the cache.",
     )
-    """Cadence (seconds) for refreshing cached key/value tensors."""
+    """Cadence (number of frames) for refreshing cached key/value tensors."""
 
 
 
@@ -252,7 +252,7 @@ class StreamDiffusionParams(BaseParams):
 
     **Dynamically updatable parameters** (no reload required):
     - prompt, guidance_scale, delta, num_inference_steps, t_index_list, seed,
-      controlnets.conditioning_scale, cached_attention.max_frames, cached_attention.interval_sec
+      controlnets.conditioning_scale, cached_attention.max_frames, cached_attention.interval
 
     All other parameters require a full pipeline reload when changed.
     """
