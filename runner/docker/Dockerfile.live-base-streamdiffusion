@@ -27,12 +27,18 @@ RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall \
     torchaudio==2.7.1+cu128 \
     --index-url https://download.pytorch.org/whl/cu128
 
+RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@v1.0.0-beta#egg=streamdiffusion[tensorrt,controlnet,ipadapter]
+
+RUN conda run -n comfystream python -m streamdiffusion.tools.install-tensorrt
+
+# Install TensorRT bindings and libraries into the comfystream environment
+RUN conda run -n comfystream pip install --no-cache-dir \
+    polygraphy==0.49.24
+
 # Install StreamDiffusion lib into the comfystream environment
 ARG STREAMDIFFUSION_VERSION=e5b5121d58c468afcc365f98e65f3909de906d4a
 RUN conda run -n comfystream pip install git+https://github.com/livepeer/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt,controlnet,ipadapter]
 
-# Install TensorRT bindings and libraries into the comfystream environment
-RUN conda run -n comfystream python -m streamdiffusion.tools.install-tensorrt
 
 WORKDIR /app
 
