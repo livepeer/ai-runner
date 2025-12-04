@@ -34,7 +34,7 @@ MIN_TIMESTEPS = 1
 MAX_TIMESTEPS = 4
 
 # Optimal number of timesteps for t_index_list per model type
-OPT_TIMESTEPS_BY_TYPE: Dict[ModelType, int] = {
+OPTIMAL_TIMESTEPS_BY_TYPE: Dict[ModelType, int] = {
     "sd15": 3,
     "sd21": 3,
     "sdxl": 2,
@@ -229,13 +229,8 @@ def _build_matrix() -> Iterator[BuildJob]:
             ipa_types = ["regular", "faceid"]
 
         for ipa_type in ipa_types:
-            for enable_cached_attn in (False, True):
-                params = _create_params(
-                    model_id,
-                    model_type,
-                    ipa_type,
-                    enable_cached_attn=enable_cached_attn,
-                )
+            for use_cached_attn in (False, True):
+                params = _create_params(model_id, model_type, ipa_type, use_cached_attn)
                 yield BuildJob(params=params)
 
 
@@ -269,8 +264,7 @@ def _create_params(
     model_id: str,
     model_type: ModelType,
     ipa_type: Optional[str],
-    *,
-    enable_cached_attn: bool = False,
+    use_cached_attn: bool,
 ) -> StreamDiffusionParams:
     controlnets = []
     controlnet_ids = CONTROLNETS_BY_TYPE.get(model_type)
@@ -296,18 +290,12 @@ def _create_params(
             enabled=True,
         )
 
-    # Create t_index_list based on number of timesteps. Only the size matters...
-    opt_timesteps = OPT_TIMESTEPS_BY_TYPE.get(model_type, 3)
+    # Create t_index_list based on number of timesteps. Only the size matters... 😏
+    opt_timesteps = OPTIMAL_TIMESTEPS_BY_TYPE.get(model_type, 3)
     t_index_list = list(range(1, 50, 50 // opt_timesteps))[:opt_timesteps]
 
-    cached_attention = CachedAttentionConfig(
-        enabled=enable_cached_attn,
-        max_frames=2,
-        interval=1,
-    )
-
     return StreamDiffusionParams(
-        model_id=model_id,
+        model_id=model_id,  # type: ignore
         width=512,
         height=512,
         acceleration="tensorrt",
@@ -317,7 +305,7 @@ def _create_params(
         image_postprocessing=ProcessingConfig(
             processors=[SingleProcessorConfig(type="realesrgan_trt")]
         ),
-        cached_attention=cached_attention,
+        cached_attention=CachedAttentionConfig(enabled=use_cached_attn),
     )
 
 
