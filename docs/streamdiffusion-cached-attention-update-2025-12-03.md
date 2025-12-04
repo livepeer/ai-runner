@@ -11,14 +11,15 @@ This note captures the schema and runtime changes that ship cached attention (fo
 cached_attention:
   enabled: true
   max_frames: 2           # runtime-adjustable, clamped to [1, 4]
-  interval_sec: 1.0       # runtime-adjustable cadence for refreshing the cache
+  interval: 12            # runtime-adjustable cadence in FRAMES (1–1440)
 ```
 
 ### Runtime behavior
 - Cached attention requires TensorRT acceleration and a 512×512 base resolution. The validator enforces the constraint before a pipeline spins up.
-- Changing `enabled` still triggers a full pipeline reload (and engine rebuild during `prepare_models`), but `max_frames` / `interval_sec` are dynamic.
-- `max_frames` and `interval_sec` can be updated dynamically; the pipeline converts `interval_sec` values into the tick-based format expected by the wrapper and clamps them to safe defaults.
-- `prepare_streamdiffusion_models()` now builds engine pairs (cached attention on/off) for every model + IPAdapter combination so the worker has pre-built artifacts ready for either configuration.
+- Changing `enabled` still triggers a full pipeline reload (and engine rebuild during `prepare_models`), but `max_frames` / `interval` are dynamic.
+- `interval` is now **frame-based** (not seconds). It accepts integers `1–1440`, representing how many frames elapse between cache refreshes. Example: `interval=12` ≈ 0.5s at 24 FPS.
+- `max_frames` and `interval` can be updated dynamically when cached attention is already enabled; toggling `enabled` still requires a reload.
+- `prepare_streamdiffusion_models()` builds engine pairs (cached attention on/off) for every model + IPAdapter combination so the worker has pre-built artifacts ready for either configuration.
 
 ### Example payload
 ```json
@@ -27,7 +28,7 @@ cached_attention:
   "cached_attention": {
     "enabled": true,
     "max_frames": 2,
-    "interval_sec": 0.75
+    "interval": 12
   }
 }
 ```
