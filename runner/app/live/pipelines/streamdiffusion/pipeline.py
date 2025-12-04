@@ -217,16 +217,18 @@ class StreamDiffusion(Pipeline):
                 update_kwargs['latent_postprocessing_config'] = _prepare_processing_config(new_params.latent_postprocessing)['processors']
             elif key == 'cached_attention':
                 curr_cfg = curr_params.get('cached_attention') or CachedAttentionConfig().model_dump()
-                enabled_changed = curr_cfg.get('enabled') != new_value['enabled']
-                if enabled_changed:
+                if curr_cfg.get('enabled') != new_value['enabled']:
+                    # Cannot change whether cached attention is enabled or disabled without a reload
                     return False
-                elif not new_value['enabled']:
+
+                if not new_value['enabled']:
+                    # noop if it's disabled
                     continue
 
-                if new_value['max_frames'] != curr_cfg.get('max_frames'):
-                    update_kwargs['cache_maxframes'] = new_value['max_frames']
-                if new_value['interval'] != curr_cfg.get('interval'):
-                    update_kwargs['cache_interval'] = new_value['interval']
+                update_kwargs.update({
+                    'cache_maxframes': new_value['max_frames'],
+                    'cache_interval': new_value['interval'],
+                })
             else:
                 update_kwargs[key] = new_value
 
