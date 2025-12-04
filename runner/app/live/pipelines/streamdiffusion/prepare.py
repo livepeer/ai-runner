@@ -282,17 +282,9 @@ def _create_params(
             )
             controlnets.append(config)
 
-    # Create IPAdapter config if specified
-    ip_adapter = IPAdapterConfig(enabled=False)
-    if ipa_type:
-        ip_adapter = IPAdapterConfig(
-            type=ipa_type,
-            enabled=True,
-        )
-
     # Create t_index_list based on number of timesteps. Only the size matters... 😏
-    opt_timesteps = OPTIMAL_TIMESTEPS_BY_TYPE.get(model_type, 3)
-    t_index_list = list(range(1, 50, 50 // opt_timesteps))[:opt_timesteps]
+    step_count = OPTIMAL_TIMESTEPS_BY_TYPE.get(model_type, 3)
+    t_index_list = list(range(1, 50, 50 // step_count))[:step_count]
 
     return StreamDiffusionParams(
         model_id=model_id,  # type: ignore
@@ -301,7 +293,10 @@ def _create_params(
         acceleration="tensorrt",
         t_index_list=t_index_list,
         controlnets=controlnets,
-        ip_adapter=ip_adapter,
+        ip_adapter=IPAdapterConfig(
+            enabled=ipa_type is not None,
+            type="faceid" if ipa_type == "faceid" else "regular",
+        ),
         image_postprocessing=ProcessingConfig(
             processors=[SingleProcessorConfig(type="realesrgan_trt")]
         ),
