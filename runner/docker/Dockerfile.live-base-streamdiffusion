@@ -39,6 +39,8 @@ RUN conda run -n comfystream pip install --no-cache-dir \
 ARG STREAMDIFFUSION_VERSION=e5b5121d58c468afcc365f98e65f3909de906d4a
 RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall git+https://github.com/livepeer/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt,controlnet,ipadapter]
 
+# Install diffusers from specific GitHub commit
+RUN conda run -n comfystream pip install --no-cache-dir --force-reinstall git+https://github.com/varshith15/diffusers.git@b8774195fe28d7e6e6844f2e9960fc0d97e9c52e
 
 WORKDIR /app
 
