@@ -81,6 +81,7 @@ jobs:
         include:
           - subtype: "sdturbo"
           - subtype: "sd15"
+          - subtype: "sd15-v2v"
           - subtype: "sdxl"
           - subtype: "sdxl-faceid"
     env:
