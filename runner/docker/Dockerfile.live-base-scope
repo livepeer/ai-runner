@@ -1,30 +1,24 @@
 ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
-# Install Miniconda and create the 'comfystream' environment
+# Install Python 3.10 via pyenv (needed for --system installs)
 ARG PYTHON_VERSION=3.10
-ENV CONDA_DIR="/workspace/miniconda3"
-ENV PATH="$CONDA_DIR/bin:$PATH" \
-    PIP_PREFER_BINARY=1
+RUN pyenv install $PYTHON_VERSION && \
+    pyenv global $PYTHON_VERSION && \
+    pyenv rehash
 
-RUN apt update && apt install -yqq --no-install-recommends wget curl ca-certificates && \
-    wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-py310_23.11.0-2-Linux-x86_64.sh -O ~/miniconda.sh && \
-    /bin/bash ~/miniconda.sh -b -p $CONDA_DIR && \
-    rm ~/miniconda.sh && \
-    conda init bash && \
-    conda config --set auto_activate_base false && \
-    conda clean -a -y && \
-    conda create -n comfystream python=$PYTHON_VERSION -y && \
-    conda run -n comfystream pip install --no-cache-dir --upgrade pip==23.3.2 setuptools==69.5.1 wheel==0.43.0 uv==0.9.9 && \
-    conda clean -a -y && \
-    apt purge -y --auto-remove wget curl && \
-    apt clean && rm -rf /var/lib/apt/lists/*
-
-# Install Scope lib into the comfystream environment
-ARG SCOPE_VERSION=734057a4701975941a45e8ca8342b495a762ba2f
-RUN conda run -n comfystream uv pip install --no-cache git+https://github.com/daydreamlive/scope.git@${SCOPE_VERSION}
+# Install uv
+ARG UV_VERSION=0.9.9
+ENV UV_NO_MODIFY_PATH=1
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
 
 WORKDIR /app
+
+# Install Scope lib using uv with --system flag to install system-wide
+# This way regular python/pip will work without needing wrapper tricks
+ARG SCOPE_VERSION=734057a4701975941a45e8ca8342b495a762ba2f
+RUN uv pip install --system --no-cache git+https://github.com/daydreamlive/scope.git@${SCOPE_VERSION}
 
 # Configure Scope models directory
 ENV DAYDREAM_SCOPE_MODELS_DIR="/models/Scope--models"
@@ -32,4 +26,3 @@ ENV DAYDREAM_SCOPE_MODELS_DIR="/models/Scope--models"
 # Disable HF hub connectivity to avoid internet access during runtime.
 # This is manually disabled on the script to download models (dl_checkpoints.sh)
 ENV HF_HUB_OFFLINE=1
-
