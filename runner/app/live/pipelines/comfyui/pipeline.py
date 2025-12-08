@@ -44,7 +44,7 @@ class ComfyUI(Pipeline):
     async def put_video_frame(self, frame: VideoFrame, request_id: str):
         frame.side_data.input = frame.tensor
         frame.side_data.skipped = True
-        out_frame = VideoOutput(frame.replace_tensor(torch.zeros()), request_id)
+        out_frame = VideoOutput(frame.replace_tensor(torch.zeros_like(frame.tensor)), request_id)
         await self.video_incoming_frames.put(out_frame)
         self.client.put_video_input(frame)
 
