@@ -219,18 +219,11 @@ function run_pipeline_prepare() {
   # ai-worker has live-app tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here
   docker image tag "$image" "livepeer/ai-runner:live-app-$pipeline"
 
-  # NOTE: We use the legacy HF_HUB_ENABLE_HF_TRANSFER env var and install hf_transfer package
-  # because the container image has huggingface_hub==0.35.0 (from docker), which doesn't support
-  # the newer HF_XET_HIGH_PERFORMANCE feature (introduced in v1.0+). The hf_transfer package
-  # provides fast downloads compatible with older huggingface_hub versions.
-  # TODO: Migrate container's huggingface_hub to v1.0+ and switch to HF_XET_HIGH_PERFORMANCE
   docker run --rm --name "ai-runner-${pipeline}-prepare" -v ./models:/models "${docker_run_flags[@]}" \
     -l "$label" \
     -e HF_HUB_OFFLINE=0 \
-    -e HF_HUB_ENABLE_HF_TRANSFER=1 \
     -e HF_TOKEN="${HF_TOKEN:-}" \
     "$image" bash -c "set -euo pipefail && \
-      python -m pip install --no-cache-dir hf_transfer==0.1.4 && \
       python -m app.tools.prepare_models --pipeline ${pipeline} && \
       chown -R $(id -u):$(id -g) /models"
 }

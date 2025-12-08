@@ -26,6 +26,10 @@ RUN pip install --no-cache-dir git+https://github.com/daydreamlive/StreamDiffusi
 # Install TensorRT bindings and libraries
 RUN python -m streamdiffusion.tools.install-tensorrt
 
+# Enable fast HF downloads for StreamDiffusion lib, which uses older huggingface_hub version
+RUN pip install --no-cache-dir hf_transfer==0.1.4
+ENV HF_HUB_ENABLE_HF_TRANSFER=1
+
 WORKDIR /app
 
 # Disable HF hub connectivity to avoid internet access during runtime.
