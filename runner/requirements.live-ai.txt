@@ -14,3 +14,6 @@ opencv-python==4.10.0.84
 av==14.4.0
 peft==0.17.0
 pydantic==2.11.7
+# Needed for pytorch-triton CUDA wheels
+--extra-index-url https://download.pytorch.org/whl/cu128
+pytorch-triton==3.3.0
