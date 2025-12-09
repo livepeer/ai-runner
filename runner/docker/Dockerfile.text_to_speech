@@ -1,6 +1,12 @@
 ARG BASE_IMAGE=livepeer/ai-runner:base
 FROM ${BASE_IMAGE}
 
+# Install uv
+ARG UV_VERSION=0.9.9
+ENV UV_NO_MODIFY_PATH=1
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
 # Install CUDA Toolkit to enable flash attention.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -8,7 +14,7 @@ RUN apt-get update && \
     g++ && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
+RUN uv pip install --no-cache \
     ninja \
     transformers==4.43.3 \
     peft \
@@ -16,7 +22,7 @@ RUN pip install --no-cache-dir \
     soundfile \
     g2p-en \
     flash_attn==2.5.6 \
-    git+https://github.com/huggingface/parler-tts.git@5d0aca9753ab74ded179732f5bd797f7a8c6f8ee
+    "parler-tts @ git+https://github.com/huggingface/parler-tts.git@5d0aca9753ab74ded179732f5bd797f7a8c6f8ee"
 
 # Override base working directory to ensure the correct working directory.
 WORKDIR /app
@@ -24,4 +30,4 @@ WORKDIR /app
 # Copy app directory to avoid rebuilding the base image during development.
 COPY app/ /app/app
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

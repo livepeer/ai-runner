@@ -82,8 +82,9 @@ RUN apt update && apt install -yqq \
     pkg-config \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
-RUN --mount=type=bind,source=requirements.live-ai.txt,target=/tmp/requirements.txt \
-    conda run -n comfystream pip install --root-user-action ignore --requirement /tmp/requirements.txt
+COPY pyproject.toml /tmp/pyproject.toml
+RUN PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 \
+    conda run -n comfystream pip install --root-user-action ignore "/tmp[live-ai]"
 
 # Set environment variables
 ENV MAX_WORKERS=1 \

@@ -1,0 +1,58 @@
+[project]
+name = "ai-runner"
+version = "0.1.0"
+description = "AI Runner - containerized inference runtime for the Livepeer AI network"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.111.0",
+    "pydantic>=2.7.2",
+    "uvicorn>=0.30.0",
+    "Pillow==10.3.0",
+    "numpy==1.26.4",
+    "psutil==6.0.0",
+    "prometheus_client>=0.21.1",
+    "nvidia-ml-py==12.560.30",
+    "pynvml==12.0.0",
+    "python-multipart==0.0.9",
+]
+
+[project.optional-dependencies]
+llm = [
+    "vllm==0.10.0",
+    "diffusers",
+    "accelerate",
+    "transformers",
+    "huggingface_hub",
+    "xformers",
+    "triton",
+    "peft",
+    "deepcache",
+    "safetensors",
+    "scipy",
+    "av",
+    "sentencepiece",
+    "protobuf",
+    "bitsandbytes",
+]
+live-ai = [
+    "aiohttp==3.10.9",
+    "pyzmq==26.2.0",
+    "watchdog==5.0.2",
+    "opencv-python==4.10.0.84",
+    "av==14.4.0",
+    "peft==0.17.0",
+    "pytorch-triton==3.3.0",
+]
+dev = [
+    "pytest",
+    "pytest-mock",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+pytorch-triton = { index = "pytorch-cu128" }
+
