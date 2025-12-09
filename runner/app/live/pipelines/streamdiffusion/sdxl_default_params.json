@@ -61,7 +61,10 @@
     }
   ],
   "ip_adapter": { "scale": 0.6, "enabled": true },
-  "ip_adapter_style_image_url": "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg"
+  "ip_adapter_style_image_url": "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg",
+  "cached_attention": {
+    "enabled": true
+  }
 }
 
 
