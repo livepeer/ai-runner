@@ -22,7 +22,7 @@ classifiers = [
 ]
 
 # Core runtime dependencies - PyTorch is NOT included here as it's provided
-# by base Docker images with CUDA-specific builds (see Dockerfile.live-base-*)
+# by Docker images with CUDA-specific builds (see Dockerfile.live-app-*)
 dependencies = [
     "aiohttp==3.10.9",
     "fastapi==0.111.0",
@@ -58,20 +58,6 @@ packages = ["app"]
 
 [tool.setuptools.package-dir]
 "" = "."
-
-[project.entry-points."ai_runner.pipeline"]
-streamdiffusion = "app.live.pipelines.streamdiffusion.pipeline:StreamDiffusion"
-comfyui = "app.live.pipelines.comfyui.pipeline:ComfyUI"
-scope = "app.live.pipelines.scope.pipeline:Scope"
-noop = "app.live.pipelines.noop:Noop"
-
-# Params entry points - lightweight imports for parameter parsing
-# If not specified, falls back to BaseParams
-[project.entry-points."ai_runner.pipeline_params"]
-streamdiffusion = "app.live.pipelines.streamdiffusion.params:StreamDiffusionParams"
-comfyui = "app.live.pipelines.comfyui.params:ComfyUIParams"
-scope = "app.live.pipelines.scope.params:ScopeParams"
-# noop uses BaseParams (no entry point needed)
 
 [tool.black]
 line-length = 100

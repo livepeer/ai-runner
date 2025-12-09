@@ -18,12 +18,19 @@ from app.utils.errors import InferenceError
 proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntary_ctxt_switches", "nonvoluntary_ctxt_switches", "CoreDumping"]
 
 class LiveVideoToVideoPipeline(Pipeline):
-    def __init__(self, model_id: str):
+    def __init__(
+        self,
+        model_id: str,
+        pipeline_import: str = "",
+        params_import: str = "",
+    ):
         self.version = os.getenv("VERSION", "undefined")
         self.model_id = model_id
         self.model_dir = get_model_dir()
         self.torch_device = get_torch_device()
         self.infer_module = "app.live.infer"
+        self.pipeline_import = pipeline_import
+        self.params_import = params_import
         self.restart_count = 0
         self.start_process()
 
@@ -106,8 +113,12 @@ class LiveVideoToVideoPipeline(Pipeline):
     def start_process(self):
         logging.info("Starting pipeline process")
         cmd = [sys.executable, "-u", "-m", self.infer_module]
-        cmd.extend(["--pipeline", self.model_id]) # we use the model_id as the pipeline name for now
+        cmd.extend(["--pipeline", self.model_id])  # pipeline name for logging/status
         cmd.extend(["--http-port", "8888"])
+        if self.pipeline_import:
+            cmd.extend(["--pipeline-import", self.pipeline_import])
+        if self.params_import:
+            cmd.extend(["--params-import", self.params_import])
         initial_params = os.environ.get("INFERPY_INITIAL_PARAMS")
         if initial_params:
             cmd.extend(["--initial-params", initial_params])

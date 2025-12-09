@@ -1,4 +1,4 @@
-# Pipeline Plugin Architecture
+# Pipeline Loading Architecture
 
 ## Overview
 
@@ -6,20 +6,25 @@ This document describes the architecture for making AI Runner pipelines pluggabl
 
 ## Key Design Decisions
 
-### 1. Entry Points for Discovery
+### 1. Import-Based Loading
 
-We use Python entry points (`ai_runner.pipeline` and `ai_runner.pipeline_params`) to discover pipelines at runtime. This allows:
+We use explicit import paths passed via CLI arguments to load pipelines at runtime:
+
+- `--pipeline-import` - Full import path for Pipeline class (e.g., `app.live.pipelines.noop:Noop`)
+- `--params-import` - Full import path for Params class (optional - empty uses `BaseParams`)
+
+This allows:
 
 - **Zero code changes** in ai-runner when adding new pipelines
-- **Dynamic discovery** - pipelines are found automatically when installed
-- **Multi-process compatibility** - entry points work in spawned subprocesses
+- **Simple configuration** - just pass import paths via env vars or CLI
+- **Multi-process compatibility** - import paths work in spawned subprocesses
 
 ### 2. Multi-Processing Compatibility
 
 Since pipelines run in spawned subprocesses (`mp.get_context("spawn")`):
 
 - Pipelines must be **installed packages** (not just Python files)
-- Entry points are discovered **in the spawned process**
+- Import paths are passed via CLI arguments to the spawned process
 - All dependencies must be installed and importable
 
 ### 3. Package Structure
@@ -28,140 +33,100 @@ The `ai-runner-base` package provides:
 
 - `app.live.pipelines.interface.Pipeline` - Abstract base class
 - `app.live.pipelines.interface.BaseParams` - Base parameter class
-- `app.live.pipelines.trickle` - Frame types (VideoFrame, VideoOutput, etc.)
+- `app.live.trickle` - Frame types (VideoFrame, VideoOutput, etc.)
 - Runtime infrastructure (process management, queues, etc.)
 
 External pipelines depend on `ai-runner-base` and implement the `Pipeline` interface.
 
+### 4. Entrypoint Packages
+
+Each pipeline has a separate entrypoint package that:
+
+- Depends on `ai-runner-base` and the pipeline library
+- Sets environment variables (`PIPELINE_IMPORT`, `PARAMS_IMPORT`)
+- Provides a CLI command to start the runner
+
+This keeps the pipeline code separate from the startup configuration.
+
 ## How It Works
 
-### Pipeline Discovery Flow
+### Pipeline Loading Flow
 
 ```
-1. Runner starts with PIPELINE=my-pipeline
-2. PipelineProcess.start("my-pipeline") is called
-3. In spawned process, loader.py discovers entry points:
-   - Checks installed packages for "ai_runner.pipeline" entry points
-   - Finds "my-pipeline" entry point
-   - Loads the pipeline class
-4. Pipeline is instantiated and initialized
+1. Entrypoint script sets PIPELINE_IMPORT and PARAMS_IMPORT env vars
+2. Entrypoint calls uvicorn with app.main:app
+3. main.py creates LiveVideoToVideoPipeline with env var values
+4. LiveVideoToVideoPipeline starts infer.py subprocess with --pipeline-import and --params-import
+5. infer.py passes import paths to ProcessGuardian
+6. In PipelineProcess (spawned subprocess):
+   - loader.py imports the Pipeline class using the import path
+   - loader.py imports the Params class (or uses BaseParams if empty)
+   - Pipeline is instantiated and initialized
 ```
 
-### Entry Point Registration
+### Import Path Format
 
-Pipelines register themselves in `pyproject.toml`:
+Import paths use the format `module.path:ClassName`:
 
-```toml
-[project.entry-points."ai_runner.pipeline"]
-my-pipeline = "my_pipeline.pipeline:MyPipeline"
-
-[project.entry-points."ai_runner.pipeline_params"]
-my-pipeline = "my_pipeline.params:MyPipelineParams"
+```
+app.live.pipelines.noop:Noop
+app.live.pipelines.streamdiffusion.pipeline:StreamDiffusion
+my_pipeline.pipeline:MyPipeline
 ```
 
-The params entry point points directly to the params class:
-- A factory function: `def create_params(params: dict) -> BaseParams`
-- A Pydantic class: The loader will instantiate it with `**params`
+The loader splits on `:` and uses `importlib.import_module` to load the class.
 
 ## Docker Image Strategy
 
 ### Current Approach
 
-Currently, each pipeline has its own Docker image:
-- `livepeer/ai-runner:live-base-streamdiffusion`
-- `livepeer/ai-runner:live-app-streamdiffusion`
-- `livepeer/ai-runner:live-base-scope`
-- `livepeer/ai-runner:live-app-scope`
+Each pipeline has its own final Docker image:
 
-### Proposed Approaches
+```
+Dockerfile.live-base                    # Common base: CUDA, pyenv, FFmpeg
+    ├── Dockerfile.live-app-streamdiffusion  # + PyTorch, StreamDiffusion, entrypoint
+    ├── Dockerfile.live-app-comfyui          # + ComfyUI, entrypoint
+    ├── Dockerfile.live-app-scope            # + Scope, entrypoint
+    └── Dockerfile.live-app-noop             # + CPU PyTorch, built-in noop
+```
 
-#### Option 1: Single Base Image + Runtime Install (Recommended)
+Each final image:
+1. Installs pipeline-specific libraries (PyTorch, StreamDiffusion, etc.)
+2. Installs `ai-runner-base` package
+3. Installs the pipeline's entrypoint package
+4. Sets CMD to the pipeline's CLI command (e.g., `streamdiffusion-runner`)
 
-Use a single base image and install pipelines at runtime:
+### External Pipeline Images
+
+External pipelines can create their own Docker images:
 
 ```dockerfile
 FROM livepeer/ai-runner:live-base
 
-# Install pipeline via uv (fast)
-RUN uv pip install my-pipeline
+# Install Python and PyTorch
+RUN pyenv install 3.10 && pyenv global 3.10
+RUN pip install torch --index-url https://download.pytorch.org/whl/cu128
 
-# Or install from git
-RUN uv pip install git+https://github.com/org/my-pipeline.git
+# Install ai-runner-base
+COPY runner/pyproject.toml /app/pyproject.toml
+RUN pip install --no-build-isolation .
+COPY runner/app/ /app/app
+RUN pip install --no-build-isolation --no-deps .
+
+# Install your pipeline and entrypoint
+RUN pip install my-pipeline my-pipeline-entrypoint
+
+CMD ["my-pipeline-runner"]
 ```
-
-**Pros:**
-- Single base image to maintain
-- Pipelines can be updated without rebuilding images
-- Works with PyPI packages
-
-**Cons:**
-- Requires network access at build time
-- Slower container startup if installing at runtime
-
-#### Option 2: Pipeline-Specific Base Images
-
-Each pipeline provides its own base image with dependencies:
-
-```dockerfile
-# In my-pipeline repo
-FROM livepeer/ai-runner:live-base
-
-# Install pipeline-specific system dependencies
-RUN apt-get install -y some-system-lib
-
-# Install Python dependencies
-RUN uv pip install my-pipeline
-
-# ai-runner code is copied in final stage
-FROM my-pipeline-base
-COPY --from=ai-runner /app /app
-```
-
-**Pros:**
-- Pipelines control their own dependencies
-- Can optimize images per pipeline
-
-**Cons:**
-- More images to maintain
-- Harder to update ai-runner base
-
-#### Option 3: Pure Python Dependencies (Best Case)
-
-If pipelines only need Python dependencies:
-
-```dockerfile
-FROM livepeer/ai-runner:live-base
-
-# Set environment variable for auto-install
-ENV AUTO_INSTALL_PIPELINE="my-pipeline"
-
-# Startup script installs pipeline if needed
-COPY install-pipeline.sh /usr/local/bin/
-```
-
-Then modify runner startup to check `AUTO_INSTALL_PIPELINE` and install automatically.
-
-**Pros:**
-- No Docker rebuilds needed
-- Pipelines can be installed from PyPI
-- Works with `uv` for fast installs
-
-**Cons:**
-- Only works for pure Python dependencies
-- Requires network at runtime
 
 ## Implementation Status
 
 ✅ **Completed:**
-- Entry point discovery system
-- Pipeline loader refactoring
-- Base package structure (`pyproject.toml`)
+- Import-based pipeline loading (`--pipeline-import`, `--params-import`)
+- Entrypoint packages for each pipeline
+- Simplified loader (no entry point discovery)
+- Docker image restructuring
 - Documentation
-
-🔄 **In Progress:**
-- Factory functions for built-in pipeline params
-- Example external pipeline package
-- Docker image strategy documentation
 
 📋 **Future Work:**
 - Auto-install pipeline support (`AUTO_INSTALL_PIPELINE` env var)
@@ -173,16 +138,18 @@ Then modify runner startup to check `AUTO_INSTALL_PIPELINE` and install automati
 
 ### For Existing Pipelines (streamdiffusion, scope, etc.)
 
-1. **Keep current Docker images** - No breaking changes
-2. **Add entry points** - Register in `pyproject.toml` (already done)
-3. **Gradually migrate** - Can move to separate repos over time
+Existing pipelines have been migrated to the new structure:
+1. Pipeline code remains in `runner/app/live/pipelines/`
+2. Entrypoint packages created in `pipelines/{name}-entrypoint/`
+3. Docker images renamed to `Dockerfile.live-app-{pipeline}`
 
 ### For New Pipelines
 
 1. **Create separate repo** - `my-pipeline/`
 2. **Depend on ai-runner-base** - `dependencies = ["ai-runner-base>=0.1.0"]`
-3. **Register entry points** - In `pyproject.toml`
-4. **Install and use** - `pip install my-pipeline` then `PIPELINE=my-pipeline`
+3. **Create entrypoint package** - Sets import paths and starts uvicorn
+4. **Create Dockerfile** - Installs your packages
+5. **Run** - `my-pipeline-runner`
 
 ## Example: External Pipeline Package
 
@@ -192,23 +159,21 @@ See `docs/external-pipelines.md` for a complete example.
 
 ### Q: How do pipelines link to their implementation given multiprocessing?
 
-**A:** Entry points are discovered in the spawned process. Since we use `spawn` context, the process starts fresh and imports packages. As long as the pipeline package is installed, its entry points will be discoverable.
+**A:** Import paths are passed as CLI arguments to the spawned process. Since we use `spawn` context, the process starts fresh and imports packages. As long as the pipeline package is installed, it will be importable.
 
 ### Q: How do pipelines provide their own Docker images?
 
-**A:** Three options:
-1. **Runtime install** - Install pipeline in Dockerfile or at startup
-2. **Pipeline base image** - Pipeline provides base image with deps, ai-runner adds its code
-3. **Pure Python** - Use `AUTO_INSTALL_PIPELINE` env var for automatic install
+**A:** Pipelines create a Dockerfile that:
+1. Starts FROM `livepeer/ai-runner:live-base`
+2. Installs their dependencies
+3. Installs `ai-runner-base`
+4. Installs their entrypoint package
+5. Sets CMD to their runner command
 
 ### Q: Can we avoid Docker entirely?
 
-**A:** For pure Python dependencies, yes! Use `uv pip install my-pipeline` at runtime. For system dependencies, you'll still need Docker, but pipelines can specify their own base images.
+**A:** For development, yes! Install `ai-runner-base` and your pipeline in a virtual environment, then run your entrypoint command. For production, Docker is recommended for reproducibility.
 
 ### Q: How do we handle pipeline dependencies?
 
-**A:** Pipelines declare dependencies in their `pyproject.toml`. When installed via `pip` or `uv`, dependencies are resolved automatically. For Docker, pipelines can either:
-- Install in their Dockerfile
-- Use a base image with dependencies pre-installed
-- Rely on runtime install (if pure Python)
-
+**A:** Pipelines declare dependencies in their `pyproject.toml`. When installed via `pip` or `uv`, dependencies are resolved automatically. The entrypoint package should depend on both `ai-runner-base` and the pipeline library.

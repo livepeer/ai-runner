@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comfyui-entrypoint"
+version = "0.1.0"
+description = "ComfyUI pipeline entrypoint for AI Runner"
+requires-python = ">=3.10"
+dependencies = [
+    "ai-runner-base>=0.1.0",
+    # ComfyUI is installed in the base Docker image, not via pip
+]
+
+[project.scripts]
+comfyui-runner = "comfyui_entrypoint:main"
+
+[tool.setuptools]
+packages = ["comfyui_entrypoint"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+

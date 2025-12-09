@@ -1,0 +1,60 @@
+ARG BASE_IMAGE=livepeer/ai-runner:live-base
+FROM ${BASE_IMAGE}
+
+# Install Python 3.10 via pyenv (needed for --system installs)
+ARG PYTHON_VERSION=3.10
+RUN pyenv install $PYTHON_VERSION && \
+    pyenv global $PYTHON_VERSION && \
+    pyenv rehash
+
+# Install uv
+ARG UV_VERSION=0.9.9
+ENV UV_NO_MODIFY_PATH=1
+RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Install Scope lib using uv with --system flag to install system-wide
+# This way regular python/pip will work without needing wrapper tricks
+ARG SCOPE_VERSION=734057a4701975941a45e8ca8342b495a762ba2f
+RUN uv pip install --system --no-cache git+https://github.com/daydreamlive/scope.git@${SCOPE_VERSION}
+
+# Configure Scope models directory
+ENV DAYDREAM_SCOPE_MODELS_DIR="/models/Scope--models"
+
+# Disable HF hub connectivity to avoid internet access during runtime.
+# This is manually disabled on the script to download models (dl_checkpoints.sh)
+ENV HF_HUB_OFFLINE=1
+
+# -----------------------------------------------------------------------------
+# Install ai-runner-base and scope-entrypoint
+# -----------------------------------------------------------------------------
+
+# Copy ai-runner-base package and install dependencies first (for caching)
+COPY runner/pyproject.toml /app/pyproject.toml
+RUN mkdir -p /app/app && touch /app/app/__init__.py
+RUN uv pip install --system --no-cache --no-build-isolation .
+
+# Copy actual application code
+COPY runner/app/ /app/app
+COPY runner/images/ /app/images
+COPY runner/bench.py /app/bench.py
+
+# Re-install to register package with actual code
+RUN uv pip install --system --no-cache --no-build-isolation --no-deps .
+
+# Copy and install the entrypoint package
+COPY pipelines/scope-entrypoint /tmp/scope-entrypoint
+RUN uv pip install --system --no-cache /tmp/scope-entrypoint && \
+    rm -rf /tmp/scope-entrypoint
+
+# Runtime configuration
+ARG GIT_SHA
+ARG VERSION="undefined"
+
+ENV GIT_SHA="${GIT_SHA}" \
+    VERSION="${VERSION}" \
+    PIPELINE="live-video-to-video" \
+    MODEL_ID="scope"
+
+CMD ["scope-runner"]
+

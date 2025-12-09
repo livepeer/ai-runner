@@ -30,16 +30,28 @@ from .loading_overlay import LoadingOverlayRenderer
 
 class PipelineProcess:
     @staticmethod
-    def start(pipeline_name: str, params: dict | None = None):
-        instance = PipelineProcess(pipeline_name)
+    def start(
+        pipeline_name: str,
+        params: dict | None = None,
+        pipeline_import: str = "",
+        params_import: str = "",
+    ):
+        instance = PipelineProcess(pipeline_name, pipeline_import, params_import)
         if params is not None:
             instance.update_params(params)
         instance.process.start()
         instance.start_time = time.time()
         return instance
 
-    def __init__(self, pipeline_name: str):
+    def __init__(
+        self,
+        pipeline_name: str,
+        pipeline_import: str = "",
+        params_import: str = "",
+    ):
         self.pipeline_name = pipeline_name
+        self.pipeline_import = pipeline_import
+        self.params_import = params_import
         self.ctx = mp.get_context("spawn")
 
         self.input_queue = self.ctx.Queue(maxsize=1)
@@ -223,9 +235,9 @@ class PipelineProcess:
                 params = {}
 
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
-                self._last_params = parse_pipeline_params(self.pipeline_name, params)
+                self._last_params = parse_pipeline_params(self.params_import, params)
                 self._last_params_request_id = self.request_id
-                pipeline = load_pipeline(self.pipeline_name)
+                pipeline = load_pipeline(self.pipeline_import)
                 await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:
@@ -237,9 +249,9 @@ class PipelineProcess:
                 with log_timing(
                     f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"
                 ):
-                    self._last_params = parse_pipeline_params(self.pipeline_name, {})
+                    self._last_params = parse_pipeline_params(self.params_import, {})
                     self._last_params_request_id = self.request_id
-                    pipeline = load_pipeline(self.pipeline_name)
+                    pipeline = load_pipeline(self.pipeline_import)
                     await pipeline.initialize()
                     return pipeline
             except Exception as e:
@@ -349,7 +361,7 @@ class PipelineProcess:
                 )
 
                 # Check resolution change within the same request_id
-                new_params = parse_pipeline_params(self.pipeline_name, params)
+                new_params = parse_pipeline_params(self.params_import, params)
                 if self._last_params_request_id == self.request_id:
                     new_resolution = new_params.get_output_resolution()
                     current_resolution = self._last_params.get_output_resolution()

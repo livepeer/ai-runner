@@ -81,7 +81,14 @@ def load_pipeline(pipeline: str, model_id: str) -> any:
         case "live-video-to-video":
             from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
 
-            return LiveVideoToVideoPipeline(model_id)
+            # Allow import paths to be specified via environment variables
+            pipeline_import = os.environ.get("PIPELINE_IMPORT", "")
+            params_import = os.environ.get("PARAMS_IMPORT", "")
+            return LiveVideoToVideoPipeline(
+                model_id,
+                pipeline_import=pipeline_import,
+                params_import=params_import,
+            )
         case "text-to-speech":
             from app.pipelines.text_to_speech import TextToSpeechPipeline
 

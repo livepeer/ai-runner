@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scope-entrypoint"
+version = "0.1.0"
+description = "Scope pipeline entrypoint for AI Runner"
+requires-python = ">=3.10"
+dependencies = [
+    "ai-runner-base>=0.1.0",
+    # Scope is installed in the base Docker image, not via pip
+]
+
+[project.scripts]
+scope-runner = "scope_entrypoint:main"
+
+[tool.setuptools]
+packages = ["scope_entrypoint"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+

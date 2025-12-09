@@ -7,7 +7,7 @@ import sys
 import os
 import traceback
 import threading
-from typing import List
+from typing import List, Optional
 
 from .process import ProcessGuardian
 from .streamer import PipelineStreamer
@@ -15,6 +15,10 @@ from .streamer.protocol import TrickleProtocol, ZeroMQProtocol
 from .trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
 from .api import start_http_server
 from .log import config_logging, log_timing
+
+# Default pipeline import paths (noop is the built-in default)
+DEFAULT_PIPELINE_IMPORT = "app.live.pipelines.noop:Noop"
+DEFAULT_PARAMS_IMPORT = ""  # Empty means use BaseParams
 
 
 _UNCAUGHT_EXCEPTION_EVENT = asyncio.Event()
@@ -62,6 +66,8 @@ async def main(
     control_url: str,
     events_url: str,
     pipeline: str,
+    pipeline_import: str,
+    params_import: str,
     params: dict,
     request_id: str,
     manifest_id: str,
@@ -71,7 +77,12 @@ async def main(
     _MAIN_LOOP = asyncio.get_event_loop()
     _MAIN_LOOP.set_exception_handler(asyncio_exception_handler)
 
-    process = ProcessGuardian(pipeline, params or {})
+    process = ProcessGuardian(
+        pipeline,
+        params or {},
+        pipeline_import=pipeline_import,
+        params_import=params_import,
+    )
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
@@ -156,7 +167,19 @@ if __name__ == "__main__":
         "--http-port", type=int, default=8888, help="Port for the HTTP server"
     )
     parser.add_argument(
-        "--pipeline", type=str, default="comfyui", help="Pipeline to use"
+        "--pipeline", type=str, default="noop", help="Pipeline name (for logging/status)"
+    )
+    parser.add_argument(
+        "--pipeline-import",
+        type=str,
+        default=DEFAULT_PIPELINE_IMPORT,
+        help="Full import path for Pipeline class (e.g., 'app.live.pipelines.noop:Noop')",
+    )
+    parser.add_argument(
+        "--params-import",
+        type=str,
+        default=DEFAULT_PARAMS_IMPORT,
+        help="Full import path for Params class (e.g., 'app.live.pipelines.streamdiffusion.params:StreamDiffusionParams'). Empty uses BaseParams.",
     )
     parser.add_argument(
         "--initial-params",
@@ -233,6 +256,8 @@ if __name__ == "__main__":
                 control_url=args.control_url,
                 events_url=args.events_url,
                 pipeline=args.pipeline,
+                pipeline_import=args.pipeline_import,
+                params_import=args.params_import,
                 params=params,
                 request_id=args.request_id,
                 manifest_id=args.manifest_id,

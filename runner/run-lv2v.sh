@@ -6,12 +6,10 @@ PORT=8900
 
 # Build images, this will be quick if everything is cached
 docker build -t livepeer/ai-runner:live-base -f docker/Dockerfile.live-base .
-if [ "${PIPELINE}" = "noop" ]; then
-    docker build -t livepeer/ai-runner:live-app-noop -f docker/Dockerfile.live-app-noop .
-else
-    docker build -t livepeer/ai-runner:live-base-${PIPELINE} -f docker/Dockerfile.live-base-${PIPELINE} .
-    docker build -t livepeer/ai-runner:live-app-${PIPELINE} -f docker/Dockerfile.live-app__PIPELINE__ --build-arg PIPELINE=${PIPELINE} .
-fi
+
+# Build the pipeline-specific app image
+# Each pipeline has a single Dockerfile.live-app-{pipeline} that builds the final image
+docker build -t livepeer/ai-runner:live-app-${PIPELINE} -f docker/Dockerfile.live-app-${PIPELINE} .
 
 CONTAINER_NAME=live-video-to-video-${PIPELINE}
 docker run -it --rm --name ${CONTAINER_NAME} \

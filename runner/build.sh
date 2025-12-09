@@ -3,19 +3,13 @@ set -e  # Exit on any error
 
 # Configuration
 export PIPELINE=comfyui
-BASE_IMAGE="livepeer/ai-runner:live-base-comfyui"
 APP_IMAGE="livepeer/ai-runner:live-app-${PIPELINE}"
 
-# Build base image
-build_base() {
-    echo "Building base image..."
-    docker build -t ${BASE_IMAGE} -f docker/Dockerfile.live-base-comfyui .
-}
-
-# Build application image
+# Build application image (final image for comfyui)
 build_app() {
     echo "Building application image..."
-    docker build -t ${APP_IMAGE} -f docker/Dockerfile.live-app__PIPELINE__ --build-arg PIPELINE=${PIPELINE} .
+    # Note: comfyui uses an external base image, so no live-base dependency
+    docker build -t ${APP_IMAGE} -f docker/Dockerfile.live-app-comfyui ..
 }
 
 # Download checkpoints
@@ -40,16 +34,12 @@ run_app() {
 
 # Target: build-all
 build_all() {
-    build_base
     build_app
     download_checkpoints
 }
 
 # Parse command line arguments
 case "$1" in
-    "base")
-        build_base
-        ;;
     "app")
         build_app
         ;;
@@ -63,15 +53,11 @@ case "$1" in
         build_all
         ;;
     *)
-        echo "Usage: $0 {base|app|checkpoints|run|all}"
-        echo "  base       - Build base image only"
-        echo "  app        - Build application image only"
+        echo "Usage: $0 {app|models|run|all}"
+        echo "  app        - Build application image"
         echo "  models     - Download model checkpoints"
         echo "  run        - Run the application"
         echo "  all        - Build everything in sequence"
         exit 1
         ;;
 esac
-
-
-
