@@ -371,7 +371,7 @@ class StreamDiffusionParams(BaseParams):
     latent_postprocessing: Optional[ProcessingConfig[LatentProcessorsName]] = None
     """List of latent postprocessor configurations for latent processing."""
 
-    cached_attention: CachedAttentionConfig = Field(default_factory=lambda: CachedAttentionConfig(enabled=False))
+    cached_attention: CachedAttentionConfig = Field(default_factory=lambda: CachedAttentionConfig(enabled=True))
     """Cached attention configuration."""
 
     def get_output_resolution(self) -> tuple[int, int]:
