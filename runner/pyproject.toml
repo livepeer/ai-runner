@@ -47,6 +47,34 @@ dev = [
     "pytest",
     "pytest-mock",
 ]
+batch = [
+    "diffusers==0.31.0",
+    "accelerate==0.30.1",
+    "transformers==4.43.3",
+    "huggingface_hub==0.23.2",
+    "xformers==0.0.23",
+    "triton>=2.1.0",
+    "peft==0.11.1",
+    "deepcache==0.1.1",
+    "safetensors==0.4.3",
+    "scipy==1.13.0",
+    "av==12.1.0",
+    "sentencepiece==0.2.0",
+    "protobuf==5.27.2",
+    "bitsandbytes==0.43.3",
+    "types-psutil==6.0.0.20241011",
+    "PyYAML==6.0.2",
+]
+
+[tool.uv]
+# Declare mutually exclusive extras (different torch versions, used by different images)
+conflicts = [
+    [
+        { extra = "batch" },
+        { extra = "llm" },
+        { extra = "live-ai" },
+    ],
+]
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
@@ -55,4 +83,3 @@ explicit = true
 
 [tool.uv.sources]
 pytorch-triton = { index = "pytorch-cu128" }
-
