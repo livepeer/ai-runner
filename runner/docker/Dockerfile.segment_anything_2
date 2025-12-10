@@ -7,6 +7,9 @@ ENV UV_NO_MODIFY_PATH=1
 RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
+# Create venv using system Python
+RUN uv venv
+
 RUN uv pip install --no-cache \
     torch==2.3.1 \
     torchvision==0.18.1 \

@@ -1,8 +1,8 @@
 ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
-# Install Python 3.10 via uv
-RUN uv python install 3.10
+# Install Python 3.10 via uv and create venv
+RUN uv python install 3.10 && uv venv
 
 WORKDIR /app
 
