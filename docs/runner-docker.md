@@ -22,7 +22,7 @@ To build a pipeline-specific container, you need to build the base container fir
 2. **Build the Base Container**:
 
    ```bash
-   docker build --build-arg VERSION=$(./print_version.sh) -t livepeer/ai-runner:base .
+   docker build -f docker/Dockerfile --build-arg VERSION=$(./print_version.sh) -t livepeer/ai-runner:base .
    ```
 
    This command builds the base container and tags it as `livepeer/ai-runner:base`.
