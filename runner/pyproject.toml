@@ -2,7 +2,7 @@
 name = "ai-runner"
 version = "0.1.0"
 description = "AI Runner - containerized inference runtime for the Livepeer AI network"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.12"
 dependencies = [
     "fastapi==0.115.6",
     "uvicorn==0.38.0",
