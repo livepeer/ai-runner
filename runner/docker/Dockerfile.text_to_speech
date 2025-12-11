@@ -10,6 +10,7 @@ RUN apt-get update && \
     g++ && \
     rm -rf /var/lib/apt/lists/*
 
+# Install dependencies (flash_attn needs torch at build time, so use --no-build-isolation)
 RUN uv pip install --no-cache \
     ninja \
     transformers==4.43.3 \
@@ -17,8 +18,8 @@ RUN uv pip install --no-cache \
     deepcache \
     soundfile \
     g2p-en \
-    flash_attn==2.5.6 \
-    "parler-tts @ git+https://github.com/huggingface/parler-tts.git@5d0aca9753ab74ded179732f5bd797f7a8c6f8ee"
+    "parler-tts @ git+https://github.com/huggingface/parler-tts.git@5d0aca9753ab74ded179732f5bd797f7a8c6f8ee" && \
+    uv pip install --no-cache --no-build-isolation flash_attn==2.5.6
 
 # Copy app directory to avoid rebuilding the base image during development.
 COPY app/ /app/app
