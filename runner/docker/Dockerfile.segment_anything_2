@@ -1,14 +1,7 @@
 ARG BASE_IMAGE=livepeer/ai-runner:base
 FROM ${BASE_IMAGE}
 
-# Install uv
-ARG UV_VERSION=0.9.9
-ENV UV_NO_MODIFY_PATH=1
-RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
-
-# Create venv using system Python
-RUN uv venv
+WORKDIR /app
 
 RUN uv pip install --no-cache \
     torch==2.3.1 \
@@ -16,9 +9,6 @@ RUN uv pip install --no-cache \
     torchaudio==2.3.1 \
     xformers==0.0.27 \
     "sam-2 @ git+https://github.com/facebookresearch/sam2.git@0f6515ae853c40420ea8e3dd250f8031bbf03023"
-
-# Override base working directory to ensure the correct working directory.
-WORKDIR /app
 
 # Copy app directory to avoid rebuilding the base image during development.
 COPY app/ /app/app

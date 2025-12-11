@@ -4,6 +4,7 @@ FROM ${BASE_IMAGE}
 # Install Python 3.11 via uv and create venv in /app
 WORKDIR /app
 RUN uv python install 3.11 && uv venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Install StreamDiffusion dependencies
 RUN uv pip install --no-cache \

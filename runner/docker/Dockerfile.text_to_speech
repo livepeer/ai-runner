@@ -1,14 +1,7 @@
 ARG BASE_IMAGE=livepeer/ai-runner:base
 FROM ${BASE_IMAGE}
 
-# Install uv
-ARG UV_VERSION=0.9.9
-ENV UV_NO_MODIFY_PATH=1
-RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
-
-# Create venv using system Python
-RUN uv venv
+WORKDIR /app
 
 # Install CUDA Toolkit to enable flash attention.
 RUN apt-get update && \
@@ -26,9 +19,6 @@ RUN uv pip install --no-cache \
     g2p-en \
     flash_attn==2.5.6 \
     "parler-tts @ git+https://github.com/huggingface/parler-tts.git@5d0aca9753ab74ded179732f5bd797f7a8c6f8ee"
-
-# Override base working directory to ensure the correct working directory.
-WORKDIR /app
 
 # Copy app directory to avoid rebuilding the base image during development.
 COPY app/ /app/app

@@ -20,9 +20,12 @@ ENV PATH="/root/.local/bin:$PATH"
 
 # Install Python 3.11 via uv and create venv
 RUN uv python install 3.11 && uv venv
+ENV PATH="/app/.venv/bin:$PATH"
 
-# Install torch (not in pyproject.toml as torch versions vary per image)
-RUN uv pip install --no-cache torch==2.4.0 torchvision torchaudio
+# Upgrade pip and install your desired packages
+ARG PIP_VERSION=24.2
+RUN uv pip install --no-cache --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0 && \
+    uv pip install --no-cache torch==2.4.0 torchvision torchaudio
 
 ARG VERSION="undefined"
 ENV VERSION=${VERSION}

@@ -1,14 +1,7 @@
 ARG BASE_IMAGE=livepeer/ai-runner:base
 FROM ${BASE_IMAGE}
 
-# Install uv
-ARG UV_VERSION=0.9.9
-ENV UV_NO_MODIFY_PATH=1
-RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
-
-# Create venv using system Python
-RUN uv venv
+WORKDIR /app
 
 # Install CUDA Toolkit to enable flash attention.
 RUN apt-get update && \
@@ -32,9 +25,6 @@ ENV VERSION=${VERSION}
 RUN uv pip install --no-cache faster-whisper && \
     uv pip install --no-cache --force-reinstall ctranslate2==4.4.0 && \
     uv pip install --no-cache numpy==1.26.4
-
-# Override base working directory to ensure the correct working directory.
-WORKDIR /app
 
 # Copy app directory to avoid rebuilding the base image during development.
 COPY app/ /app/app

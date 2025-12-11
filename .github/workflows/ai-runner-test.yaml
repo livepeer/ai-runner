@@ -18,18 +18,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
-          cache: "pip"
+          version: "0.9.9"
 
       - name: Install dependencies
+        working-directory: runner
         run: |
-          python -m pip install --upgrade pip
-          pip install -r runner/requirements-dev.txt
-          pip install -r runner/requirements.txt
+          uv python install 3.11
+          uv sync --locked --extra batch --extra dev
 
       - name: Run tests
         working-directory: runner
-        run: pytest --verbose --showlocals
+        run: uv run pytest --verbose --showlocals

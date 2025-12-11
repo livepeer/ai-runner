@@ -18,12 +18,17 @@ ENV UV_NO_MODIFY_PATH=1
 RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
-# Install Python 3.11 via uv and create venv
+# Install Python via uv and create venv
+ARG PYTHON_VERSION=3.11
+ARG PIP_VERSION=23.3.2
+
 WORKDIR /app
-RUN uv python install 3.11 && uv venv
+RUN uv python install $PYTHON_VERSION && uv venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Install torch (older version for batch pipelines)
-RUN uv pip install --no-cache torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1
+RUN uv pip install --no-cache --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0 && \
+    uv pip install --no-cache torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1
 
 ARG VERSION="undefined"
 ENV VERSION=${VERSION}
