@@ -97,6 +97,9 @@ class StreamDiffusion(Pipeline):
         if _is_bchw_format(out_tensor):
             out_tensor = out_tensor.permute(0, 2, 3, 1)
 
+        if out_tensor.dim() != 4 or out_tensor.shape[0] != 1 or out_tensor.shape[-1] != 3:
+            logging.error(f"[StreamDiffusion] Invalid output tensor shape for encoder: {out_tensor.shape}. Expected (1, H, W, 3). Params: {self.params}")
+
         return out_tensor
 
     async def get_processed_video_frame(self) -> VideoOutput:
