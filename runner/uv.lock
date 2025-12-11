@@ -103,6 +103,7 @@ batch = [
     { name = "safetensors" },
     { name = "scipy" },
     { name = "sentencepiece" },
+    { name = "setuptools", version = "69.5.1", source = { registry = "https://pypi.org/simple" } },
     { name = "transformers", version = "4.43.3", source = { registry = "https://pypi.org/simple" } },
     { name = "triton", version = "2.1.0", source = { registry = "https://pypi.org/simple" } },
     { name = "types-psutil" },
@@ -135,6 +136,7 @@ llm = [
     { name = "safetensors" },
     { name = "scipy" },
     { name = "sentencepiece" },
+    { name = "setuptools", version = "69.5.1", source = { registry = "https://pypi.org/simple" } },
     { name = "transformers", version = "4.57.3", source = { registry = "https://pypi.org/simple" } },
     { name = "triton", version = "3.3.1", source = { registry = "https://pypi.org/simple" } },
     { name = "vllm" },
@@ -185,6 +187,8 @@ requires-dist = [
     { name = "scipy", marker = "extra == 'llm'" },
     { name = "sentencepiece", marker = "extra == 'batch'", specifier = "==0.2.0" },
     { name = "sentencepiece", marker = "extra == 'llm'" },
+    { name = "setuptools", marker = "extra == 'batch'", specifier = "==69.5.1" },
+    { name = "setuptools", marker = "extra == 'llm'", specifier = "==69.5.1" },
     { name = "transformers", marker = "extra == 'batch'", specifier = "==4.43.3" },
     { name = "transformers", marker = "extra == 'llm'" },
     { name = "triton", marker = "extra == 'batch'", specifier = ">=2.1.0" },
@@ -386,7 +390,7 @@ name = "bitsandbytes"
 version = "0.43.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-llm'" },
+    { name = "numpy" },
     { name = "torch", version = "2.1.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-9-ai-runner-batch' or (extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
     { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm')" },
 ]
@@ -755,7 +759,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or extra == 'extra-9-ai-runner-batch' or extra != 'extra-9-ai-runner-live-ai' or (extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra != 'extra-9-ai-runner-llm')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -1128,7 +1132,7 @@ name = "importlib-metadata"
 version = "8.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-llm'" },
+    { name = "zipp" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/76/66/650a33bd90f786193e4de4b3ad86ea60b53c89b669a5c7be931fac31cdb0/importlib_metadata-8.7.0.tar.gz", hash = "sha256:d13b81ad223b890aa16c5471f2ac3056cf76c5f10f82d6f9292f0b415f389000", size = 56641, upload-time = "2025-04-27T15:29:01.736Z" }
 wheels = [
@@ -1158,7 +1162,7 @@ name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-live-ai' or extra == 'extra-9-ai-runner-llm'" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
@@ -1390,13 +1394,13 @@ name = "mlx-lm"
 version = "0.28.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "jinja2" },
+    { name = "jinja2", marker = "sys_platform == 'darwin'" },
     { name = "mlx", marker = "sys_platform == 'darwin'" },
-    { name = "numpy" },
-    { name = "protobuf" },
-    { name = "pyyaml" },
-    { name = "sentencepiece" },
-    { name = "transformers", version = "4.57.3", source = { registry = "https://pypi.org/simple" } },
+    { name = "numpy", marker = "sys_platform == 'darwin'" },
+    { name = "protobuf", marker = "sys_platform == 'darwin'" },
+    { name = "pyyaml", marker = "sys_platform == 'darwin'" },
+    { name = "sentencepiece", marker = "sys_platform == 'darwin'" },
+    { name = "transformers", version = "4.57.3", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f2/7f/94b3f7e00c4681a4fe2d47b519458245bd8a8f0506b1ce018d1850bbcf79/mlx_lm-0.28.4.tar.gz", hash = "sha256:3661d8ef5f0e2695d52993e0df1ed2c1f93ca1d094258146c18d9cec0c50514e", size = 232455, upload-time = "2025-12-03T22:39:59.122Z" }
 wheels = [
@@ -1763,7 +1767,7 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "nvidia-cublas-cu12", version = "12.6.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai')" },
+    { name = "nvidia-cublas-cu12", version = "12.6.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/93/a201a12d3ec1caa8c6ac34c1c2f9eeb696b886f0c36ff23c638b46603bd0/nvidia_cudnn_cu12-9.5.1.17-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:9fd4584468533c61873e5fda8ca41bac3a38bcb2d12350830c69b0a96a7e4def", size = 570523509, upload-time = "2024-10-25T19:53:03.148Z" },
@@ -1793,7 +1797,7 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1f/37/c50d2b2f2c07e146776389e3080f4faf70bcc4fa6e19d65bb54ca174ebc3/nvidia_cufft_cu12-11.3.0.4-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:d16079550df460376455cba121db6564089176d9bac9e4f360493ca4741b22a6", size = 200164144, upload-time = "2024-11-20T17:40:58.288Z" },
@@ -1868,9 +1872,9 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "nvidia-cublas-cu12", version = "12.6.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai')" },
-    { name = "nvidia-cusparse-cu12", version = "12.5.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai')" },
-    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai')" },
+    { name = "nvidia-cublas-cu12", version = "12.6.4.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
+    { name = "nvidia-cusparse-cu12", version = "12.5.4.2", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/93/17/dbe1aa865e4fdc7b6d4d0dd308fdd5aaab60f939abfc0ea1954eac4fb113/nvidia_cusolver_cu12-11.7.1.2-py3-none-manylinux2014_aarch64.whl", hash = "sha256:0ce237ef60acde1efc457335a2ddadfd7610b892d94efee7b776c64bb1cac9e0", size = 157833628, upload-time = "2024-10-01T17:05:05.591Z" },
@@ -1905,7 +1909,7 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/eb/6681efd0aa7df96b4f8067b3ce7246833dd36830bb4cec8896182773db7d/nvidia_cusparse_cu12-12.5.4.2-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:d25b62fb18751758fe3c93a4a08eff08effedfe4edf1c6bb5afd0890fe88f887", size = 216451147, upload-time = "2024-11-20T17:44:18.055Z" },
@@ -2723,7 +2727,7 @@ name = "pytorch-triton"
 version = "3.3.0"
 source = { registry = "https://download.pytorch.org/whl/cu128" }
 dependencies = [
-    { name = "setuptools" },
+    { name = "setuptools", version = "79.0.1", source = { registry = "https://pypi.org/simple" } },
 ]
 wheels = [
     { url = "https://download.pytorch.org/whl/pytorch_triton-3.3.0-cp310-cp310-linux_aarch64.whl", hash = "sha256:69f22f73c7c54c7bd74f5d9b1c76037f1e19aedd5e2e91513bba6a1efd639211" },
@@ -2884,10 +2888,10 @@ name = "requests"
 version = "2.32.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "certifi", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-live-ai' or extra == 'extra-9-ai-runner-llm'" },
-    { name = "charset-normalizer", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-live-ai' or extra == 'extra-9-ai-runner-llm'" },
-    { name = "idna", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-live-ai' or extra == 'extra-9-ai-runner-llm'" },
-    { name = "urllib3", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-live-ai' or extra == 'extra-9-ai-runner-llm'" },
+    { name = "certifi" },
+    { name = "charset-normalizer" },
+    { name = "idna" },
+    { name = "urllib3" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c9/74/b3ff8e6c8446842c3f5c837e9c3dfcfe2018ea6ecef224c710c85ef728f4/requests-2.32.5.tar.gz", hash = "sha256:dbba0bac56e100853db0ea71b82b4dfd5fe2bf6d3754a8893c3af500cec7d7cf", size = 134517, upload-time = "2025-08-18T20:46:02.573Z" }
 wheels = [
@@ -3075,7 +3079,7 @@ name = "scipy"
 version = "1.13.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-llm'" },
+    { name = "numpy" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/fb/a3/328965862f41ba67d27ddd26205962007ec87d99eec6d364a29bf00ac093/scipy-1.13.0.tar.gz", hash = "sha256:58569af537ea29d3f78e5abd18398459f195546bb3be23d16677fb26616cc11e", size = 57204550, upload-time = "2024-04-02T21:48:22.385Z" }
 wheels = [
@@ -3132,8 +3136,35 @@ wheels = [
 
 [[package]]
 name = "setuptools"
+version = "69.5.1"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.11' and sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm'",
+    "python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm'",
+    "(python_full_version >= '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (python_full_version >= '3.11' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')",
+    "python_full_version < '3.11' and sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux' and extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux' and extra != 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')",
+    "python_full_version >= '3.11' and extra == 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra != 'extra-9-ai-runner-llm'",
+    "python_full_version < '3.11' and extra == 'extra-9-ai-runner-batch' and extra != 'extra-9-ai-runner-live-ai' and extra != 'extra-9-ai-runner-llm'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d6/4f/b10f707e14ef7de524fe1f8988a294fb262a29c9b5b12275c7e188864aed/setuptools-69.5.1.tar.gz", hash = "sha256:6c1fccdac05a97e598fb0ae3bbed5904ccb317337a51139dcd51453611bbb987", size = 2291314, upload-time = "2024-04-13T21:06:28.589Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/29/13965af254e3373bceae8fb9a0e6ea0d0e571171b80d6646932131d6439b/setuptools-69.5.1-py3-none-any.whl", hash = "sha256:c636ac361bc47580504644275c9ad802c50415c7522212252c033bd15f301f32", size = 894566, upload-time = "2024-04-13T21:06:23.256Z" },
+]
+
+[[package]]
+name = "setuptools"
 version = "79.0.1"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.11' and sys_platform == 'darwin'",
+    "python_full_version >= '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version < '3.11' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
+]
 sdist = { url = "https://files.pythonhosted.org/packages/bb/71/b6365e6325b3290e14957b2c3a804a529968c77a049b2ed40c095f749707/setuptools-79.0.1.tar.gz", hash = "sha256:128ce7b8f33c3079fd1b067ecbb4051a66e8526e7b65f6cec075dfc650ddfa88", size = 1367909, upload-time = "2025-04-23T22:20:59.241Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0d/6d/b4752b044bf94cb802d88a888dc7d288baaf77d7910b7dedda74b5ceea0c/setuptools-79.0.1-py3-none-any.whl", hash = "sha256:e147c0549f27767ba362f9da434eab9c5dc0045d5304feb602a0af001089fc51", size = 1256281, upload-time = "2025-04-23T22:20:56.768Z" },
@@ -3219,7 +3250,7 @@ name = "sympy"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "mpmath", marker = "extra == 'extra-9-ai-runner-batch' or extra == 'extra-9-ai-runner-live-ai' or extra == 'extra-9-ai-runner-llm'" },
+    { name = "mpmath" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
@@ -3480,7 +3511,7 @@ name = "tqdm"
 version = "4.67.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "(sys_platform == 'win32' and extra == 'extra-9-ai-runner-batch') or (sys_platform == 'win32' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'win32' and extra == 'extra-9-ai-runner-llm') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
 wheels = [
@@ -3570,7 +3601,8 @@ resolution-markers = [
     "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
-    { name = "setuptools", marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'darwin' and extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai')" },
+    { name = "setuptools", version = "69.5.1", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (extra != 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (extra != 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm')" },
+    { name = "setuptools", version = "79.0.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-9-ai-runner-live-ai') or (sys_platform == 'darwin' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (sys_platform == 'linux' and extra == 'extra-9-ai-runner-live-ai' and extra == 'extra-9-ai-runner-llm') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-live-ai') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8d/a9/549e51e9b1b2c9b854fd761a1d23df0ba2fbc60bd0c13b489ffa518cfcb7/triton-3.3.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b74db445b1c562844d3cfad6e9679c72e93fdfb1a90a24052b03bb5c49d1242e", size = 155600257, upload-time = "2025-05-29T23:39:36.085Z" },
