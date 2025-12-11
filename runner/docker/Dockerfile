@@ -12,11 +12,8 @@ RUN apt update && \
     xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git \
     ffmpeg cuda-toolkit-12-8
 
-# Install uv
-ARG UV_VERSION=0.9.9
-ENV UV_NO_MODIFY_PATH=1
-RUN curl -LsSf https://astral.sh/uv/${UV_VERSION}/install.sh | sh
-ENV PATH="/root/.local/bin:$PATH"
+# Install uv (pinned version copied from official image)
+COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
 
 # Install Python via uv and create venv
 ARG PYTHON_VERSION=3.11
