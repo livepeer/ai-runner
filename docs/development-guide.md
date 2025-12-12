@@ -17,7 +17,7 @@ This project uses [uv](https://docs.astral.sh/uv/) for Python dependency managem
 
    Available dependency extras:
    - `batch` - Dependencies for batch inference pipelines (text-to-image, image-to-video, etc.)
-   - `live-ai` - Dependencies for live/realtime pipelines (streamdiffusion, comfyui, etc.)
+   - `realtime` - Dependencies for realtime pipelines (streamdiffusion, comfyui, etc.)
    - `llm` - Dependencies for LLM pipelines
    - `dev` - Development dependencies (pytest, etc.)
 

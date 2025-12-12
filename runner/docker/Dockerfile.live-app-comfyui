@@ -92,7 +92,7 @@ RUN apt update && apt install -yqq \
 
 COPY pyproject.toml /tmp/pyproject.toml
 RUN PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 \
-    conda run -n comfystream pip install --root-user-action ignore "/tmp[live-ai]"
+    conda run -n comfystream pip install --root-user-action ignore "/tmp[realtime]"
 
 # Set environment variables
 ENV MAX_WORKERS=1 \

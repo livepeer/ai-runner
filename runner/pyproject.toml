@@ -36,7 +36,7 @@ batch = [
     "types-psutil==6.0.0.20241011",
     "PyYAML==6.0.2",
 ]
-live-ai = [
+realtime = [
     "pydantic==2.11.7",
     "aiohttp==3.10.9",
     "pyzmq==26.2.0",
@@ -73,7 +73,7 @@ conflicts = [
     [
         { extra = "batch" },
         { extra = "llm" },
-        { extra = "live-ai" },
+        { extra = "realtime" },
     ],
 ]
 
