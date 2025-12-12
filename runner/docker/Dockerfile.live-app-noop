@@ -22,9 +22,12 @@ COPY pyproject.toml uv.lock ./
 # Install live-ai dependencies (minimal runtime, no ML stack)
 RUN uv sync --locked --extra live-ai --no-install-project
 
-# Add noop pipeline-specific ML deps
+# Add noop pipeline-specific deps (CPU-only torch for minimal size)
 RUN uv pip install --no-cache \
-    torch==2.5.1 \
+    torch==2.5.1+cpu \
+    --index-url https://download.pytorch.org/whl/cpu
+
+RUN uv pip install --no-cache \
     diffusers==0.30.0 \
     transformers==4.43.3
 
