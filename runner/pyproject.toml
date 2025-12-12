@@ -47,7 +47,7 @@ realtime = [
 llm = [
     "setuptools==69.5.1",
     "pydantic>=2.7.2",
-    "vllm==0.10.0",
+    "vllm==0.6.5",
     "diffusers",
     "accelerate",
     "transformers",
