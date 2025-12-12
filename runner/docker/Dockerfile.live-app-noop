@@ -48,4 +48,4 @@ ENV MAX_WORKERS=1 \
 ARG VERSION="undefined"
 ENV VERSION=${VERSION}
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

@@ -45,4 +45,4 @@ ENV GIT_SHA="${GIT_SHA}" \
     PIPELINE="${PIPELINE}" \
     INFERPY_INITIAL_PARAMS="${INFERPY_INITIAL_PARAMS}"
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

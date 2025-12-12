@@ -29,4 +29,4 @@ RUN uv pip install --no-cache faster-whisper && \
 # Copy app directory to avoid rebuilding the base image during development.
 COPY app/ /app/app
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

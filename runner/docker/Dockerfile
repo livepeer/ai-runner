@@ -57,4 +57,4 @@ COPY example_data/ /app/example_data
 # Final sync to install the project
 RUN uv sync --locked --extra batch --inexact
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
