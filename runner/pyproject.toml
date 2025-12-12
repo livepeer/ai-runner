@@ -45,6 +45,7 @@ live-ai = [
     "av==14.4.0",
     "peft==0.17.0",
     "pytorch-triton==3.3.0",
+    "safetensors==0.7.0",
 ]
 llm = [
     "setuptools==69.5.1",
