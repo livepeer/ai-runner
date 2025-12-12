@@ -22,7 +22,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         self.version = os.getenv("VERSION", "undefined")
         self.model_id = model_id
         self.model_dir = get_model_dir()
-        self.torch_device = get_torch_device()
+        self.torch_device = get_torch_device(optional=True)
         self.infer_module = "app.live.infer"
         self.restart_count = 0
         self.start_process()
