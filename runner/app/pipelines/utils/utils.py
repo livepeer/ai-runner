@@ -6,14 +6,14 @@ import os
 import re
 import psutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, Optional
 
 import numpy as np
+import torch
+from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from PIL import Image
-
-if TYPE_CHECKING:
-    import torch
-    from diffusers.pipelines.pipeline_utils import DiffusionPipeline
+from torch import dtype as TorchDtype
+from transformers import CLIPImageProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +30,7 @@ def get_model_path(model_id: str) -> Path:
     return get_model_dir() / model_id.lower()
 
 
-def get_torch_device(optional: bool = False):
-    try:
-        import torch
-    except ImportError:
-        if optional:
-            logger.warning("torch not available, skipping device detection")
-            return None
-        raise
+def get_torch_device():
     if torch.cuda.is_available():
         return torch.device("cuda")
     elif torch.backends.mps.is_available():
@@ -55,7 +48,6 @@ def validate_torch_device(device_name: str) -> bool:
     Returns:
         True if valid and available, False otherwise.
     """
-    import torch
     try:
         device = torch.device(device_name)
         if device.type == "cuda":
@@ -144,7 +136,7 @@ class SafetyChecker:
     def __init__(
         self,
         device: Optional[str] = "cuda",
-        dtype=None,
+        dtype: Optional[TorchDtype] = torch.float16,
     ):
         """Initializes the SafetyChecker.
 
@@ -152,13 +144,6 @@ class SafetyChecker:
             device: Device for inference. Defaults to "cuda".
             dtype: Data type for inference. Defaults to `torch.float16`.
         """
-        import torch
-        from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
-        from transformers import CLIPImageProcessor
-
-        if dtype is None:
-            dtype = torch.float16
-
         device = device.lower() if device else device
         if not validate_torch_device(device):
             default_device = get_torch_device()
@@ -169,7 +154,8 @@ class SafetyChecker:
 
         self.device = device
         self._dtype = dtype
-
+        
+        from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
         self._safety_checker = StableDiffusionSafetyChecker.from_pretrained(
             "CompVis/stable-diffusion-safety-checker"
         ).to(self.device)
@@ -238,14 +224,12 @@ class LoraLoader:
         loras_enabled: Flag to enable or disable LoRas.
     """
 
-    def __init__(self, pipeline: "DiffusionPipeline"):
+    def __init__(self, pipeline: DiffusionPipeline):
         """Initializes the LoraLoader.
 
         Args:
             pipeline: Diffusion pipeline to load LoRas into.
         """
-        import torch
-        self._torch = torch  # Store reference for use in methods
         self.pipeline = pipeline
         self.loras_enabled = False
 
@@ -273,7 +257,7 @@ class LoraLoader:
         """
         while True:
             free_memory_gb = (
-                self._torch.cuda.mem_get_info(device=self.pipeline.device)[0] / 1024**3
+                torch.cuda.mem_get_info(device=self.pipeline.device)[0] / 1024**3
             )
             loaded_loras = self._get_loaded_loras()
             memory_limit_reached = free_memory_gb < LORA_FREE_VRAM_THRESHOLD
@@ -292,7 +276,7 @@ class LoraLoader:
                     self.pipeline.delete_adapters(lora)
                     break
         if memory_limit_reached:
-            self._torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
 
     def load_loras(self, loras_json: str) -> None:
         """Loads LoRas and sets their weights into the pipeline managed by this
@@ -350,7 +334,7 @@ class LoraLoader:
         except Exception as e:
             # Delete failed adapter and log the error.
             self.pipeline.delete_adapters(adapter)
-            self._torch.cuda.empty_cache()
+            torch.cuda.empty_cache()
             if "not found in the base model" in str(e):
                 error_message = (
                     "LoRa incompatible with base model: "
@@ -395,7 +379,6 @@ class MemoryInfo:
 
 
 def get_max_memory() -> MemoryInfo:
-    import torch
     num_gpus = torch.cuda.device_count()
     gpu_memory = {
         i: f"{torch.cuda.get_device_properties(i).total_memory // 1024**3}GiB" for i in range(num_gpus)}
