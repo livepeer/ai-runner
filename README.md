@@ -40,8 +40,12 @@ It also includes utility scripts:
 Regenerate the OpenAPI specification for the AI runner's API endpoints with:
 
 ```bash
-python gen_openapi.py
+cd runner
+uv run python gen_openapi.py
 ```
+
+> [!NOTE]
+> This project uses [uv](https://docs.astral.sh/uv/) for dependency management. Install uv first, then run `uv sync --extra batch` to install dependencies before generating the OpenAPI spec.
 
 To correspondingly generate the Go client bindings in the go-livepeer repository,
 you should clone [`livepeer/go-livepeer`](https://github.com/livepeer/go-livepeer) and run:

@@ -1,6 +1,8 @@
 ARG BASE_IMAGE=livepeer/ai-runner:base
 FROM ${BASE_IMAGE}
 
+WORKDIR /app
+
 # Install CUDA Toolkit to enable flash attention.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -8,7 +10,7 @@ RUN apt-get update && \
     g++ && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
+RUN uv pip install --no-cache \
     ninja \
     transformers==4.51.3 \
     peft \
@@ -20,12 +22,11 @@ ENV VERSION=${VERSION}
 
 #add FASTER-WHISPER backend
 #note: ctranslate2==4.4.0 is only required if base image uses cuDNN 8
-RUN pip install faster-whisper && pip install --force-reinstall ctranslate2==4.4.0 && pip install numpy==1.26.4
-
-# Override base working directory to ensure the correct working directory.
-WORKDIR /app
+RUN uv pip install --no-cache faster-whisper && \
+    uv pip install --no-cache --force-reinstall ctranslate2==4.4.0 && \
+    uv pip install --no-cache numpy==1.26.4
 
 # Copy app directory to avoid rebuilding the base image during development.
 COPY app/ /app/app
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

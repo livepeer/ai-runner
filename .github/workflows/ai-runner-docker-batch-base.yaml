@@ -79,7 +79,7 @@ jobs:
           provenance: mode=max
           sbom: true
           push: true
-          file: "Dockerfile"
+          file: "docker/Dockerfile"
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
           platforms: linux/amd64

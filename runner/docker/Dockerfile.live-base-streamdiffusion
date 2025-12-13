@@ -1,33 +1,27 @@
 ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
-# Install Python 3.11 via pyenv
-ARG PYTHON_VERSION=3.11
-ENV PIP_PREFER_BINARY=1
-
-RUN pyenv install $PYTHON_VERSION && \
-    pyenv global $PYTHON_VERSION && \
-    pyenv rehash
-
-# Upgrade pip and install required packages
-RUN pip install --no-cache-dir --upgrade pip==23.3.2 setuptools==69.5.1 wheel==0.43.0
+# Install Python 3.11 via uv and create venv in /app
+WORKDIR /app
+RUN uv python install 3.11 && uv venv /app/.venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Install StreamDiffusion dependencies
-RUN pip install --no-cache-dir --force-reinstall \
+RUN uv pip install --no-cache \
     torch==2.7.1+cu128 \
     torchvision==0.22.1+cu128 \
     torchaudio==2.7.1+cu128 \
     --index-url https://download.pytorch.org/whl/cu128
 
 # Install StreamDiffusion lib
-ARG STREAMDIFFUSION_VERSION=v1.0.0-rc
-RUN pip install --no-cache-dir git+https://github.com/daydreamlive/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}#egg=streamdiffusion[tensorrt,controlnet,ipadapter]
+ARG STREAMDIFFUSION_VERSION=72a5bac5a0ca04ab696637e73290db41c3ca7348
+RUN uv pip install --no-cache "streamdiffusion[tensorrt,controlnet,ipadapter] @ git+https://github.com/daydreamlive/StreamDiffusion.git@${STREAMDIFFUSION_VERSION}"
 
 # Install TensorRT bindings and libraries
-RUN python -m streamdiffusion.tools.install-tensorrt
+RUN uv run python -m streamdiffusion.tools.install-tensorrt
 
 # Enable fast HF downloads for StreamDiffusion lib, which uses older huggingface_hub version
-RUN pip install --no-cache-dir hf_transfer==0.1.4
+RUN uv pip install --no-cache hf_transfer==0.1.4
 ENV HF_HUB_ENABLE_HF_TRANSFER=1
 
 WORKDIR /app

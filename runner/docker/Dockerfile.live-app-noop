@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
-# Install latest stable Go version and system dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     libcairo2-dev \
@@ -9,49 +9,43 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-ARG PYTHON_VERSION=3.10
-RUN pyenv install $PYTHON_VERSION && \
-    pyenv global $PYTHON_VERSION && \
-    pyenv rehash
+# Install Python 3.10 via uv and create venv
+WORKDIR /app
+RUN uv python install 3.10 && uv venv
 
-# Upgrade pip and install required packages
-ARG PIP_VERSION=23.3.2
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig \
+    PATH="/app/.venv/bin:$PATH"
 
-ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
+# Copy lockfile and pyproject.toml first (for layer caching)
+COPY pyproject.toml uv.lock ./
 
-RUN ls /usr/local/lib && ls /usr/local/lib/pkgconfig && ls -lha /usr/local/bin && echo $PKG_CONFIG_PATH
+# Install realtime dependencies (minimal runtime, no ML stack)
+RUN uv sync --locked --extra realtime --no-install-project
 
-# Install any additional Python packages
-RUN pip install --no-cache-dir \
-    uvicorn==0.34.0 \
-    fastapi==0.111.0 \
-    numpy==1.26.4 \
-    torch==2.5.1 \
+# Add noop pipeline-specific deps (CPU-only torch for minimal size)
+RUN uv pip install --no-cache \
+    torch==2.5.1+cpu \
+    --index-url https://download.pytorch.org/whl/cpu
+
+RUN uv pip install --no-cache \
     diffusers==0.30.0 \
-    transformers==4.43.3 \
-    aiohttp==3.10.9 \
-    pyzmq==26.2.0 \
-    nvidia-ml-py==12.560.30 \
-    opencv-python==4.10.0.84 \
-    --no-binary=av \
-    av==14.0.1 \
-    psutil==6.0.0 \
-    prometheus_client>=0.21.1
-
-# Set environment variables
-ENV MAX_WORKERS=1
-ENV HUGGINGFACE_HUB_CACHE=/models
-ENV DIFFUSERS_CACHE=/models
-ENV MODEL_DIR=/models
+    transformers==4.43.3
 
 # Copy application files
 COPY app/ /app/app
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 
+# Final sync to install the project (--inexact preserves manually installed ML deps)
+RUN uv sync --locked --extra realtime --inexact
+
+# Set environment variables
+ENV MAX_WORKERS=1 \
+    HUGGINGFACE_HUB_CACHE=/models \
+    DIFFUSERS_CACHE=/models \
+    MODEL_DIR=/models
+
 ARG VERSION="undefined"
 ENV VERSION=${VERSION}
 
-WORKDIR /app
-
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

@@ -77,3 +77,44 @@ ENV BASH_ENV=/conda_activate.sh
 SHELL ["/bin/bash", "-c"]
 # Ensure the app run from CMD is also in the comfystream conda environment (just wrap in bash and it will run the .bashrc above)
 ENTRYPOINT ["bash", "-c", "exec /opt/nvidia/nvidia_entrypoint.sh \"$@\"", "--"]
+
+# -----------------------------------------------------------------------------
+# live-app: The section below was copied from live-app-__PIPELINE__ since we don't use it for comfyui anymore.
+# -----------------------------------------------------------------------------
+
+# Install latest stable Go version and system dependencies
+RUN apt update && apt install -yqq \
+    wget \
+    libcairo2-dev \
+    libgirepository1.0-dev \
+    pkg-config \
+    && apt clean && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml /tmp/pyproject.toml
+RUN PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 \
+    conda run -n comfystream pip install --root-user-action ignore "/tmp[realtime]"
+
+# Set environment variables
+ENV MAX_WORKERS=1 \
+    HUGGINGFACE_HUB_CACHE=/models \
+    DIFFUSERS_CACHE=/models \
+    MODEL_DIR=/models
+
+# Copy application files
+COPY app/ /app/app
+COPY images/ /app/images
+COPY bench.py /app/bench.py
+
+WORKDIR /app
+
+# Keep these args/envs last to maximize cache reuse when only runtime envs change
+ARG GIT_SHA
+ARG VERSION="undefined"
+ARG INFERPY_INITIAL_PARAMS
+
+ENV GIT_SHA="${GIT_SHA}" \
+    VERSION="${VERSION}" \
+    PIPELINE="comfyui" \
+    INFERPY_INITIAL_PARAMS="${INFERPY_INITIAL_PARAMS}"
+
+CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
