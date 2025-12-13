@@ -20,16 +20,7 @@ ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig \
 COPY pyproject.toml uv.lock ./
 
 # Install realtime dependencies (minimal runtime, no ML stack)
-RUN uv sync --locked --extra realtime --no-install-project
-
-# Add noop pipeline-specific deps (CPU-only torch for minimal size)
-RUN uv pip install --no-cache \
-    torch==2.5.1+cpu \
-    --index-url https://download.pytorch.org/whl/cpu
-
-RUN uv pip install --no-cache \
-    diffusers==0.30.0 \
-    transformers==4.43.3
+RUN uv sync --locked --extra realtime-dev --no-install-project
 
 # Copy application files
 COPY app/ /app/app
@@ -37,7 +28,7 @@ COPY images/ /app/images
 COPY bench.py /app/bench.py
 
 # Final sync to install the project (--inexact preserves manually installed ML deps)
-RUN uv sync --locked --extra realtime --inexact
+RUN uv sync --locked --extra realtime-dev --inexact
 
 # Set environment variables
 ENV MAX_WORKERS=1 \
