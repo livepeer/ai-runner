@@ -133,6 +133,24 @@ def use_route_names_as_operation_ids(app: FastAPI) -> None:
             route.operation_id = route.name
 
 def create_app(pipeline: Pipeline | None = None) -> FastAPI:
+    """
+    Create a configured AI Runner FastAPI app.
+
+    Args:
+        pipeline: Pipeline instance to use. If None, loads from PIPELINE and MODEL_ID
+                  environment variables using the built-in pipeline registry.
+
+    Returns:
+        Configured FastAPI application ready to be run with an ASGI server.
+
+    Example:
+        main.py:
+            from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
+            app = create_app(pipeline=LiveVideoToVideoPipeline("streamdiffusion"))
+
+        And to run the app with uvicorn:
+            uvicorn main:app --host 0.0.0.0 --port 8000
+    """
     runner_version=os.getenv("VERSION", "undefined")
     VERSION.labels(app="ai-runner", version=runner_version).set(1)
     logger.info("Runner version: %s", runner_version)
@@ -144,8 +162,7 @@ def create_app(pipeline: Pipeline | None = None) -> FastAPI:
             raise EnvironmentError("PIPELINE and MODEL_ID environment variables must be set")
 
         pipeline = load_pipeline(pipeline_name, model_id)
-        if pipeline is None:
-            raise ValueError("Failed to load pipeline")
+
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -164,3 +181,32 @@ def create_app(pipeline: Pipeline | None = None) -> FastAPI:
         return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     return app
+
+
+def start_app(
+
+    pipeline: Pipeline | None = None,
+    host: str | None = None,
+    port: int | None = None,
+    **uvicorn_kwargs,
+):
+    """
+    Create and start an AI Runner app. Blocks until shutdown.
+
+    Args:
+        pipeline: Pipeline instance. Defaults to loading from PIPELINE/MODEL_ID env vars.
+        host: Host to bind to. Defaults to HOST env var or "0.0.0.0".
+        port: Port to bind to. Defaults to PORT env var or 8000.
+        **uvicorn_kwargs: Additional arguments passed to uvicorn.run()
+
+    Example:
+        from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
+        start_app(pipeline=LiveVideoToVideoPipeline("streamdiffusion"), port=8080)
+    """
+    import uvicorn
+
+    host = host or os.getenv("HOST", "0.0.0.0")
+    port = port or int(os.getenv("PORT", "8000"))
+
+    app = create_app(pipeline=pipeline)
+    uvicorn.run(app, host=host, port=port, **uvicorn_kwargs)
