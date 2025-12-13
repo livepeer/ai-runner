@@ -50,28 +50,21 @@ def builtin_pipeline_spec(name: str) -> PipelineSpec | None:
     """
     Look up a built-in pipeline by name and return a PipelineSpec if found.
     """
-    if name == "streamdiffusion" or name.startswith("streamdiffusion-"):
-        return PipelineSpec(
-            name="streamdiffusion",
-            pipeline_cls="live.pipelines.streamdiffusion.pipeline:StreamDiffusion",
-            params_cls="live.pipelines.streamdiffusion.params:StreamDiffusionParams",
-        )
     if name == "comfyui":
         return PipelineSpec(
             name="comfyui",
-            pipeline_cls="live.pipelines.comfyui.pipeline:ComfyUI",
-            params_cls="live.pipelines.comfyui.params:ComfyUIParams",
+            pipeline_cls="app.live.pipelines.comfyui.pipeline:ComfyUI",
+            params_cls="app.live.pipelines.comfyui.params:ComfyUIParams",
         )
-    elif name == "scope":
+    if name == "scope":
         return PipelineSpec(
             name="scope",
-            pipeline_cls="live.pipelines.scope.pipeline:Scope",
-            params_cls="live.pipelines.scope.params:ScopeParams",
+            pipeline_cls="app.live.pipelines.scope.pipeline:Scope",
+            params_cls="app.live.pipelines.scope.params:ScopeParams",
         )
-    elif name == "noop":
+    if name == "noop":
         return PipelineSpec(
             name="noop",
-            pipeline_cls="live.pipelines.noop.pipeline:Noop",
+            pipeline_cls="app.live.pipelines.noop:Noop",
         )
-    else:
-        return None
+    return None

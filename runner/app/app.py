@@ -118,14 +118,15 @@ def create_app(pipeline: Pipeline | None = None) -> FastAPI:
     if pipeline is None:
         pipeline_name = os.getenv("PIPELINE", "")
         model_id = os.getenv("MODEL_ID", "")
-        if pipeline_name == "" or model_id == "":
-            raise EnvironmentError("PIPELINE and MODEL_ID environment variables must be set")
-
-        pipeline = load_pipeline(pipeline_name, model_id)
+        if pipeline_name != "" and model_id != "":
+            pipeline = load_pipeline(pipeline_name, model_id)
 
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        if pipeline is None:
+            raise EnvironmentError("Pipeline must be provided or set through the PIPELINE and MODEL_ID environment variables")
+
         _setup_app(app, pipeline)
         logger.info(f"Started up with pipeline={type(pipeline).__name__} model_id={pipeline.model_id}")
 
