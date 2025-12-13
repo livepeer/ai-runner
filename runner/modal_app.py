@@ -68,7 +68,7 @@ class Pipeline:
 
     @enter()
     def enter(self):
-        from app.main import load_pipeline
+        from app.app import load_pipeline
 
         model_id = self.model_id
         if SDXL_LIGHTNING_MODEL_ID in self.model_id:

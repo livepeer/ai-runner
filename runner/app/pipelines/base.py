@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from fastapi import APIRouter
 
 class HealthCheck(BaseModel):
     status: Literal["LOADING", "OK", "ERROR", "IDLE"] = Field(..., description="The health status of the pipeline")
@@ -26,3 +29,11 @@ class Pipeline(ABC):
         Returns a health check object for the pipeline.
         """
         return HealthCheck(status="OK", version="undefined")
+
+    @property
+    def router(self) -> "APIRouter | None":
+        """
+        Returns the API router for this pipeline. Override in subclasses.
+        Uses lazy import to avoid circular dependencies.
+        """
+        return None

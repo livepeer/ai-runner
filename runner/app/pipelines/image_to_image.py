@@ -251,3 +251,8 @@ class ImageToImagePipeline(Pipeline):
 
     def __str__(self) -> str:
         return f"ImageToImagePipeline model_id={self.model_id}"
+
+    @property
+    def router(self):
+        from app.routes import image_to_image
+        return image_to_image.router

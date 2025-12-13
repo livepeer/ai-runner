@@ -66,3 +66,8 @@ class ImageToTextPipeline(Pipeline):
 
     def __str__(self) -> str:
         return f"ImageToTextPipeline model_id={self.model_id}"
+
+    @property
+    def router(self):
+        from app.routes import image_to_text
+        return image_to_text.router

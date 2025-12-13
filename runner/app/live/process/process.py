@@ -3,6 +3,7 @@ import asyncio
 import logging
 import hashlib
 import json
+from multiprocessing.synchronize import Event
 import torch.multiprocessing as mp
 import queue
 import sys
@@ -13,8 +14,8 @@ from typing import Any
 
 import torch
 
-from ..pipelines import load_pipeline, Pipeline, BaseParams
-from ..pipelines.loader import parse_pipeline_params
+from ..pipelines import Pipeline, BaseParams, PipelineSpec
+from ..pipelines.loader import load_pipeline, parse_pipeline_params
 from ..log import config_logging, config_logging_fields, log_timing
 from ..trickle import (
     InputFrame,
@@ -30,16 +31,14 @@ from .loading_overlay import LoadingOverlayRenderer
 
 class PipelineProcess:
     @staticmethod
-    def start(pipeline_name: str, params: dict | None = None):
-        instance = PipelineProcess(pipeline_name)
-        if params is not None:
-            instance.update_params(params)
+    def start(spec: PipelineSpec):
+        instance = PipelineProcess(spec)
         instance.process.start()
         instance.start_time = time.time()
         return instance
 
-    def __init__(self, pipeline_name: str):
-        self.pipeline_name = pipeline_name
+    def __init__(self, spec: PipelineSpec):
+        self.pipeline_spec = spec
         self.ctx = mp.get_context("spawn")
 
         self.input_queue = self.ctx.Queue(maxsize=1)
@@ -215,31 +214,25 @@ class PipelineProcess:
 
     async def _initialize_pipeline(self):
         try:
-            params = await self._get_latest_params(timeout=0.1)
-            if params is not None:
-                logging.info(f"PipelineProcess: Got params from param_update_queue {params}")
-            else:
-                logging.info("PipelineProcess: No params found in param_update_queue, loading with default params")
-                params = {}
-
+            params = self.pipeline_spec.initial_params
             with log_timing(f"PipelineProcess: Pipeline loading with {params}"):
-                self._last_params = parse_pipeline_params(self.pipeline_name, params)
+                self._last_params = parse_pipeline_params(self.pipeline_spec, params)
                 self._last_params_request_id = self.request_id
-                pipeline = load_pipeline(self.pipeline_name)
+                pipeline = load_pipeline(self.pipeline_spec)
                 await pipeline.initialize(**params)
                 return pipeline
         except Exception as e:
             self._report_error("Error loading pipeline", e)
             if not params:
-                # Already tried loading with default params
+                # Already tried loading with empty/default params
                 raise
             try:
                 with log_timing(
                     f"PipelineProcess: Pipeline loading with default params due to error with params: {params}"
                 ):
-                    self._last_params = parse_pipeline_params(self.pipeline_name, {})
+                    self._last_params = parse_pipeline_params(self.pipeline_spec, {})
                     self._last_params_request_id = self.request_id
-                    pipeline = load_pipeline(self.pipeline_name)
+                    pipeline = load_pipeline(self.pipeline_spec)
                     await pipeline.initialize()
                     return pipeline
             except Exception as e:
@@ -349,7 +342,7 @@ class PipelineProcess:
                 )
 
                 # Check resolution change within the same request_id
-                new_params = parse_pipeline_params(self.pipeline_name, params)
+                new_params = parse_pipeline_params(self.pipeline_spec, params)
                 if self._last_params_request_id == self.request_id:
                     new_resolution = new_params.get_output_resolution()
                     current_resolution = self._last_params.get_output_resolution()
@@ -521,7 +514,7 @@ def clear_queue(queue):
 
 
 def _setup_signal_handlers(
-    done: mp.Event,
+    done: Event,
     signals: list[signal.Signals] = [signal.SIGTERM, signal.SIGINT],
 ):
     """
@@ -576,7 +569,7 @@ def _setup_parent_death_signal():
         logging.warning(f"Unable to set PDEATHSIG: {e}")
 
 
-def _start_parent_watchdog(done: mp.Event):
+def _start_parent_watchdog(done: Event):
     """
     Start a lightweight watchdog to observe parent death as a cross-platform fallback
     """

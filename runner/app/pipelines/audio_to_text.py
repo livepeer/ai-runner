@@ -111,8 +111,8 @@ class AudioToTextPipeline(Pipeline):
 
     def __call__(self, audio: UploadFile, duration: float, **kwargs) -> List[File]:
         if self.backend == "faster-whisper":
-            segments, info = self.tm.transcribe(audio.file, 
-                                                beam_size=5, 
+            segments, info = self.tm.transcribe(audio.file,
+                                                beam_size=5,
                                                 word_timestamps=True if kwargs["return_timestamps"] == "word" else False)
             text = ""
             chunks = []
@@ -129,7 +129,7 @@ class AudioToTextPipeline(Pipeline):
                         "timestamp": [segment.start,segment.end],
                         "text": segment.text
                     })
-                
+
             return {"text": text, "chunks": chunks}
         else:
             audioBytes = audio.file.read()
@@ -172,3 +172,8 @@ class AudioToTextPipeline(Pipeline):
 
     def __str__(self) -> str:
         return f"AudioToTextPipeline model_id={self.model_id}"
+
+    @property
+    def router(self):
+        from app.routes import audio_to_text
+        return audio_to_text.router

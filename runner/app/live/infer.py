@@ -10,6 +10,7 @@ import threading
 from typing import List
 
 from .process import ProcessGuardian
+from .pipelines import builtin_pipeline_spec, PipelineSpec
 from .streamer import PipelineStreamer
 from .streamer.protocol import TrickleProtocol, ZeroMQProtocol
 from .trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
@@ -71,7 +72,11 @@ async def main(
     _MAIN_LOOP = asyncio.get_event_loop()
     _MAIN_LOOP.set_exception_handler(asyncio_exception_handler)
 
-    process = ProcessGuardian(pipeline, params or {})
+    pipeline_spec = builtin_pipeline_spec(args.pipeline)
+    if pipeline_spec is None:
+        pipeline_spec = PipelineSpec.model_validate_json(pipeline)
+    process = ProcessGuardian(pipeline_spec)
+
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
@@ -124,7 +129,9 @@ async def main(
             results = await asyncio.wait_for(stops, timeout=6)
             exceptions = [result for result in results if isinstance(result, Exception)]
             if exceptions:
-                raise ExceptionGroup("Error stopping components", exceptions)
+                for exc in exceptions:
+                    logging.error("Error stopping component", exc_info=exc)
+                raise RuntimeError("Error stopping pipeline components")
         except Exception as e:
             logging.error(f"Graceful shutdown error, exiting abruptly: {e}", exc_info=True)
             os._exit(1)
