@@ -18,9 +18,14 @@ from app.utils.errors import InferenceError
 proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntary_ctxt_switches", "nonvoluntary_ctxt_switches", "CoreDumping"]
 
 class LiveVideoToVideoPipeline(Pipeline):
-    def __init__(self, model_id: str):
+    def __init__(self, live_pipeline: str):
+        """
+        Initialize the LiveVideoToVideoPipeline. Notice that we rename the model_id argument to live_pipeline for clarity
+        of the interface when creating this class from custom live pipelines.
+        """
         self.version = os.getenv("VERSION", "undefined")
-        self.model_id = model_id
+        self.model_id = live_pipeline # we set the parent class model_id to the live_pipeline name for now
+        self.live_pipeline = live_pipeline
         self.model_dir = get_model_dir()
         self.torch_device = get_torch_device()
         self.infer_module = "app.live.infer"
@@ -106,7 +111,7 @@ class LiveVideoToVideoPipeline(Pipeline):
     def start_process(self):
         logging.info("Starting pipeline process")
         cmd = [sys.executable, "-u", "-m", self.infer_module]
-        cmd.extend(["--pipeline", self.model_id]) # we use the model_id as the pipeline name for now
+        cmd.extend(["--pipeline", self.live_pipeline])
         cmd.extend(["--http-port", "8888"])
         initial_params = os.environ.get("INFERPY_INITIAL_PARAMS")
         if initial_params:
