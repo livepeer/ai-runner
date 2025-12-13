@@ -33,7 +33,6 @@ from .pipeline import load_streamdiffusion_sync, ENGINES_DIR, LOCAL_MODELS_DIR
 MIN_TIMESTEPS = 1
 MAX_TIMESTEPS = 4
 
-# Optimal number of timesteps for t_index_list per model type
 OPTIMAL_TIMESTEPS_BY_TYPE: Dict[ModelType, int] = {
     "sd15": 3,
     "sd21": 3,
@@ -45,7 +44,6 @@ MAX_RESOLUTION = 1024
 
 BASE_GIT_REPOS_DIR = Path("/workspace")
 
-# Models directory is fixed in Docker image via HUGGINGFACE_HUB_CACHE env var
 MODELS_DIR = Path(os.environ.get("HUGGINGFACE_HUB_CACHE", "/models"))
 
 @dataclass(frozen=True)
@@ -78,7 +76,6 @@ POSE_ASSETS: Sequence[HfAsset] = (
         repo_id="yuvraj108c/yolo-nas-pose-onnx",
         filename="yolo_nas_pose_l_0.5.onnx",
     ),
-    # might want to add other confidence thresholds later
 )
 
 
@@ -252,7 +249,6 @@ def _compile_build(job: BuildJob) -> None:
             engine_dir=ENGINES_DIR,
             build_engines=True,
         )
-        # Explicitly drop the wrapper to keep GPU memory low between builds.
         del pipe
     finally:
         gc.collect()
@@ -282,12 +278,11 @@ def _create_params(
             )
             controlnets.append(config)
 
-    # Create t_index_list based on number of timesteps. Only the size matters... 😏
     step_count = OPTIMAL_TIMESTEPS_BY_TYPE.get(model_type, 3)
     t_index_list = list(range(1, 50, 50 // step_count))[:step_count]
 
     return StreamDiffusionParams(
-        model_id=model_id,  # type: ignore
+        model_id=model_id,
         width=512,
         height=512,
         acceleration="tensorrt",
