@@ -204,4 +204,5 @@ async def start_http_server(
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     logging.info(f"HTTP server started on port {port}")
+
     return runner

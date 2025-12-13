@@ -15,7 +15,9 @@ import logging
 import os
 import sys
 from pathlib import Path
-from ..live.pipelines.loader import load_pipeline_class, builtin_pipeline_spec, PipelineSpec
+
+from ..live.pipelines import builtin_pipeline_spec
+from ..live.pipelines.loader import load_pipeline_class
 
 
 def parse_args():

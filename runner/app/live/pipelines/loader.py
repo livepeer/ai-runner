@@ -1,87 +1,14 @@
-"""Pipeline loader utilities for dynamic pipeline and params class loading.
-
-Import Path Format:
-    Classes are specified as "module.path:ClassName" where the colon separates
-    the dotted module path from the class name. This allows pipelines and their
-    params classes to be loaded dynamically at runtime.
+"""
+Pipeline loader utilities for dynamic pipeline and params class loading.
 """
 
 import sys
 import time
 from contextlib import contextmanager
 import importlib
-from typing import cast
-
-from pydantic import BaseModel, model_validator
 
 from .interface import Pipeline, BaseParams
-
-
-class PipelineSpec(BaseModel):
-    """Specification for dynamically loading a pipeline and its parameters class.
-
-    Import paths use "module.path:ClassName" format where the colon separates
-    the dotted module path from the class name.
-
-    e.g.:
-        >>> spec = PipelineSpec(
-        ...     pipeline_cls="my_package.pipeline:CustomPipeline",
-        ...     params_cls="my_package.params:CustomParams",
-        ...     initial_params={"strength": 0.8}
-        ... )
-    """
-    name: str | None = None
-    """Identifier for the pipeline. Derived from pipeline_cls if not provided."""
-
-    pipeline_cls: str
-    """Import path to the Pipeline subclass. e.g. "my_pipelines.module:MyPipeline" """
-
-    params_cls: str | None = None
-    """Import path to the BaseParams subclass, or None to use generic BaseParams."""
-
-    initial_params: dict = {}
-    """Default parameter values passed to the pipeline on init."""
-
-    @model_validator(mode="before")
-    @classmethod
-    def _set_default_name(cls, values: dict) -> dict:
-        if not values.get("name") and "pipeline_cls" in values:
-            name = cast(str, values["pipeline_cls"])
-            name = name.rsplit(":", 1)[-1].lower().removesuffix("pipeline")
-            values["name"] = name
-        return values
-
-
-def builtin_pipeline_spec(name: str) -> PipelineSpec | None:
-    """
-    Look up a built-in pipeline by name and return a PipelineSpec if found.
-    """
-    if name == "streamdiffusion" or name.startswith("streamdiffusion-"):
-        return PipelineSpec(
-            name="streamdiffusion",
-            pipeline_cls="live.pipelines.streamdiffusion.pipeline:StreamDiffusion",
-            params_cls="live.pipelines.streamdiffusion.params:StreamDiffusionParams",
-        )
-    if name == "comfyui":
-        return PipelineSpec(
-            name="comfyui",
-            pipeline_cls="live.pipelines.comfyui.pipeline:ComfyUI",
-            params_cls="live.pipelines.comfyui.params:ComfyUIParams",
-        )
-    elif name == "scope":
-        return PipelineSpec(
-            name="scope",
-            pipeline_cls="live.pipelines.scope.pipeline:Scope",
-            params_cls="live.pipelines.scope.params:ScopeParams",
-        )
-    elif name == "noop":
-        return PipelineSpec(
-            name="noop",
-            pipeline_cls="live.pipelines.noop.pipeline:Noop",
-        )
-    else:
-        return None
-
+from .spec import PipelineSpec
 
 def load_pipeline_class(pipeline_cls: str) -> type[Pipeline]:
     """Dynamically import and return a pipeline class.

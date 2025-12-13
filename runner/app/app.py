@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from app.routes import health, hardware, version
 from fastapi import FastAPI
-from fastapi.routing import APIRoute, APIRouter
+from fastapi.routing import APIRoute
 from app.utils.hardware import HardwareInfo
 from app.live.log import config_logging
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
@@ -70,8 +70,13 @@ def load_pipeline(pipeline: str, model_id: str) -> Pipeline:
             return ImageToTextPipeline(model_id)
         case "live-video-to-video":
             from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
+            from app.live.pipelines import builtin_pipeline_spec
 
-            return LiveVideoToVideoPipeline(model_id)
+            pipeline_spec = builtin_pipeline_spec(model_id)
+            if pipeline_spec is None:
+                raise EnvironmentError(f"Live pipeline {model_id} not found")
+
+            return LiveVideoToVideoPipeline(pipeline_spec)
         case "text-to-speech":
             from app.pipelines.text_to_speech import TextToSpeechPipeline
 

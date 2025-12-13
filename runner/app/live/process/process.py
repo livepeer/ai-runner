@@ -14,7 +14,8 @@ from typing import Any
 
 import torch
 
-from ..pipelines import load_pipeline, Pipeline, BaseParams, PipelineSpec, parse_pipeline_params
+from ..pipelines import Pipeline, BaseParams, PipelineSpec
+from ..pipelines.loader import load_pipeline, parse_pipeline_params
 from ..log import config_logging, config_logging_fields, log_timing
 from ..trickle import (
     InputFrame,

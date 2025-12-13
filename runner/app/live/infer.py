@@ -74,9 +74,7 @@ async def main(
 
     pipeline_spec = builtin_pipeline_spec(args.pipeline)
     if pipeline_spec is None:
-        # This can be called with the pipeline import path directly for custom pipelines.
-        name = args.pipeline.rsplit(":", 1)[-1]
-        pipeline_spec = PipelineSpec(name, args.pipeline, initial_params=params or {})
+        pipeline_spec = PipelineSpec.model_validate_json(pipeline)
     process = ProcessGuardian(pipeline_spec)
 
     # Only initialize the streamer if we have a protocol and URLs to connect to
@@ -131,7 +129,9 @@ async def main(
             results = await asyncio.wait_for(stops, timeout=6)
             exceptions = [result for result in results if isinstance(result, Exception)]
             if exceptions:
-                raise ExceptionGroup("Error stopping components", exceptions)
+                for exc in exceptions:
+                    logging.error("Error stopping component", exc_info=exc)
+                raise RuntimeError("Error stopping pipeline components")
         except Exception as e:
             logging.error(f"Graceful shutdown error, exiting abruptly: {e}", exc_info=True)
             os._exit(1)
