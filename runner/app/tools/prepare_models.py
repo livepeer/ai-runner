@@ -15,20 +15,28 @@ import logging
 import os
 import sys
 from pathlib import Path
+from ..live.pipelines.loader import load_pipeline_class, builtin_pipeline_spec, PipelineSpec
 
-from ..live.pipelines.loader import load_pipeline, builtin_pipeline_spec, PipelineSpec
 
-
-def parse_args() -> argparse.Namespace:
+def parse_args():
     parser = argparse.ArgumentParser(description="Prepare models for a pipeline.")
     parser.add_argument(
         "--pipeline",
+        type=str,
         required=True,
         help="Pipeline built-in name or import path for loading the pipeline"
         "(e.g. streamdiffusion, scope, custom_pipeline.package:PipelineClass).",
     )
     parser.add_argument(
+        "--pipeline-name",
+        type=str,
+        required=False,
+        help="Custom pipeline name (e.g. streamdiffusion, scope, custom).",
+    )
+    parser.add_argument(
         "--verbose",
+        type=bool,
+        default=False,
         action="store_true",
         help="Enable verbose logging.",
     )
@@ -53,16 +61,17 @@ def main() -> None:
         raise ValueError(f"Models dir {models_dir} does not exist (check HUGGINGFACE_HUB_CACHE env var)")
 
     logging.info("Loading pipeline '%s' for model preparation", args.pipeline)
+
     pipeline_spec = builtin_pipeline_spec(args.pipeline)
-    if pipeline_spec is None:
-        # This can be called with the pipeline import path directly for custom pipelines.
-        name = args.pipeline.rsplit(":", 1)[-1]
-        pipeline_spec = PipelineSpec(name, args.pipeline)
-    pipeline = load_pipeline(pipeline_spec)
-    try:
-        pipeline.prepare_models()
-    finally:
-        del pipeline
+    if pipeline_spec:
+        pipeline_class = load_pipeline_class(pipeline_spec.pipeline_cls)
+    else:
+        # This can be called with the pipeline import path for custom pipelines.
+        pipeline_class = load_pipeline_class(args.pipeline)
+
+    # This will download and/or compile any assets required for this pipeline. Might take a while.
+    pipeline_class.prepare_models()
+
     logging.info("Model preparation finished successfully.")
 
 

@@ -83,7 +83,7 @@ def builtin_pipeline_spec(name: str) -> PipelineSpec | None:
         return None
 
 
-def load_pipeline_class(pipeline_cls: str) -> type:
+def load_pipeline_class(pipeline_cls: str) -> type[Pipeline]:
     """Dynamically import and return a pipeline class.
 
     Args:
