@@ -2,6 +2,37 @@
 
 This document offers a comprehensive guide for configuring the development environment and debugging the [worker](/worker) component within the [AI worker](https://github.com/livepeer/ai-worker) repository.
 
+## Local Development Setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for Python dependency management. To set up a local development environment:
+
+1. **Install uv**: Follow the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/).
+
+2. **Install dependencies**: Navigate to the `runner` directory and install dependencies:
+
+   ```bash
+   cd runner
+   uv sync --extra batch --extra dev
+   ```
+
+   Available dependency extras:
+   - `batch` - Dependencies for batch inference pipelines (text-to-image, image-to-video, etc.)
+   - `realtime` - Dependencies for realtime pipelines (streamdiffusion, comfyui, etc.)
+   - `llm` - Dependencies for LLM pipelines
+   - `dev` - Development dependencies (pytest, etc.)
+
+3. **Run tests**:
+
+   ```bash
+   uv run pytest
+   ```
+
+4. **Generate OpenAPI spec**:
+
+   ```bash
+   uv run python gen_openapi.py
+   ```
+
 ## Running with Docker
 
 ### Get the Docker Image
@@ -17,20 +48,25 @@ docker pull livepeer/ai-runner:latest
 #### Build Docker image
 
 ```bash
-docker build -t livepeer/ai-runner:latest .
+cd runner
+docker build -f docker/Dockerfile -t livepeer/ai-runner:latest .
 ```
 
 ### Download AI Models
 
 The AI Runner container's runner app uses [HuggingFace](https://huggingface.co/) model IDs to reference models. It expects model checkpoints in a `/models` directory, which can be mounted to a local `models` directory. To download model checkpoints to the local `models` directory, use the `dl-checkpoints.sh` script:
 
-1. **Install Hugging Face CLI**: Install the Hugging Face CLI by running the following command:
+1. **Install Hugging Face CLI**: Install the Hugging Face CLI using [uv](https://docs.astral.sh/uv/) (recommended) or pip:
 
    ```bash
+   # Using uv (recommended)
+   uv tool install huggingface_hub
+
+   # Or using pip
    pip install huggingface_hub
    ```
 
-2. **Set up Hugging Face Access Token**: Generate a Hugging Face access token as per the [official guide](https://huggingface.co/docs/hub/en/security-tokens) and assign it to the `HG_TOKEN` environment variable. This token enables downloading of [private models](https://huggingface.co/docs/transformers.js/en/guides/private) from the Hugging Face model hub. Alternatively, use the Hugging Face CLI's [login command](https://huggingface.co/docs/huggingface_hub/en/guides/cli#huggingface-cli-login) to install the token.
+2. **Set up Hugging Face Access Token**: Generate a Hugging Face access token as per the [official guide](https://huggingface.co/docs/hub/en/security-tokens) and assign it to the `HF_TOKEN` environment variable. This token enables downloading of [private models](https://huggingface.co/docs/transformers.js/en/guides/private) from the Hugging Face model hub. Alternatively, use the Hugging Face CLI's [login command](https://huggingface.co/docs/huggingface_hub/en/guides/cli#huggingface-cli-login) to install the token.
 
    > [!IMPORTANT]
    > The `dl_checkpoints.sh` script includes the [SVD1.1](https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt-1-1) model. To use this model on the _AI Subnet_, visit its [page](https://huggingface.co/stabilityai/stable-video-diffusion-img2vid-xt-1-1), log in, and accept the terms.

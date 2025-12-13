@@ -5,7 +5,7 @@ FROM ${BASE_IMAGE}
 # Need to repeat it here since one above is in a different stage
 ARG PIPELINE=comfyui
 
-# Install latest stable Go version and system dependencies
+# Install system dependencies
 RUN apt update && apt install -yqq \
     wget \
     libcairo2-dev \
@@ -13,21 +13,27 @@ RUN apt update && apt install -yqq \
     pkg-config \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
-RUN --mount=type=bind,source=requirements.live-ai.txt,target=/tmp/requirements.txt \
-    pip install --root-user-action ignore --requirement /tmp/requirements.txt
+WORKDIR /app
 
-# Set environment variables
-ENV MAX_WORKERS=1 \
-    HUGGINGFACE_HUB_CACHE=/models \
-    DIFFUSERS_CACHE=/models \
-    MODEL_DIR=/models
+# Copy lockfile and pyproject.toml first (for layer caching)
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies (--inexact preserves packages from base image)
+RUN uv sync --locked --extra realtime --no-install-project --inexact
 
 # Copy application files
 COPY app/ /app/app
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 
-WORKDIR /app
+# Final sync to install the project
+RUN uv sync --locked --extra realtime --inexact
+
+# Set environment variables
+ENV MAX_WORKERS=1 \
+    HUGGINGFACE_HUB_CACHE=/models \
+    DIFFUSERS_CACHE=/models \
+    MODEL_DIR=/models
 
 # Keep these args/envs last to maximize cache reuse when only runtime envs change
 ARG GIT_SHA
@@ -39,4 +45,4 @@ ENV GIT_SHA="${GIT_SHA}" \
     PIPELINE="${PIPELINE}" \
     INFERPY_INITIAL_PARAMS="${INFERPY_INITIAL_PARAMS}"
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
