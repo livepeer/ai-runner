@@ -1,45 +1,54 @@
 import sys
 import time
 from contextlib import contextmanager
+import importlib
+
+from pydantic import BaseModel
+
 from .interface import Pipeline, BaseParams
 
+class PipelineSpec(BaseModel):
+    """
+    Specification for the classes to use for a pipeline and its parameters.
+    """
+    name: str
+    pipeline_cls: str
+    params_cls: str | None = None
+    initial_params: dict = {}
 
-def load_pipeline(name: str) -> Pipeline:
+    def __init__(self, name: str, pipeline_cls: str, params_cls: str | None = None, initial_params: dict = {}):
+        super().__init__(name=name, pipeline_cls=pipeline_cls, params_cls=params_cls, initial_params=initial_params)
+
+
+def builtin_pipeline_spec(name: str) -> PipelineSpec | None:
     if name == "streamdiffusion" or name.startswith("streamdiffusion-"):
-        from .streamdiffusion.pipeline import StreamDiffusion
-        return StreamDiffusion()
+        return PipelineSpec("streamdiffusion", "live.pipelines.streamdiffusion.pipeline:StreamDiffusion", "live.pipelines.streamdiffusion.params:StreamDiffusionParams")
     if name == "comfyui":
-        from .comfyui.pipeline import ComfyUI
-        return ComfyUI()
+        return PipelineSpec("comfyui", "live.pipelines.comfyui.pipeline:ComfyUI", "live.pipelines.comfyui.params:ComfyUIParams")
     elif name == "scope":
-        from .scope.pipeline import Scope
-        return Scope()
+        return PipelineSpec("scope", "live.pipelines.scope.pipeline:Scope", "live.pipelines.scope.params:ScopeParams")
     elif name == "noop":
-        from .noop import Noop
-        return Noop()
-    raise ValueError(f"Unknown pipeline: {name}")
+        return PipelineSpec("noop", "live.pipelines.noop.pipeline:Noop")
+    else:
+        return None
 
 
-def parse_pipeline_params(name: str, params: dict) -> BaseParams:
+def load_pipeline(pipeline_spec: PipelineSpec) -> Pipeline:
+    pipeline_class = _import_class(pipeline_spec.pipeline_cls)
+    return pipeline_class()
+
+
+def parse_pipeline_params(spec: PipelineSpec, params: dict) -> BaseParams:
     """
     Parse pipeline parameters. This function may be called from outside the
     pipeline process, so we need to ensure no expensive libraries are imported.
     """
-    if name == "streamdiffusion" or name.startswith("streamdiffusion-"):
-        with _no_expensive_imports():
-            from .streamdiffusion.params import StreamDiffusionParams
-            return StreamDiffusionParams(**params)
-    if name == "comfyui":
-        with _no_expensive_imports():
-            from .comfyui.params import ComfyUIParams
-            return ComfyUIParams(**params)
-    if name == "scope":
-        with _no_expensive_imports():
-            from .scope.params import ScopeParams
-            return ScopeParams(**params)
-    if name == "noop":
-        return BaseParams(**params)
-    raise ValueError(f"Unknown pipeline: {name}")
+    with _no_expensive_imports():
+        if spec.params_cls is None:
+            return BaseParams(**params)
+
+        params_class = _import_class(spec.params_cls)
+        return params_class(**params)
 
 
 @contextmanager
@@ -65,3 +74,8 @@ def _no_expensive_imports(timeout: float = 0.5):
             raise ImportError(
                 f"Import imported expensive modules: {expensive_after - expensive_before}"
             )
+
+def _import_class(import_path: str) -> type:
+    module_name, class_name = import_path.rsplit(":", 1)
+    module = importlib.import_module(module_name)
+    return getattr(module, class_name)

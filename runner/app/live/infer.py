@@ -10,6 +10,7 @@ import threading
 from typing import List
 
 from .process import ProcessGuardian
+from .pipelines import builtin_pipeline_spec, PipelineSpec
 from .streamer import PipelineStreamer
 from .streamer.protocol import TrickleProtocol, ZeroMQProtocol
 from .trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
@@ -71,7 +72,13 @@ async def main(
     _MAIN_LOOP = asyncio.get_event_loop()
     _MAIN_LOOP.set_exception_handler(asyncio_exception_handler)
 
-    process = ProcessGuardian(pipeline, params or {})
+    pipeline_spec = builtin_pipeline_spec(args.pipeline)
+    if pipeline_spec is None:
+        # This can be called with the pipeline import path directly for custom pipelines.
+        name = args.pipeline.rsplit(":", 1)[-1]
+        pipeline_spec = PipelineSpec(name, args.pipeline, initial_params=params or {})
+    process = ProcessGuardian(pipeline_spec)
+
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:

@@ -5,6 +5,7 @@ from typing import Optional
 import abc
 
 from ..trickle import InputFrame, OutputFrame
+from ..pipelines import PipelineSpec
 from .process import PipelineProcess
 from .status import PipelineState, PipelineStatus, InferenceStatus, InputStatus
 
@@ -39,24 +40,22 @@ class ProcessGuardian:
 
     def __init__(
         self,
-        pipeline: str,
-        params: dict,
+        pipeline_spec: PipelineSpec
     ):
-        self.pipeline = pipeline
-        self.initial_params = params
+        self.pipeline_spec = pipeline_spec
         self.streamer: StreamerCallbacks = _NoopStreamerCallbacks()
 
         self.process: Optional[PipelineProcess] = None
         self.monitor_task = None
-        self.status = PipelineStatus(pipeline=pipeline, start_time=0).update_params(
-            params, False
+        self.status = PipelineStatus(pipeline=pipeline_spec.name, start_time=0).update_params(
+            pipeline_spec.initial_params, False
         )
 
         self.input_fps_counter = FPSCounter()
         self.output_fps_counter = FPSCounter()
 
     async def start(self):
-        self.process = PipelineProcess.start(self.pipeline, self.initial_params)
+        self.process = PipelineProcess.start(self.pipeline_spec)
         self.status.update_state(PipelineState.LOADING)
         self.monitor_task = asyncio.create_task(self._monitor_loop())
 
@@ -199,7 +198,7 @@ class ProcessGuardian:
         # Special case: short halt after params update
         active_after_load = time_since_last_output < time_since_pipeline_load
         if not active_after_load:
-            error_threshold = 30 if self.pipeline == "comfyui" else 10
+            error_threshold = 30 if self.pipeline_spec.name == "comfyui" else 10
             return (
                 PipelineState.ONLINE
                 if time_since_pipeline_load < 2
@@ -238,7 +237,7 @@ class ProcessGuardian:
         # don't call the full start/stop methods since we only want to restart the process
         await self.process.stop()
 
-        self.process = PipelineProcess.start(self.pipeline, self.initial_params)
+        self.process = PipelineProcess.start(self.pipeline_spec)
         self.status.update_state(PipelineState.LOADING)
         curr_status = self.status.inference_status
         self.status.inference_status = InferenceStatus(
@@ -250,7 +249,7 @@ class ProcessGuardian:
         await self.streamer.emit_monitoring_event(
             {
                 "type": "restart",
-                "pipeline": self.pipeline,
+                "pipeline": self.pipeline_spec.name,
                 "restart_count": self.status.inference_status.restart_count,
                 "restart_time": self.status.inference_status.last_restart_time,
                 "restart_logs": restart_logs,
@@ -277,7 +276,7 @@ class ProcessGuardian:
                     await self.streamer.emit_monitoring_event(
                         {
                             "type": "error",
-                            "pipeline": self.pipeline,
+                            "pipeline": self.pipeline_spec.name,
                             "message": error_msg,
                             "time": error_time,
                         }
@@ -304,7 +303,7 @@ class ProcessGuardian:
                 if state == PipelineState.OFFLINE:
                     # Revert to initial params when the stream stops
                     self.process.reset_stream("", "", "")
-                    self.process.update_params(self.initial_params)
+                    self.process.update_params(self.pipeline_spec.initial_params)
 
                 if state != PipelineState.ERROR:
                     # avoid thrashing the state to ERROR if we're going to restart the process below
@@ -323,7 +322,7 @@ class ProcessGuardian:
                         if restart_count >= 3:
                             raise Exception(f"Pipeline process max restarts reached ({restart_count})")
 
-                        if self.pipeline == "comfyui":
+                        if self.pipeline_spec.name == "comfyui":
                             # Hot fix: the comfyui pipeline process is having trouble shutting down and causes restarts not to recover.
                             # So we skip the restart here and move the state to ERROR so the worker will restart the whole container.
                             # TODO: Remove this exception once pipeline shutdown is fixed and restarting process is useful again.

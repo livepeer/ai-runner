@@ -16,7 +16,7 @@ import os
 import sys
 from pathlib import Path
 
-from ..live.pipelines.loader import load_pipeline
+from ..live.pipelines.loader import load_pipeline, builtin_pipeline_spec, PipelineSpec
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,8 +24,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--pipeline",
         required=True,
-        help="Pipeline name accepted by loader.load_pipeline "
-        "(e.g. streamdiffusion, scope, comfyui).",
+        help="Pipeline built-in name or import path for loading the pipeline"
+        "(e.g. streamdiffusion, scope, custom_pipeline.package:PipelineClass).",
     )
     parser.add_argument(
         "--verbose",
@@ -53,7 +53,12 @@ def main() -> None:
         raise ValueError(f"Models dir {models_dir} does not exist (check HUGGINGFACE_HUB_CACHE env var)")
 
     logging.info("Loading pipeline '%s' for model preparation", args.pipeline)
-    pipeline = load_pipeline(args.pipeline)
+    pipeline_spec = builtin_pipeline_spec(args.pipeline)
+    if pipeline_spec is None:
+        # This can be called with the pipeline import path directly for custom pipelines.
+        name = args.pipeline.rsplit(":", 1)[-1]
+        pipeline_spec = PipelineSpec(name, args.pipeline)
+    pipeline = load_pipeline(pipeline_spec)
     try:
         pipeline.prepare_models()
     finally:
