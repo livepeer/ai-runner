@@ -132,3 +132,8 @@ class UpscalePipeline(Pipeline):
 
     def __str__(self) -> str:
         return f"UpscalePipeline model_id={self.model_id}"
+
+    @property
+    def router(self):
+        from app.routes import upscale
+        return upscale.router

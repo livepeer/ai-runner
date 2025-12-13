@@ -148,3 +148,8 @@ class ImageToVideoPipeline(Pipeline):
 
     def __str__(self) -> str:
         return f"ImageToVideoPipeline model_id={self.model_id}"
+
+    @property
+    def router(self):
+        from app.routes import image_to_video
+        return image_to_video.router

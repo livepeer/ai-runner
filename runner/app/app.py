@@ -24,7 +24,10 @@ def _setup_app(app: FastAPI, pipeline: Pipeline):
     app.include_router(health.router)
     app.include_router(hardware.router)
     app.include_router(version.router)
-    app.include_router(load_route(pipeline))
+
+    if pipeline.router is None:
+        raise NotImplementedError(f"{type(pipeline).__name__} does not have a router defined")
+    app.include_router(pipeline.router)
 
     app.hardware_info_service.log_gpu_compute_info()
 
@@ -77,54 +80,6 @@ def load_pipeline(pipeline: str, model_id: str) -> Pipeline:
             raise EnvironmentError(
                 f"{pipeline} is not a valid pipeline for model {model_id}"
             )
-
-
-def load_route(pipeline: Pipeline) -> APIRouter:
-    match type(pipeline).__name__:
-        case "TextToImagePipeline":
-            from app.routes import text_to_image
-
-            return text_to_image.router
-        case "ImageToImagePipeline":
-            from app.routes import image_to_image
-
-            return image_to_image.router
-        case "ImageToVideoPipeline":
-            from app.routes import image_to_video
-
-            return image_to_video.router
-        case "AudioToTextPipeline":
-            from app.routes import audio_to_text
-
-            return audio_to_text.router
-        case "FrameInterpolationPipeline":
-            raise NotImplementedError("frame-interpolation pipeline not implemented")
-        case "UpscalePipeline":
-            from app.routes import upscale
-
-            return upscale.router
-        case "SegmentAnything2Pipeline":
-            from app.routes import segment_anything_2
-
-            return segment_anything_2.router
-        case "LLMPipeline":
-            from app.routes import llm
-
-            return llm.router
-        case "ImageToTextPipeline":
-            from app.routes import image_to_text
-
-            return image_to_text.router
-        case "LiveVideoToVideoPipeline":
-            from app.routes import live_video_to_video
-
-            return live_video_to_video.router
-        case "TextToSpeechPipeline":
-            from app.routes import text_to_speech
-
-            return text_to_speech.router
-        case _:
-            raise EnvironmentError(f"{pipeline} is not a valid pipeline")
 
 
 def use_route_names_as_operation_ids(app: FastAPI) -> None:

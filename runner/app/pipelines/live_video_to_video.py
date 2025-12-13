@@ -299,6 +299,11 @@ class LiveVideoToVideoPipeline(Pipeline):
     def __str__(self) -> str:
         return f"VideoToVideoPipeline model_id={self.model_id}"
 
+    @property
+    def router(self):
+        from app.routes import live_video_to_video
+        return live_video_to_video.router
+
 def log_output(f: IO[str]):
     try:
         for line in f:
