@@ -20,10 +20,6 @@ proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntar
 
 class LiveVideoToVideoPipeline(Pipeline):
     def __init__(self, pipeline_spec: PipelineSpec):
-        """
-        Initialize the LiveVideoToVideoPipeline. Notice that we rename the model_id argument to live_pipeline for clarity
-        of the interface when creating this class from custom live pipelines.
-        """
         self.version = os.getenv("VERSION", "undefined")
         self.model_id = pipeline_spec.name # we set the parent class model_id to the pipeline name for compatibility
         self.pipeline_spec = pipeline_spec
@@ -114,9 +110,6 @@ class LiveVideoToVideoPipeline(Pipeline):
         cmd = [sys.executable, "-u", "-m", self.infer_module]
         cmd.extend(["--pipeline", self.pipeline_spec.model_dump_json()])
         cmd.extend(["--http-port", "8888"])
-        initial_params = os.environ.get("INFERPY_INITIAL_PARAMS")
-        if initial_params:
-            cmd.extend(["--initial-params", initial_params])
         # TODO: set torch device from self.torch_device
 
         env = os.environ.copy()

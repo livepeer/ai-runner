@@ -110,11 +110,9 @@ WORKDIR /app
 # Keep these args/envs last to maximize cache reuse when only runtime envs change
 ARG GIT_SHA
 ARG VERSION="undefined"
-ARG INFERPY_INITIAL_PARAMS
 
 ENV GIT_SHA="${GIT_SHA}" \
     VERSION="${VERSION}" \
-    PIPELINE="comfyui" \
-    INFERPY_INITIAL_PARAMS="${INFERPY_INITIAL_PARAMS}"
+    PIPELINE="comfyui"
 
 CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

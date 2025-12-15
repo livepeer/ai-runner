@@ -63,7 +63,6 @@ async def main(
     control_url: str,
     events_url: str,
     pipeline: str,
-    params: dict,
     request_id: str,
     manifest_id: str,
     stream_id: str,
@@ -80,8 +79,8 @@ async def main(
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
-        width = params.get('width', DEFAULT_WIDTH)
-        height = params.get('height', DEFAULT_HEIGHT)
+        width = pipeline_spec.initial_params.get('width', DEFAULT_WIDTH)
+        height = pipeline_spec.initial_params.get('height', DEFAULT_HEIGHT)
         if stream_protocol == "trickle":
             protocol = TrickleProtocol(
                 subscribe_url, publish_url, control_url, events_url, width, height
@@ -99,7 +98,7 @@ async def main(
         with log_timing("starting ProcessGuardian"):
             await process.start()
             if streamer:
-                await streamer.start(params)
+                await streamer.start(pipeline_spec.initial_params)
             api = await start_http_server(http_port, process, streamer)
 
         lifecycle_tasks: List[asyncio.Task] = [
@@ -166,12 +165,6 @@ if __name__ == "__main__":
         "--pipeline", type=str, default="comfyui", help="Pipeline to use"
     )
     parser.add_argument(
-        "--initial-params",
-        type=str,
-        default="{}",
-        help="Initial parameters for the pipeline",
-    )
-    parser.add_argument(
         "--stream-protocol",
         type=str,
         choices=["trickle", "zeromq"],
@@ -214,11 +207,6 @@ if __name__ == "__main__":
         "--stream-id", type=str, default="", help="The Livepeer stream ID"
     )
     args = parser.parse_args()
-    try:
-        params = json.loads(args.initial_params)
-    except Exception as e:
-        logging.error(f"Error parsing --initial-params: {e}")
-        sys.exit(1)
 
     if args.verbose:
         os.environ["VERBOSE_LOGGING"] = "1"  # enable verbose logging in sub-processes
@@ -240,7 +228,6 @@ if __name__ == "__main__":
                 control_url=args.control_url,
                 events_url=args.events_url,
                 pipeline=args.pipeline,
-                params=params,
                 request_id=args.request_id,
                 manifest_id=args.manifest_id,
                 stream_id=args.stream_id,
