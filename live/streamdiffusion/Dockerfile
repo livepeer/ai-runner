@@ -20,6 +20,7 @@ RUN uv run python -m streamdiffusion.tools.install-tensorrt
 COPY runner/app/ /app/runner/app/
 COPY runner/images/ /app/runner/images/
 COPY live/streamdiffusion/pipeline ./pipeline/
+COPY live/streamdiffusion/default_params ./default_params/
 COPY live/streamdiffusion/main.py ./main.py
 
 # Need --inexact to keep packages installed from install-tensorrt
@@ -38,10 +39,10 @@ ENV HF_HUB_ENABLE_HF_TRANSFER=1 \
 
 ARG GIT_SHA
 ARG VERSION="undefined"
-ARG PIPE_INITIAL_PARAMS
+ARG SUBVARIANT="sdturbo"
 
 ENV GIT_SHA="${GIT_SHA}" \
     VERSION="${VERSION}" \
-    PIPE_INITIAL_PARAMS="${PIPE_INITIAL_PARAMS}"
+    SUBVARIANT="${SUBVARIANT}"
 
 CMD ["uv", "run", "python", "main.py"]

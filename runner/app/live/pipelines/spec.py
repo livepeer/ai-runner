@@ -25,7 +25,10 @@ class PipelineSpec(BaseModel):
         ... )
     """
     name: str = ""
-    """Identifier for the pipeline. Derived from pipeline_cls if not provided."""
+    """
+    Identifier for the pipeline. Derived from pipeline_cls if not provided.
+    This must match the MODEL_ID set by the Orchestrator for the runner container.
+    """
 
     pipeline_cls: str
     """Import path to the Pipeline subclass. e.g. "my_pipelines.module:MyPipeline" """

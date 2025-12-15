@@ -74,22 +74,6 @@ jobs:
           username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
-      - name: Load params for subtype
-        id: params_json
-        shell: bash
-        run: |
-          set -ex
-
-          PARAM_NAME="$(echo "${{ matrix.subtype }}" | tr '-' '_')"
-          JSON_FILE="live/streamdiffusion/default_params/${PARAM_NAME}.json"
-          if [ ! -f "$JSON_FILE" ]; then
-            echo "Params file missing: $JSON_FILE" >&2
-            exit 1
-          fi
-
-          JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
-          echo "json_compact=$JSON_COMPACT" >> "$GITHUB_OUTPUT"
-
       - name: Build and push pipeline app image
         id: build-app
         uses: docker/build-push-action@v6
@@ -102,7 +86,7 @@ jobs:
           build-args: |
             GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
             VERSION=${{ steps.version.outputs.version }}
-            PIPE_INITIAL_PARAMS=${{ steps.params_json.outputs.json_compact }}
+            SUBVARIANT=${{ matrix.subtype }}
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
