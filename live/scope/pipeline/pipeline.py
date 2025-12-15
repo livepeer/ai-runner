@@ -9,8 +9,8 @@ import torch
 from omegaconf import OmegaConf
 from scope.core.pipelines.interface import Pipeline as ScopePipeline
 
-from ..interface import Pipeline
-from ...trickle import VideoFrame, VideoOutput
+from app.live.pipelines import Pipeline
+from app.live.trickle import VideoFrame, VideoOutput
 from .params import ScopeParams
 
 # Models directory configured via DAYDREAM_SCOPE_MODELS_DIR env var

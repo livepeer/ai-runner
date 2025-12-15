@@ -59,12 +59,6 @@ def builtin_pipeline_spec(name: str) -> PipelineSpec | None:
             pipeline_cls="app.live.pipelines.comfyui.pipeline:ComfyUI",
             params_cls="app.live.pipelines.comfyui.params:ComfyUIParams",
         )
-    if name == "scope":
-        return PipelineSpec(
-            name="scope",
-            pipeline_cls="app.live.pipelines.scope.pipeline:Scope",
-            params_cls="app.live.pipelines.scope.params:ScopeParams",
-        )
     if name == "noop":
         return PipelineSpec(
             name="noop",

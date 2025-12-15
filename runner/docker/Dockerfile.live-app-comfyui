@@ -91,6 +91,8 @@ RUN apt update && apt install -yqq \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml /tmp/pyproject.toml
+# Copy stub for editable install validation (setuptools needs the app package to exist)
+COPY app/__init__.py /tmp/app/__init__.py
 RUN PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 \
     conda run -n comfystream pip install --root-user-action ignore "/tmp[realtime]"
 

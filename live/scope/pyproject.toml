@@ -1,0 +1,20 @@
+[project]
+name = "scope-pipeline"
+version = "0.1.0"
+requires-python = ">=3.10.12,<3.11"
+dependencies = [
+    "ai-runner[realtime]",
+    "daydream-scope",
+]
+
+[tool.uv.sources]
+ai-runner = { path = "../../runner", editable = true }
+daydream-scope = { git = "https://github.com/daydreamlive/scope.git", rev = "734057a4701975941a45e8ca8342b495a762ba2f" }
+
+[tool.uv]
+package = true
+# Let scope dictate fastapi version (ai-runner pins 0.115.6, scope needs >=0.116.1)
+override-dependencies = ["fastapi>=0.116.1"]
+
+[tool.setuptools]
+packages = ["pipeline"]
