@@ -3,9 +3,10 @@ name: Build realtime AI scope docker image
 on:
   pull_request:
     paths:
-      - "runner/docker/Dockerfile.live-*"
+      - "live/scope/**"
       - "runner/app/**"
-      - "runner/images/**"
+      - "runner/pyproject.toml"
+      - "runner/uv.lock"
       - "runner/VERSION"
   push:
     branches:
@@ -13,9 +14,10 @@ on:
     tags:
       - '*'
     paths:
-      - "runner/docker/Dockerfile.live-*"
+      - "live/scope/**"
       - "runner/app/**"
-      - "runner/images/**"
+      - "runner/pyproject.toml"
+      - "runner/uv.lock"
       - "runner/VERSION"
   workflow_dispatch:
 
@@ -24,57 +26,8 @@ concurrency:
   cancel-in-progress: ${{ !((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag') }}
 
 jobs:
-  base:
-    name: scope-base image
-    runs-on: [self-hosted, linux, amd64]
-    outputs:
-      image-digest: ${{ steps.build-base.outputs.digest }}
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract metadata for base image
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: livepeer/ai-runner
-          tags: |
-            type=raw,value=live-base-scope,enable={{is_default_branch}}
-            type=sha,prefix=live-base-scope-sha-
-            type=sha,format=long,prefix=live-base-scope-sha-
-            type=ref,event=pr,prefix=live-base-scope-pr-
-            type=ref,event=tag,prefix=live-base-scope-
-            type=ref,event=branch,prefix=live-base-scope-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-base-scope-
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
-          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
-
-      - name: Build and push live-base image
-        id: build-base
-        uses: docker/build-push-action@v6
-        with:
-          context: "{{defaultContext}}:runner"
-          file: docker/Dockerfile.live-base-scope
-          provenance: mode=max
-          sbom: true
-          push: true
-          platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          annotations: ${{ steps.meta.outputs.annotations }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=livepeer/ai-runner:live-base-scope-dockerbuildcache
-          cache-to: type=registry,ref=livepeer/ai-runner:live-base-scope-dockerbuildcache,mode=max
-
-  app:
-    name: Build pipeline image for runner
-    needs: base
+  build:
+    name: Build pipeline image
     runs-on: [self-hosted, linux, amd64]
     steps:
       - name: Check out code
@@ -112,19 +65,17 @@ jobs:
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
       - name: Build and push pipeline app image
+        id: build-app
         uses: docker/build-push-action@v6
         with:
-          context: "{{defaultContext}}:runner"
+          context: .
           provenance: mode=max
           sbom: true
           push: true
-          file: docker/Dockerfile.live-app__PIPELINE__
+          file: live/scope/Dockerfile
           build-args: |
-            PIPELINE=scope
             GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
             VERSION=${{ steps.version.outputs.version }}
-            # only specify base image if we just built it above, otherwise use whatever default is in the Dockerfile
-            ${{ needs.base.outputs.image-digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.base.outputs.image-digest) }}
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
@@ -132,6 +83,10 @@ jobs:
           cache-from: type=registry,ref=livepeer/ai-runner:live-app-scope-dockerbuildcache
           cache-to: type=registry,ref=livepeer/ai-runner:live-app-scope-dockerbuildcache,mode=max
 
+  notify:
+    name: Notify new build upload
+    needs: build
+    runs-on: [self-hosted, linux, amd64]
+    steps:
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
-
