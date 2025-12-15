@@ -3,6 +3,7 @@ FROM ${BASE_IMAGE}
 
 RUN apt update && apt install -yqq \
     wget libcairo2-dev libgirepository1.0-dev pkg-config \
+    build-essential python3.10-dev \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/live/scope
