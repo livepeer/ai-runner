@@ -2,7 +2,7 @@ from typing import Dict, List, Literal, Optional, Any, Tuple, TypeVar, Generic
 
 from pydantic import BaseModel, model_validator, Field
 
-from ..interface import BaseParams
+from app.live.pipelines import BaseParams
 
 ModelType = Literal["sd15", "sd21", "sdxl"]
 
@@ -464,3 +464,4 @@ class StreamDiffusionParams(BaseParams):
             raise ValueError("Cached attention currently supports only 512x512 resolution")
 
         return model
+

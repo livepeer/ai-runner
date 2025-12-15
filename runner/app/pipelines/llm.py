@@ -316,6 +316,11 @@ class LLMPipeline(Pipeline):
     def __str__(self):
         return f"LLMPipeline(model_id={self.model_id})"
 
+    @property
+    def router(self):
+        from app.routes import llm
+        return llm.router
+
     def _find_model_path(self, base_path):
         # Check if the model files are directly in the base path
         if any(file.endswith('.bin') or file.endswith('.safetensors') for file in os.listdir(base_path)):

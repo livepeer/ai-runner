@@ -67,6 +67,17 @@ dev = [
     "pytest",
     "pytest-mock",
 ]
+# Local development for realtime pipelines with CPU-only torch.
+# Also used by the noop pipeline Docker image.
+realtime-dev = [
+    "ai-runner[realtime]",
+    "torch",
+    "diffusers",
+    "transformers",
+]
+
+[tool.setuptools]
+packages = ["app"]
 
 [tool.uv]
 conflicts = [
@@ -74,10 +85,14 @@ conflicts = [
         { extra = "batch" },
         { extra = "llm" },
         { extra = "realtime" },
+        { extra = "realtime-dev" },
     ],
 ]
 
+[tool.uv.sources]
+torch = { index = "pytorch-cpu", extra = "realtime-dev" }
+
 [[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 explicit = true

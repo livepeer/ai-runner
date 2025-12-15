@@ -43,3 +43,8 @@ class SegmentAnything2Pipeline(Pipeline):
 
     def __str__(self) -> str:
         return f"SegmentAnything2Pipeline model_id={self.model_id}"
+
+    @property
+    def router(self):
+        from app.routes import segment_anything_2
+        return segment_anything_2.router

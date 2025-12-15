@@ -10,6 +10,7 @@ import threading
 from typing import List
 
 from .process import ProcessGuardian
+from .pipelines import builtin_pipeline_spec, PipelineSpec
 from .streamer import PipelineStreamer
 from .streamer.protocol import TrickleProtocol, ZeroMQProtocol
 from .trickle import DEFAULT_WIDTH, DEFAULT_HEIGHT
@@ -62,7 +63,6 @@ async def main(
     control_url: str,
     events_url: str,
     pipeline: str,
-    params: dict,
     request_id: str,
     manifest_id: str,
     stream_id: str,
@@ -71,12 +71,16 @@ async def main(
     _MAIN_LOOP = asyncio.get_event_loop()
     _MAIN_LOOP.set_exception_handler(asyncio_exception_handler)
 
-    process = ProcessGuardian(pipeline, params or {})
+    pipeline_spec = builtin_pipeline_spec(args.pipeline)
+    if pipeline_spec is None:
+        pipeline_spec = PipelineSpec.model_validate_json(pipeline)
+    process = ProcessGuardian(pipeline_spec)
+
     # Only initialize the streamer if we have a protocol and URLs to connect to
     streamer = None
     if stream_protocol and subscribe_url and publish_url:
-        width = params.get('width', DEFAULT_WIDTH)
-        height = params.get('height', DEFAULT_HEIGHT)
+        width = pipeline_spec.initial_params.get('width', DEFAULT_WIDTH)
+        height = pipeline_spec.initial_params.get('height', DEFAULT_HEIGHT)
         if stream_protocol == "trickle":
             protocol = TrickleProtocol(
                 subscribe_url, publish_url, control_url, events_url, width, height
@@ -94,7 +98,7 @@ async def main(
         with log_timing("starting ProcessGuardian"):
             await process.start()
             if streamer:
-                await streamer.start(params)
+                await streamer.start(pipeline_spec.initial_params)
             api = await start_http_server(http_port, process, streamer)
 
         lifecycle_tasks: List[asyncio.Task] = [
@@ -124,7 +128,9 @@ async def main(
             results = await asyncio.wait_for(stops, timeout=6)
             exceptions = [result for result in results if isinstance(result, Exception)]
             if exceptions:
-                raise ExceptionGroup("Error stopping components", exceptions)
+                for exc in exceptions:
+                    logging.error("Error stopping component", exc_info=exc)
+                raise RuntimeError("Error stopping pipeline components")
         except Exception as e:
             logging.error(f"Graceful shutdown error, exiting abruptly: {e}", exc_info=True)
             os._exit(1)
@@ -157,12 +163,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pipeline", type=str, default="comfyui", help="Pipeline to use"
-    )
-    parser.add_argument(
-        "--initial-params",
-        type=str,
-        default="{}",
-        help="Initial parameters for the pipeline",
     )
     parser.add_argument(
         "--stream-protocol",
@@ -207,11 +207,6 @@ if __name__ == "__main__":
         "--stream-id", type=str, default="", help="The Livepeer stream ID"
     )
     args = parser.parse_args()
-    try:
-        params = json.loads(args.initial_params)
-    except Exception as e:
-        logging.error(f"Error parsing --initial-params: {e}")
-        sys.exit(1)
 
     if args.verbose:
         os.environ["VERBOSE_LOGGING"] = "1"  # enable verbose logging in sub-processes
@@ -233,7 +228,6 @@ if __name__ == "__main__":
                 control_url=args.control_url,
                 events_url=args.events_url,
                 pipeline=args.pipeline,
-                params=params,
                 request_id=args.request_id,
                 manifest_id=args.manifest_id,
                 stream_id=args.stream_id,

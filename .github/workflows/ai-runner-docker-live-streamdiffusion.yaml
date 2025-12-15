@@ -3,9 +3,10 @@ name: Build realtime AI streamdiffusion docker image
 on:
   pull_request:
     paths:
-      - "runner/docker/Dockerfile.live-*"
+      - "live/streamdiffusion/**"
       - "runner/app/**"
-      - "runner/images/**"
+      - "runner/pyproject.toml"
+      - "runner/uv.lock"
       - "runner/VERSION"
   push:
     branches:
@@ -13,9 +14,10 @@ on:
     tags:
       - '*'
     paths:
-      - "runner/docker/Dockerfile.live-*"
+      - "live/streamdiffusion/**"
       - "runner/app/**"
-      - "runner/images/**"
+      - "runner/pyproject.toml"
+      - "runner/uv.lock"
       - "runner/VERSION"
   workflow_dispatch:
 
@@ -24,57 +26,8 @@ concurrency:
   cancel-in-progress: ${{ !((github.ref_type == 'branch' && github.ref_name == 'main') || github.ref_type == 'tag') }}
 
 jobs:
-  base:
-    name: streamdiffusion-base image
-    runs-on: [self-hosted, linux, amd64]
-    outputs:
-      image-digest: ${{ steps.build-base.outputs.digest }}
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract metadata for base image
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: livepeer/ai-runner
-          tags: |
-            type=raw,value=live-base-streamdiffusion,enable={{is_default_branch}}
-            type=sha,prefix=live-base-streamdiffusion-sha-
-            type=sha,format=long,prefix=live-base-streamdiffusion-sha-
-            type=ref,event=pr,prefix=live-base-streamdiffusion-pr-
-            type=ref,event=tag,prefix=live-base-streamdiffusion-
-            type=ref,event=branch,prefix=live-base-streamdiffusion-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-base-streamdiffusion-
-
-      - name: Login to DockerHub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
-          password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
-
-      - name: Build and push live-base image
-        id: build-base
-        uses: docker/build-push-action@v6
-        with:
-          context: "{{defaultContext}}:runner"
-          file: docker/Dockerfile.live-base-streamdiffusion
-          provenance: mode=max
-          sbom: true
-          push: true
-          platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          annotations: ${{ steps.meta.outputs.annotations }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=livepeer/ai-runner:live-base-streamdiffusion-dockerbuildcache
-          cache-to: type=registry,ref=livepeer/ai-runner:live-base-streamdiffusion-dockerbuildcache,mode=max
-
-  app:
+  build:
     name: Build pipeline images
-    needs: base
     runs-on: [self-hosted, linux, amd64]
     strategy:
       matrix:
@@ -121,38 +74,19 @@ jobs:
           username: ${{ secrets.CI_DOCKERHUB_USERNAME }}
           password: ${{ secrets.CI_DOCKERHUB_TOKEN }}
 
-      - name: Load params for subtype
-        id: params_json
-        shell: bash
-        run: |
-          set -ex
-
-          PARAM_NAME="$(echo "${{ matrix.subtype }}" | tr '-' '_')"
-          JSON_FILE="runner/app/live/pipelines/streamdiffusion/${PARAM_NAME}_default_params.json"
-          if [ ! -f "$JSON_FILE" ]; then
-            echo "Params file missing: $JSON_FILE" >&2
-            exit 1
-          fi
-
-          JSON_COMPACT=$(tr -d '\n' < "$JSON_FILE")
-          echo "json_compact=$JSON_COMPACT" >> "$GITHUB_OUTPUT"
-
       - name: Build and push pipeline app image
         id: build-app
         uses: docker/build-push-action@v6
         with:
-          context: "{{defaultContext}}:runner"
+          context: .
           provenance: mode=max
           sbom: true
           push: true
-          file: docker/Dockerfile.live-app__PIPELINE__
+          file: live/streamdiffusion/Dockerfile
           build-args: |
-            PIPELINE=streamdiffusion
             GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
             VERSION=${{ steps.version.outputs.version }}
-            # only specify base image if we just built it above, otherwise use whatever default is in the Dockerfile
-            ${{ needs.base.outputs.image-digest && format('BASE_IMAGE=livepeer/ai-runner@{0}', needs.base.outputs.image-digest) }}
-            ${{ steps.params_json.outputs.json_compact && format('INFERPY_INITIAL_PARAMS={0}', steps.params_json.outputs.json_compact) }}
+            SUBVARIANT=${{ matrix.subtype }}
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           annotations: ${{ steps.meta.outputs.annotations }}
@@ -162,7 +96,7 @@ jobs:
 
   notify:
     name: Notify new build upload
-    needs: app
+    needs: build
     runs-on: [self-hosted, linux, amd64]
     steps:
       - name: Notify new build upload

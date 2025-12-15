@@ -4,7 +4,6 @@ import os
 import subprocess
 import sys
 import threading
-from pathlib import Path
 import time
 from typing import IO
 from pydantic import BaseModel
@@ -15,12 +14,15 @@ from app.pipelines.base import Pipeline, HealthCheck
 from app.pipelines.utils import get_model_dir, get_torch_device
 from app.utils.errors import InferenceError
 
+from app.live.pipelines import PipelineSpec
+
 proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntary_ctxt_switches", "nonvoluntary_ctxt_switches", "CoreDumping"]
 
 class LiveVideoToVideoPipeline(Pipeline):
-    def __init__(self, model_id: str):
+    def __init__(self, pipeline_spec: PipelineSpec):
         self.version = os.getenv("VERSION", "undefined")
-        self.model_id = model_id
+        self.model_id = pipeline_spec.name # we set the parent class model_id to the pipeline name for compatibility
+        self.pipeline_spec = pipeline_spec
         self.model_dir = get_model_dir()
         self.torch_device = get_torch_device()
         self.infer_module = "app.live.infer"
@@ -106,11 +108,8 @@ class LiveVideoToVideoPipeline(Pipeline):
     def start_process(self):
         logging.info("Starting pipeline process")
         cmd = [sys.executable, "-u", "-m", self.infer_module]
-        cmd.extend(["--pipeline", self.model_id]) # we use the model_id as the pipeline name for now
+        cmd.extend(["--pipeline", self.pipeline_spec.model_dump_json()])
         cmd.extend(["--http-port", "8888"])
-        initial_params = os.environ.get("INFERPY_INITIAL_PARAMS")
-        if initial_params:
-            cmd.extend(["--initial-params", initial_params])
         # TODO: set torch device from self.torch_device
 
         env = os.environ.copy()
@@ -293,6 +292,11 @@ class LiveVideoToVideoPipeline(Pipeline):
 
     def __str__(self) -> str:
         return f"VideoToVideoPipeline model_id={self.model_id}"
+
+    @property
+    def router(self):
+        from app.routes import live_video_to_video
+        return live_video_to_video.router
 
 def log_output(f: IO[str]):
     try:

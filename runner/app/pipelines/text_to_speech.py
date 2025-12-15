@@ -74,3 +74,8 @@ class TextToSpeechPipeline(Pipeline):
 
     def __str__(self) -> str:
         return f"TextToSpeechPipeline model_id={self.model_id}"
+
+    @property
+    def router(self):
+        from app.routes import text_to_speech
+        return text_to_speech.router

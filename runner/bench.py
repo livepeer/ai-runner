@@ -13,7 +13,7 @@ from PIL import Image
 from pydantic import BaseModel
 from starlette.datastructures import UploadFile
 
-from app.main import load_pipeline
+from app.app import load_pipeline
 from app.pipelines.base import Pipeline
 
 CURRENT_DIR = Path(__file__).parent

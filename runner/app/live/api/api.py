@@ -127,13 +127,13 @@ async def handle_start_stream(request: web.Request):
         # Try to get dimensions from workflow first
         input_width = params.params.get("width", DEFAULT_WIDTH)
         input_height = params.params.get("height", DEFAULT_HEIGHT)
-        if process.pipeline == "comfyui":
+        if process.pipeline_spec.name == "comfyui":
             # TODO: Remove this once ComfyUI pipeline supports different resolutions without a restart
             input_width, input_height = DEFAULT_WIDTH, DEFAULT_HEIGHT
             params.params = params.params | {"width": input_width, "height": input_height}
             logging.warning("Using default input dimensions for ComfyUI pipeline")
 
-        parsed_params = parse_pipeline_params(process.pipeline, params.params)
+        parsed_params = parse_pipeline_params(process.pipeline_spec, params.params)
         output_width, output_height = parsed_params.get_output_resolution()
         logging.info(f"Pipeline resolutions: input={input_width}x{input_height} output={output_width}x{output_height}")
 
@@ -204,4 +204,5 @@ async def start_http_server(
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     logging.info(f"HTTP server started on port {port}")
+
     return runner
