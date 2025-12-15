@@ -2,8 +2,11 @@ ARG BASE_IMAGE=livepeer/ai-runner:live-base
 FROM ${BASE_IMAGE}
 
 RUN apt update && apt install -yqq \
-    wget libcairo2-dev libgirepository1.0-dev pkg-config \
-    build-essential python3.10-dev \
+    wget git curl \
+    build-essential software-properties-common \
+    libcairo2-dev libgirepository1.0-dev pkg-config \
+    libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 \
+    python3-dev \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/live/scope
