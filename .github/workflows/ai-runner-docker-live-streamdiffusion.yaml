@@ -100,6 +100,7 @@ jobs:
           push: true
           file: live/streamdiffusion/Dockerfile
           build-args: |
+            GIT_SHA=${{ (github.ref_type == 'tag' && github.ref_name) || (github.event.pull_request.head.sha || github.sha) }}
             VERSION=${{ steps.version.outputs.version }}
             INFERPY_INITIAL_PARAMS=${{ steps.params_json.outputs.json_compact }}
           platforms: linux/amd64
