@@ -441,7 +441,7 @@ class StreamDiffusionParams(BaseParams):
         if model_type == "sdxl" and not _is_building_tensorrt_engines:
             enabled_cns = [
                 cn for cn in model.controlnets
-                if cn.enabled and cn.conditioning_scale > 0
+                if cn.enabled
             ]
             if len(enabled_cns) > 3:
                 raise ValueError(
