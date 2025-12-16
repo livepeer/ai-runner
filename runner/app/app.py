@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 
 from app.routes import health, hardware, version
@@ -7,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.routing import APIRoute
 from app.utils.hardware import HardwareInfo
 from app.live.log import config_logging
+from app.live.pipelines import PipelineSpec
 from prometheus_client import Gauge, generate_latest, CONTENT_TYPE_LATEST
 from starlette.responses import Response
 from app.pipelines.base import Pipeline
@@ -92,25 +94,19 @@ def use_route_names_as_operation_ids(app: FastAPI) -> None:
         if isinstance(route, APIRoute):
             route.operation_id = route.name
 
+
+def prepare_models(pipeline_spec: PipelineSpec) -> None:
+    """Prepare models for a live pipeline (download, compile TensorRT engines, etc.)."""
+    from .live.pipelines.loader import load_pipeline_class
+
+    logger.info(f"Preparing models for pipeline: {pipeline_spec.name}")
+    pipeline_class = load_pipeline_class(pipeline_spec.pipeline_cls)
+    pipeline_class.prepare_models()
+    logger.info("Model preparation complete")
+
+
 def create_app(pipeline: Pipeline | None = None) -> FastAPI:
-    """
-    Create a configured AI Runner FastAPI app.
-
-    Args:
-        pipeline: Pipeline instance to use. If None, loads from PIPELINE and MODEL_ID
-                  environment variables using the built-in pipeline registry.
-
-    Returns:
-        Configured FastAPI application ready to be run with an ASGI server.
-
-    Example:
-        main.py:
-            from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
-            app = create_app(pipeline=LiveVideoToVideoPipeline("streamdiffusion"))
-
-        And to run the app with uvicorn:
-            uvicorn main:app --host 0.0.0.0 --port 8000
-    """
+    """Create a FastAPI app for use with custom ASGI servers."""
     runner_version=os.getenv("VERSION", "undefined")
     VERSION.labels(app="ai-runner", version=runner_version).set(1)
     logger.info("Runner version: %s", runner_version)
@@ -145,25 +141,53 @@ def create_app(pipeline: Pipeline | None = None) -> FastAPI:
 
 
 def start_app(
-
-    pipeline: Pipeline | None = None,
+    pipeline: Pipeline | PipelineSpec | None = None,
     host: str | None = None,
     port: int | None = None,
     **uvicorn_kwargs,
 ):
     """
-    Create and start an AI Runner app. Blocks until shutdown.
+    Primary entrypoint for AI Runner applications. Handles both running the server
+    and preparing models based on environment configuration.
+
+    For live pipelines, pass a PipelineSpec directly. The function will:
+    - If PREPARE_MODELS=1 env var (or --prepare-models arg): prepare models and exit
+    - Otherwise: wrap in LiveVideoToVideoPipeline and start the server
 
     Args:
-        pipeline: Pipeline instance. Defaults to loading from PIPELINE/MODEL_ID env vars.
+        pipeline: Pipeline instance or PipelineSpec for live pipelines.
+                  Defaults to loading from PIPELINE/MODEL_ID env vars.
         host: Host to bind to. Defaults to HOST env var or "0.0.0.0".
         port: Port to bind to. Defaults to PORT env var or 8000.
         **uvicorn_kwargs: Additional arguments passed to uvicorn.run()
 
-    Example:
-        from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
-        start_app(pipeline=LiveVideoToVideoPipeline("streamdiffusion"), port=8080)
+    Example (live pipeline):
+        from app.app import start_app
+        from app.live.pipelines import PipelineSpec
+
+        pipeline_spec = PipelineSpec(
+            name="my-pipeline",
+            pipeline_cls="pipeline.pipeline:MyPipeline",
+            params_cls="pipeline.params:MyParams",
+        )
+
+        if __name__ == "__main__":
+            start_app(pipeline=pipeline_spec)
+
+        # Run normally:     python main.py
+        # Prepare models:   PREPARE_MODELS=1 python main.py
     """
+    # Handle PipelineSpec for live pipelines
+    if isinstance(pipeline, PipelineSpec):
+        # Check for model preparation mode
+        if os.getenv("PREPARE_MODELS") == "1" or "--prepare-models" in sys.argv:
+            prepare_models(pipeline)
+            return
+
+        # Wrap in LiveVideoToVideoPipeline for normal operation
+        from .pipelines.live_video_to_video import LiveVideoToVideoPipeline
+        pipeline = LiveVideoToVideoPipeline(pipeline)
+
     import uvicorn
 
     host = host or os.getenv("HOST", "0.0.0.0")

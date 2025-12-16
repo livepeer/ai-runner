@@ -107,4 +107,7 @@ class ComfyUI(Pipeline):
 
     @classmethod
     def prepare_models(cls):
-        logging.info("ComfyUI prepare_models is currently a no-op")
+        raise NotImplementedError(
+            "ComfyUI uses a separate model preparation flow. "
+            "See dl_checkpoints.sh download_comfyui_live_models()."
+        )

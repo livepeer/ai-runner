@@ -219,13 +219,16 @@ function run_pipeline_prepare() {
   # ai-worker has live-app tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here
   docker image tag "$image" "livepeer/ai-runner:live-app-$pipeline"
 
+  # Run model preparation using PREPARE_MODELS env var (triggers main.py prepare mode)
   docker run --rm --name "ai-runner-${pipeline}-prepare" -v ./models:/models "${docker_run_flags[@]}" \
     -l "$label" \
     -e HF_HUB_OFFLINE=0 \
     -e HF_TOKEN="${HF_TOKEN:-}" \
-    "$image" bash -c "set -euo pipefail && \
-      python -m app.tools.prepare_models --pipeline ${pipeline} && \
-      chown -R $(id -u):$(id -g) /models"
+    -e PREPARE_MODELS=1 \
+    "$image"
+
+  # Fix ownership of downloaded models
+  docker run --rm -v ./models:/models "$image" chown -R "$(id -u):$(id -g)" /models
 }
 
 function prepare_streamdiffusion_models() {
