@@ -1,0 +1,19 @@
+[project]
+name = "comfyui-pipeline"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "ai-runner[realtime]",
+    # comfystream is pre-installed in the conda comfystream environment
+    # from the base image, so we don't install it here
+]
+
+[tool.uv.sources]
+ai-runner = { path = "../../runner", editable = true }
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+packages = ["pipeline"]
+

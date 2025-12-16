@@ -79,10 +79,9 @@ SHELL ["/bin/bash", "-c"]
 ENTRYPOINT ["bash", "-c", "exec /opt/nvidia/nvidia_entrypoint.sh \"$@\"", "--"]
 
 # -----------------------------------------------------------------------------
-# live-app: The section below was copied from live-app-__PIPELINE__ since we don't use it for comfyui anymore.
+# live-app: Install ai-runner and pipeline
 # -----------------------------------------------------------------------------
 
-# Install latest stable Go version and system dependencies
 RUN apt update && apt install -yqq \
     wget \
     libcairo2-dev \
@@ -90,11 +89,29 @@ RUN apt update && apt install -yqq \
     pkg-config \
     && apt clean && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml /tmp/pyproject.toml
-# Copy stub for editable install validation (setuptools needs the app package to exist)
-COPY app/__init__.py /tmp/app/__init__.py
-RUN PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cu128 \
-    conda run -n comfystream pip install --root-user-action ignore "/tmp[realtime]"
+WORKDIR /app/live/comfyui
+
+# Point to the conda environment so uv/pip install there
+ENV VIRTUAL_ENV=/workspace/miniconda3/envs/comfystream
+
+# Copy runner and pipeline files for dependency resolution
+COPY runner/pyproject.toml runner/uv.lock /app/runner/
+COPY live/comfyui/pyproject.toml live/comfyui/uv.lock .
+# Copy stubs for editable install validation
+COPY runner/app/__init__.py /app/runner/app/
+COPY live/comfyui/pipeline/__init__.py ./pipeline/
+
+# Install dependencies using uv sync --inexact to preserve conda packages
+RUN uv sync --locked --no-install-project --inexact
+
+# Copy application files
+COPY runner/app/ /app/runner/app/
+COPY runner/images/ /app/runner/images/
+COPY live/comfyui/pipeline ./pipeline/
+COPY live/comfyui/main.py ./main.py
+
+# Final sync to install the project
+RUN uv sync --locked --inexact
 
 # Set environment variables
 ENV MAX_WORKERS=1 \
@@ -102,19 +119,12 @@ ENV MAX_WORKERS=1 \
     DIFFUSERS_CACHE=/models \
     MODEL_DIR=/models
 
-# Copy application files
-COPY app/ /app/app
-COPY images/ /app/images
-COPY bench.py /app/bench.py
-
-WORKDIR /app
-
 # Keep these args/envs last to maximize cache reuse when only runtime envs change
 ARG GIT_SHA
 ARG VERSION="undefined"
 
 ENV GIT_SHA="${GIT_SHA}" \
-    VERSION="${VERSION}" \
-    PIPELINE="comfyui"
+    VERSION="${VERSION}"
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["python", "main.py"]
+

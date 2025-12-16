@@ -6,9 +6,9 @@ from pathlib import Path
 import torch
 from comfystream.client import ComfyStreamClient
 
-from ..interface import Pipeline
+from app.live.pipelines import Pipeline
+from app.live.trickle import VideoFrame, VideoOutput
 from .params import ComfyUIParams
-from ...trickle import VideoFrame, VideoOutput
 
 
 COMFY_UI_WORKSPACE_ENV = "COMFY_UI_WORKSPACE"

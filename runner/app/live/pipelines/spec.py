@@ -53,12 +53,6 @@ def builtin_pipeline_spec(name: str) -> PipelineSpec | None:
     """
     Look up a built-in pipeline by name and return a PipelineSpec if found.
     """
-    if name == "comfyui":
-        return PipelineSpec(
-            name="comfyui",
-            pipeline_cls="app.live.pipelines.comfyui.pipeline:ComfyUI",
-            params_cls="app.live.pipelines.comfyui.params:ComfyUIParams",
-        )
     if name == "noop":
         return PipelineSpec(
             name="noop",

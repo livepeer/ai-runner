@@ -3,7 +3,7 @@ import json
 from typing import Union
 from pydantic import field_validator
 
-from ..interface import BaseParams
+from app.live.pipelines import BaseParams
 
 _default_workflow_path = pathlib.Path(__file__).parent.absolute() / "default_workflow.json"
 with open(_default_workflow_path, 'r') as f:
