@@ -16,6 +16,9 @@ RUN apt update && \
     xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git runit libzmq3-dev && \
     apt clean && rm -rf /var/lib/apt/lists/*
 
+# Install uv (pinned version copied from official image)
+COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
+
 # Install ffmpeg
 RUN apt update && apt install -yqq --no-install-recommends \
     autoconf automake build-essential cmake git-core libtool pkg-config wget \
