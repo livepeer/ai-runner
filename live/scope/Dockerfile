@@ -41,5 +41,5 @@ ARG VERSION="undefined"
 ENV GIT_SHA="${GIT_SHA}" \
     VERSION="${VERSION}"
 
-CMD ["uv", "run", "python", "main.py"]
+CMD ["uv", "run", "--frozen", "python", "main.py"]
 

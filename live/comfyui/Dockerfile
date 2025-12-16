@@ -74,7 +74,7 @@ RUN rm -rf /workspace/ComfyUI/models && ln -s /models/ComfyUI--models /workspace
 RUN rm -rf /workspace/ComfyUI/output && ln -s /models/ComfyUI--output /workspace/ComfyUI/output
 
 # Ensure all the next RUN commands are run in the comfystream conda environment
-RUN echo "source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream" >> /conda_activate.sh && \
+RUN echo "source /workspace/miniconda3/etc/profile.d/conda.sh && conda activate comfystream && export VIRTUAL_ENV=\$CONDA_PREFIX" >> /conda_activate.sh && \
     chmod +x /conda_activate.sh
 ENV BASH_ENV=/conda_activate.sh
 SHELL ["/bin/bash", "-c"]
@@ -94,9 +94,6 @@ RUN apt update && apt install -yqq \
 
 WORKDIR /app/live/comfyui
 
-# Point to the conda environment so uv/pip install there
-ENV VIRTUAL_ENV=/workspace/miniconda3/envs/comfystream
-
 # Copy runner and pipeline files for dependency resolution
 COPY runner/pyproject.toml runner/uv.lock /app/runner/
 COPY live/comfyui/pyproject.toml live/comfyui/uv.lock .
@@ -105,7 +102,7 @@ COPY runner/app/__init__.py /app/runner/app/
 COPY live/comfyui/pipeline/__init__.py ./pipeline/
 
 # Install dependencies using uv sync --inexact to preserve conda packages
-RUN uv sync --locked --no-install-project --inexact
+RUN uv sync --active --locked --no-install-project --inexact
 
 # Copy application files
 COPY runner/app/ /app/runner/app/
@@ -114,7 +111,7 @@ COPY live/comfyui/pipeline ./pipeline/
 COPY live/comfyui/main.py ./main.py
 
 # Final sync to install the project
-RUN uv sync --locked --inexact
+RUN uv sync --active --locked --inexact
 
 # Set environment variables
 ENV MAX_WORKERS=1 \
@@ -129,5 +126,5 @@ ARG VERSION="undefined"
 ENV GIT_SHA="${GIT_SHA}" \
     VERSION="${VERSION}"
 
-CMD ["python", "main.py"]
+CMD ["uv", "run", "--active", "--frozen", "python", "main.py"]
 
