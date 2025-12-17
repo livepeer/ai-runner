@@ -76,12 +76,6 @@ class LLMPipeline(Pipeline):
         tensor_parallel_size = int(os.getenv("TENSOR_PARALLEL_SIZE", "1"))
         pipeline_parallel_size = int(os.getenv("PIPELINE_PARALLEL_SIZE", "1"))
 
-        if max_num_batched_tokens < max_model_len:
-            max_num_batched_tokens = max_model_len
-            logger.info(
-                f"max_num_batched_tokens ({max_num_batched_tokens}) is smaller than max_model_len ({max_model_len}). This effectively limits the maximum sequence length to max_num_batched_tokens and makes vLLM reject longer sequences.")
-            logger.info(f"setting 'max_model_len' to equal 'max_num_batched_tokens'")
-
     # Load config to check model compatibility
         try:
             config = AutoConfig.from_pretrained(self.local_model_path)
@@ -118,6 +112,8 @@ class LLMPipeline(Pipeline):
             logger.info(f"Using pipeline parallel size: {pipeline_parallel_size}")
             logger.info(f"Total GPUs used: {total_gpus_needed}")
 
+        except AttributeError as ae:
+            logger.error(f"Cannot confirm tensor and pipeline parallelism. Confirm manually. ({ae})")
         except Exception as e:
             logger.error(f"Error in parallelism configuration: {e}")
             raise
