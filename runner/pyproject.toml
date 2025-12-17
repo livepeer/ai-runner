@@ -76,8 +76,8 @@ realtime-dev = [
     "transformers",
 ]
 
-[tool.setuptools]
-packages = ["app"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.uv]
 conflicts = [

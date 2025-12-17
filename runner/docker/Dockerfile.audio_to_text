@@ -27,6 +27,6 @@ RUN uv pip install --no-cache faster-whisper && \
     uv pip install --no-cache numpy==1.26.4
 
 # Copy app directory to avoid rebuilding the base image during development.
-COPY app/ /app/app
+COPY src/runner/ /app/src/runner
 
-CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "runner.main:app", "--log-config", "src/runner/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

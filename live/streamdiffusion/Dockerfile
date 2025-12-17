@@ -10,14 +10,14 @@ WORKDIR /app/live/streamdiffusion
 COPY runner/pyproject.toml runner/uv.lock /app/runner/
 COPY live/streamdiffusion/pyproject.toml live/streamdiffusion/uv.lock .
 # Copy stubs for editable install validation
-COPY runner/app/__init__.py /app/runner/app/
+COPY runner/src/runner/__init__.py /app/runner/src/runner/
 COPY live/streamdiffusion/pipeline/__init__.py ./pipeline/
 
 RUN uv sync --locked --no-install-project
 
 RUN uv run python -m streamdiffusion.tools.install-tensorrt
 
-COPY runner/app/ /app/runner/app/
+COPY runner/src/runner/ /app/runner/src/runner/
 COPY runner/images/ /app/runner/images/
 COPY live/streamdiffusion/pipeline ./pipeline/
 COPY live/streamdiffusion/default_params ./default_params/

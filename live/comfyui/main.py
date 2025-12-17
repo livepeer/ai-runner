@@ -1,6 +1,6 @@
-from app.app import start_app
-from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
-from app.live.pipelines import PipelineSpec
+from runner.app import start_app
+from runner.pipelines.live_video_to_video import LiveVideoToVideoPipeline
+from runner.live.pipelines import PipelineSpec
 
 pipeline_spec = PipelineSpec(
     name="comfyui",

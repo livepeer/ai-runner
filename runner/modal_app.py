@@ -4,8 +4,8 @@ from pathlib import Path
 
 from modal import Image, Secret, Stub, Volume, asgi_app, enter, method
 
-from app.main import config_logging, load_route, use_route_names_as_operation_ids
-from app.routes import health
+from runner.main import config_logging, load_route, use_route_names_as_operation_ids
+from runner.routes import health
 
 stub = Stub("livepeer-ai-runner")
 pipeline_image = (
@@ -68,7 +68,7 @@ class Pipeline:
 
     @enter()
     def enter(self):
-        from app.app import load_pipeline
+        from runner.app import load_pipeline
 
         model_id = self.model_id
         if SDXL_LIGHTNING_MODEL_ID in self.model_id:

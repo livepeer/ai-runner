@@ -2,7 +2,7 @@ from typing import List, Literal, Union
 
 from pydantic import BaseModel, Field
 
-from app.live.pipelines import BaseParams
+from runner.live.pipelines import BaseParams
 
 
 class WeightedPrompt(BaseModel):

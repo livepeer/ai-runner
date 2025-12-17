@@ -49,7 +49,7 @@ ENV MAX_WORKERS=$max_workers \
     DIFFUSERS_CACHE=/models \
     MODEL_DIR=/models
 
-COPY app/ /app/app
+COPY src/runner/ /app/src/runner
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 COPY example_data/ /app/example_data
@@ -57,4 +57,4 @@ COPY example_data/ /app/example_data
 # Final sync to install the project
 RUN uv sync --locked --extra batch --inexact
 
-CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "runner.main:app", "--log-config", "src/runner/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

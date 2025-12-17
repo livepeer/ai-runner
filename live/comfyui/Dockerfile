@@ -98,14 +98,14 @@ WORKDIR /app/live/comfyui
 COPY runner/pyproject.toml runner/uv.lock /app/runner/
 COPY live/comfyui/pyproject.toml live/comfyui/uv.lock .
 # Copy stubs for editable install validation
-COPY runner/app/__init__.py /app/runner/app/
+COPY runner/src/runner/__init__.py /app/runner/src/runner/
 COPY live/comfyui/pipeline/__init__.py ./pipeline/
 
 # Install dependencies using uv sync --inexact to preserve conda packages
 RUN uv sync --active --locked --no-install-project --inexact
 
 # Copy application files
-COPY runner/app/ /app/runner/app/
+COPY runner/src/runner/ /app/runner/src/runner/
 COPY runner/images/ /app/runner/images/
 COPY live/comfyui/pipeline ./pipeline/
 COPY live/comfyui/main.py ./main.py

@@ -25,8 +25,8 @@ A high level sketch of how the runner is used:
 
 The AI runner, found in the [app](./runner/app) directory, consists of:
 
-- **Routes**: FastAPI routes in [app/routes](./runner/app/routes) that handle requests and delegate them to the appropriate pipeline.
-- **Pipelines**: Modules in [app/pipelines](./runner/app/pipelines) that manage model loading, request processing, and response generation for specific AI tasks.
+- **Routes**: FastAPI routes in [src/runner/routes](./runner/src/runner/routes) that handle requests and delegate them to the appropriate pipeline.
+- **Pipelines**: Modules in [src/runner/pipelines](./runner/src/runner/pipelines) that manage model loading, request processing, and response generation for specific AI tasks.
 
 It also includes utility scripts:
 

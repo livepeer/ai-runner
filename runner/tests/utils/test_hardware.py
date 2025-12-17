@@ -1,13 +1,13 @@
 import pytest
 import pynvml
-from app.utils.hardware import HardwareInfo, GPUInfo, GPUComputeInfo, GPUUtilizationInfo
+from runner.utils.hardware import HardwareInfo, GPUInfo, GPUComputeInfo, GPUUtilizationInfo
 
 class TestHardwareInfo:
     @pytest.fixture(autouse=True)
     def setup(self, mocker):
         self.mocker = mocker
 
-        self.mock_pynvml = self.mocker.patch("app.utils.hardware.pynvml")
+        self.mock_pynvml = self.mocker.patch("runner.utils.hardware.pynvml")
         self.mock_pynvml.NVMLError = pynvml.NVMLError
         self.mock_pynvml.nvmlInit.return_value = None
         self.mock_pynvml.nvmlShutdown.return_value = None

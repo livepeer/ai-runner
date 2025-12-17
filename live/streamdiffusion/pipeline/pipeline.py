@@ -12,8 +12,8 @@ from PIL import Image
 from io import BytesIO
 import aiohttp
 
-from app.live.pipelines import Pipeline
-from app.live.trickle import VideoFrame, VideoOutput
+from runner.live.pipelines import Pipeline
+from runner.live.trickle import VideoFrame, VideoOutput
 
 from .params import (
     StreamDiffusionParams,

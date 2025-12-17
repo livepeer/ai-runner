@@ -1,0 +1,4 @@
+#!/bin/sh
+
+cd /app
+exec uvicorn runner.main:app --log-config src/runner/cfg/uvicorn_logging_config.json --host "" --port 8000

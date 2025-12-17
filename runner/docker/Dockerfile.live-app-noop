@@ -23,7 +23,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --extra realtime-dev --no-install-project
 
 # Copy application files
-COPY app/ /app/app
+COPY src/runner/ /app/src/runner
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 
@@ -39,4 +39,4 @@ ENV MAX_WORKERS=1 \
 ARG VERSION="undefined"
 ENV VERSION=${VERSION}
 
-CMD ["uv", "run", "--frozen", "uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "runner.main:app", "--log-config", "src/runner/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

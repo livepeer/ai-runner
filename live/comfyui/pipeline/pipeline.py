@@ -6,8 +6,8 @@ from pathlib import Path
 import torch
 from comfystream.client import ComfyStreamClient
 
-from app.live.pipelines import Pipeline
-from app.live.trickle import VideoFrame, VideoOutput
+from runner.live.pipelines import Pipeline
+from runner.live.trickle import VideoFrame, VideoOutput
 from .params import ComfyUIParams
 
 

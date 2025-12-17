@@ -16,11 +16,11 @@
 **Core Flow**: Video Stream → Trickle Subscriber → FFmpeg Decode → Pipeline Process → AI Inference → FFmpeg Encode → Trickle Publisher → Video Stream
 
 **Key Files to Know**:
-- `runner/app/main.py` - FastAPI entrypoint, loads pipelines
-- `runner/app/pipelines/live_video_to_video.py` - Starts `infer.py` subprocess
-- `runner/app/live/infer.py` - Main inference process orchestrator
-- `runner/app/live/process/process.py` - Isolated multiprocessing pipeline execution
-- `runner/app/live/pipelines/` - Actual AI pipeline implementations
+- `runner/src/runner/main.py` - FastAPI entrypoint, loads pipelines
+- `runner/src/runner/pipelines/live_video_to_video.py` - Starts `infer.py` subprocess
+- `runner/src/runner/live/infer.py` - Main inference process orchestrator
+- `runner/src/runner/live/process/process.py` - Isolated multiprocessing pipeline execution
+- `runner/src/runner/live/pipelines/` - Actual AI pipeline implementations
 
 **Need Details?** Check the Quick Navigation Guide below or `docs/` folder
 
@@ -50,14 +50,14 @@
 | Runtime overview | `docs/live-ai-runtime-overview.md` |
 | Local development | `docs/live-ai-local-dev.md` |
 | Container setup | `docs/runner-docker.md` |
-| FastAPI entrypoint | `runner/app/main.py` |
-| Live pipeline wrapper | `runner/app/pipelines/live_video_to_video.py` |
-| Infer process | `runner/app/live/infer.py` |
-| Process management | `runner/app/live/process/` |
-| Streaming protocols | `runner/app/live/streamer/` |
-| Frame encoding/decoding | `runner/app/live/trickle/` |
-| Pipeline implementations | `runner/app/live/pipelines/` |
-| HTTP API (internal) | `runner/app/live/api/api.py` |
+| FastAPI entrypoint | `runner/src/runner/main.py` |
+| Live pipeline wrapper | `runner/src/runner/pipelines/live_video_to_video.py` |
+| Infer process | `runner/src/runner/live/infer.py` |
+| Process management | `runner/src/runner/live/process/` |
+| Streaming protocols | `runner/src/runner/live/streamer/` |
+| Frame encoding/decoding | `runner/src/runner/live/trickle/` |
+| Pipeline implementations | `runner/src/runner/live/pipelines/` |
+| HTTP API (internal) | `runner/src/runner/live/api/api.py` |
 
 ---
 
@@ -153,7 +153,7 @@ External Trickle Stream (to Orchestrator)
 
 ## 🗂️ Project Structure
 
-### Container Entrypoint (`runner/app/main.py`)
+### Container Entrypoint (`runner/src/runner/main.py`)
 
 ```python
 # Key responsibilities:
@@ -164,12 +164,12 @@ External Trickle Stream (to Orchestrator)
 def load_pipeline(pipeline: str, model_id: str):
     match pipeline:
         case "live-video-to-video":
-            from app.pipelines.live_video_to_video import LiveVideoToVideoPipeline
+            from runner.pipelines.live_video_to_video import LiveVideoToVideoPipeline
             return LiveVideoToVideoPipeline(model_id)
         # ... other pipelines
 ```
 
-### Live Video Pipeline Wrapper (`runner/app/pipelines/live_video_to_video.py`)
+### Live Video Pipeline Wrapper (`runner/src/runner/pipelines/live_video_to_video.py`)
 
 ```python
 class LiveVideoToVideoPipeline(Pipeline):
@@ -186,7 +186,7 @@ class LiveVideoToVideoPipeline(Pipeline):
         conn.request("GET", "/api/status")
 ```
 
-### Infer Process (`runner/app/live/infer.py`)
+### Infer Process (`runner/src/runner/live/infer.py`)
 
 ```python
 async def main(...):
@@ -205,7 +205,7 @@ async def main(...):
     await asyncio.wait([signal_task, exception_task, streamer.wait()], ...)
 ```
 
-### Process Management (`runner/app/live/process/`)
+### Process Management (`runner/src/runner/live/process/`)
 
 | File | Purpose |
 |------|---------|
@@ -214,7 +214,7 @@ async def main(...):
 | `status.py` | State machine: `LOADING`, `ONLINE`, `DEGRADED_*`, `ERROR`, `OFFLINE` |
 | `loading_overlay.py` | Renders "loading" frame when pipeline is reinitializing |
 
-### Streaming (`runner/app/live/streamer/`)
+### Streaming (`runner/src/runner/live/streamer/`)
 
 | File | Purpose |
 |------|---------|
@@ -223,7 +223,7 @@ async def main(...):
 | `protocol/trickle.py` | Trickle protocol implementation (production) |
 | `protocol/zeromq.py` | ⚠️ **DEPRECATED** - Was used for local development only, no longer maintained |
 
-### Frame Handling (`runner/app/live/trickle/`)
+### Frame Handling (`runner/src/runner/live/trickle/`)
 
 | File | Purpose |
 |------|---------|
@@ -234,7 +234,7 @@ async def main(...):
 | `trickle_publisher.py` | Trickle HTTP client for publishing |
 | `trickle_subscriber.py` | Trickle HTTP client for subscribing |
 
-### Pipeline Implementations (`runner/app/live/pipelines/`)
+### Pipeline Implementations (`runner/src/runner/live/pipelines/`)
 
 | Pipeline | Files | Description |
 |----------|-------|-------------|
@@ -496,7 +496,7 @@ threading.Thread(target=lambda: stdout.close(), daemon=True).start()
 
 ### Adding a New Pipeline
 
-1. Create new directory under `runner/app/live/pipelines/`
+1. Create new directory under `runner/src/runner/live/pipelines/`
 2. Implement `Pipeline` ABC (initialize, put_video_frame, get_processed_video_frame, update_params, stop, prepare_models)
 3. Create `*Params` class extending `BaseParams`
 4. Add to `loader.py` (load_pipeline and parse_pipeline_params)

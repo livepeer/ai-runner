@@ -2,8 +2,8 @@ import json
 import os
 from pathlib import Path
 
-from app.app import start_app
-from app.live.pipelines import PipelineSpec
+from runner.app import start_app
+from runner.live.pipelines import PipelineSpec
 
 initial_params = {}
 
