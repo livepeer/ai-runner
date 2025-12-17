@@ -84,6 +84,7 @@ name = "ai-runner"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiohttp" },
     { name = "fastapi" },
     { name = "numpy" },
     { name = "nvidia-ml-py" },
@@ -140,7 +141,6 @@ llm = [
     { name = "xformers", version = "0.0.28.post3", source = { registry = "https://pypi.org/simple" } },
 ]
 realtime = [
-    { name = "aiohttp" },
     { name = "av", version = "14.4.0", source = { registry = "https://pypi.org/simple" } },
     { name = "opencv-python" },
     { name = "pydantic", version = "2.11.7", source = { registry = "https://pypi.org/simple" } },
@@ -148,7 +148,6 @@ realtime = [
     { name = "watchdog" },
 ]
 realtime-dev = [
-    { name = "aiohttp" },
     { name = "av", version = "14.4.0", source = { registry = "https://pypi.org/simple" } },
     { name = "diffusers", version = "0.36.0", source = { registry = "https://pypi.org/simple" } },
     { name = "opencv-python" },
@@ -165,7 +164,7 @@ requires-dist = [
     { name = "accelerate", marker = "extra == 'batch'", specifier = "==0.30.1" },
     { name = "accelerate", marker = "extra == 'llm'" },
     { name = "ai-runner", extras = ["realtime"], marker = "extra == 'realtime-dev'" },
-    { name = "aiohttp", marker = "extra == 'realtime'", specifier = "==3.10.9" },
+    { name = "aiohttp", specifier = "==3.10.9" },
     { name = "av", marker = "extra == 'batch'", specifier = "==12.1.0" },
     { name = "av", marker = "extra == 'llm'" },
     { name = "av", marker = "extra == 'realtime'", specifier = "==14.4.0" },
@@ -237,7 +236,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohappyeyeballs" },
     { name = "aiosignal" },
-    { name = "async-timeout", marker = "python_full_version < '3.11'" },
+    { name = "async-timeout", marker = "python_full_version < '3.11' or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-realtime') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-realtime-dev') or (extra == 'extra-9-ai-runner-llm' and extra == 'extra-9-ai-runner-realtime') or (extra == 'extra-9-ai-runner-llm' and extra == 'extra-9-ai-runner-realtime-dev') or (extra == 'extra-9-ai-runner-realtime' and extra == 'extra-9-ai-runner-realtime-dev')" },
     { name = "attrs" },
     { name = "frozenlist" },
     { name = "multidict" },
@@ -1264,7 +1263,7 @@ name = "multidict"
 version = "6.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-llm') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-realtime') or (extra == 'extra-9-ai-runner-batch' and extra == 'extra-9-ai-runner-realtime-dev') or (extra == 'extra-9-ai-runner-llm' and extra == 'extra-9-ai-runner-realtime') or (extra == 'extra-9-ai-runner-llm' and extra == 'extra-9-ai-runner-realtime-dev') or (extra == 'extra-9-ai-runner-realtime' and extra == 'extra-9-ai-runner-realtime-dev')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/80/1e/5492c365f222f907de1039b91f922b93fa4f764c713ee858d235495d8f50/multidict-6.7.0.tar.gz", hash = "sha256:c6e99d9a65ca282e578dfea819cfa9c0a62b2499d8677392e09feaf305e9e6f5", size = 101834, upload-time = "2025-10-06T14:52:30.657Z" }
 wheels = [
