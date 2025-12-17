@@ -5,10 +5,10 @@ from typing import List, Optional, Tuple
 
 import PIL
 import torch
+
 from diffusers import (
     AutoPipelineForText2Image,
     EulerDiscreteScheduler,
-    FluxPipeline,
     StableDiffusion3Pipeline,
     StableDiffusionXLPipeline,
     UNet2DConditionModel,
@@ -28,6 +28,10 @@ from app.pipelines.utils import (
     split_prompt,
 )
 from app.utils.errors import InferenceError
+
+from app.pipelines.device_maps import (
+    LPFluxPipeline,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +141,7 @@ class TextToImagePipeline(Pipeline):
         ):
             # Decrease precision to preven OOM errors.
             kwargs["torch_dtype"] = torch.bfloat16
-            self.ldm = FluxPipeline.from_pretrained(model_id, **kwargs).to(torch_device)
+            self.ldm = LPFluxPipeline(model_id, os.environ.get("DEVICE_MAP", ""), torch_device, **kwargs)
         else:
             self.ldm = AutoPipelineForText2Image.from_pretrained(model_id, **kwargs).to(
                 torch_device
