@@ -36,6 +36,7 @@ name = "ai-runner"
 version = "0.1.0"
 source = { editable = "../../runner" }
 dependencies = [
+    { name = "aiohttp" },
     { name = "fastapi" },
     { name = "numpy" },
     { name = "nvidia-ml-py" },
@@ -49,7 +50,6 @@ dependencies = [
 
 [package.optional-dependencies]
 realtime = [
-    { name = "aiohttp" },
     { name = "av" },
     { name = "opencv-python" },
     { name = "pydantic" },
@@ -62,7 +62,7 @@ requires-dist = [
     { name = "accelerate", marker = "extra == 'batch'", specifier = "==0.30.1" },
     { name = "accelerate", marker = "extra == 'llm'" },
     { name = "ai-runner", extras = ["realtime"], marker = "extra == 'realtime-dev'" },
-    { name = "aiohttp", marker = "extra == 'realtime'", specifier = "==3.10.9" },
+    { name = "aiohttp", specifier = "==3.10.9" },
     { name = "av", marker = "extra == 'batch'", specifier = "==12.1.0" },
     { name = "av", marker = "extra == 'llm'" },
     { name = "av", marker = "extra == 'realtime'", specifier = "==14.4.0" },
