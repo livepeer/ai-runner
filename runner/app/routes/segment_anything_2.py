@@ -70,7 +70,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def segment_anything_2(
+def segment_anything_2(
     image: Annotated[
         UploadFile, File(description="Image to segment.", media_type="image/*")
     ],

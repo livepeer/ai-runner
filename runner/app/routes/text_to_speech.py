@@ -93,7 +93,7 @@ RESPONSES = {
     responses=RESPONSES,
     include_in_schema=False,
 )
-async def text_to_speech(
+def text_to_speech(
     params: TextToSpeechParams,
     pipeline: Pipeline = Depends(get_pipeline),
     token: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
