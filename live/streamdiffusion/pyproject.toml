@@ -9,6 +9,7 @@ dependencies = [
     "torchaudio==2.7.1+cu128",
     "streamdiffusion[tensorrt,controlnet,ipadapter]",
     "hf_transfer==0.1.4",
+    "pip",
 ]
 
 [tool.uv.sources]
