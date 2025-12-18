@@ -226,10 +226,16 @@ def _build_matrix() -> Iterator[BuildJob]:
         ipa_types: Sequence[Optional[str]]
         ipa_types = [None]
         if model_type in IPADAPTER_SUPPORTED_TYPES:
-            ipa_types = ["regular", "faceid"]
+            # TODO: Re-enable faceid for all supported types once models tar size permits
+            if model_type == "sdxl":
+                ipa_types = ["regular", "faceid"]
+            else:
+                ipa_types = ["regular"]
 
         for ipa_type in ipa_types:
-            for use_cached_attn in (False, True):
+            # TODO: Re-enable cached attention for all model types once models tar size permits
+            cached_attn_options = (False, True) if model_type in ("sd15", "sdxl") else (False,)
+            for use_cached_attn in cached_attn_options:
                 params = _create_params(model_id, model_type, ipa_type, use_cached_attn)
                 yield BuildJob(params=params)
 
@@ -270,6 +276,9 @@ def _create_params(
     controlnet_ids = CONTROLNETS_BY_TYPE.get(model_type)
     if controlnet_ids:
         for cn_model_id in controlnet_ids:
+            # TODO: Re-enable TemporalNet for sdxl once models tar size permits
+            if model_type == "sdxl" and "TemporalNet" in cn_model_id:
+                continue
             preprocessor = "passthrough" if "TemporalNet" not in cn_model_id else "temporal_net_tensorrt"
             config = ControlNetConfig(
                 model_id=cn_model_id,
