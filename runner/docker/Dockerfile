@@ -12,16 +12,25 @@ RUN apt update && \
     xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git \
     ffmpeg cuda-toolkit-12-8
 
-# Install uv (pinned version copied from official image)
-COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
-
-# Install Python via uv and create venv
 ARG PYTHON_VERSION=3.11
 ARG PIP_VERSION=23.3.2
 
+# TODO: Remove pyenv section once we're confident on the nexus migration
+# --- pyenv for backwards compatibility ---
+ENV PYENV_ROOT="/root/.pyenv"
+ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
+SHELL [ "/bin/bash", "-c" ]
+RUN curl https://pyenv.run | bash
+RUN source /root/.bashrc && \
+    pyenv install $PYTHON_VERSION && \
+    pyenv global $PYTHON_VERSION && \
+    pyenv rehash
+# --- end pyenv ---
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
+
 WORKDIR /app
-RUN uv python install $PYTHON_VERSION && uv venv
-ENV PATH="/app/.venv/bin:$PATH"
 
 # Install torch (older version for batch pipelines)
 RUN uv pip install --no-cache --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0 && \
