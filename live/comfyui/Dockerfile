@@ -63,6 +63,12 @@ RUN git clone --branch n7.1 --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpe
     cd .. \
     rm -rf ffmpeg
 
+# Common environment variables for AI runner pipelines
+ENV MAX_WORKERS=1 \
+    HUGGINGFACE_HUB_CACHE=/models \
+    DIFFUSERS_CACHE=/models \
+    MODEL_DIR=/models
+
 # -----------------------------------------------------------------------------
 # live-base: End of section
 # -----------------------------------------------------------------------------
@@ -112,12 +118,6 @@ COPY live/comfyui/main.py ./main.py
 
 # Final sync to install the project
 RUN uv sync --active --locked --inexact
-
-# Set environment variables
-ENV MAX_WORKERS=1 \
-    HUGGINGFACE_HUB_CACHE=/models \
-    DIFFUSERS_CACHE=/models \
-    MODEL_DIR=/models
 
 # Keep these args/envs last to maximize cache reuse when only runtime envs change
 ARG GIT_SHA

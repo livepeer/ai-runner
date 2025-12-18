@@ -23,7 +23,7 @@ LORA_FREE_VRAM_THRESHOLD = 2.0  # VRAM threshold (GB) to start evicting LoRas.
 
 
 def get_model_dir() -> Path:
-    return Path(os.environ["MODEL_DIR"])
+    return Path(os.environ.get("MODEL_DIR", os.path.expanduser("~/.lpData/models")))
 
 
 def get_model_path(model_id: str) -> Path:
@@ -154,7 +154,7 @@ class SafetyChecker:
 
         self.device = device
         self._dtype = dtype
-        
+
         from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
         self._safety_checker = StableDiffusionSafetyChecker.from_pretrained(
             "CompVis/stable-diffusion-safety-checker"

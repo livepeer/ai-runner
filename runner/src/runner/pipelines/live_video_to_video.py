@@ -113,7 +113,9 @@ class LiveVideoToVideoPipeline(Pipeline):
         # TODO: set torch device from self.torch_device
 
         env = os.environ.copy()
-        env["HUGGINGFACE_HUB_CACHE"] = str(self.model_dir)
+        env.setdefault("HUGGINGFACE_HUB_CACHE", str(self.model_dir))
+        env.setdefault("DIFFUSERS_CACHE", str(self.model_dir))
+        env.setdefault("MODEL_DIR", str(self.model_dir))
 
         try:
             self.process = subprocess.Popen(

@@ -29,11 +29,7 @@ RUN uv sync --locked --inexact
 # Configure Scope models directory
 ENV DAYDREAM_SCOPE_MODELS_DIR="/models/Scope--models"
 
-ENV HF_HUB_OFFLINE=1 \
-    MAX_WORKERS=1 \
-    HUGGINGFACE_HUB_CACHE=/models \
-    DIFFUSERS_CACHE=/models \
-    MODEL_DIR=/models
+ENV HF_HUB_OFFLINE=1
 
 ARG GIT_SHA
 ARG VERSION="undefined"

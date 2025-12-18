@@ -31,11 +31,7 @@ RUN ln -s /models/StreamDiffusion--engines ./engines \
     && ln -s /models/StreamDiffusion--models ./models
 
 ENV HF_HUB_ENABLE_HF_TRANSFER=1 \
-    HF_HUB_OFFLINE=1 \
-    MAX_WORKERS=1 \
-    HUGGINGFACE_HUB_CACHE=/models \
-    DIFFUSERS_CACHE=/models \
-    MODEL_DIR=/models
+    HF_HUB_OFFLINE=1
 
 ARG GIT_SHA
 ARG VERSION="undefined"
