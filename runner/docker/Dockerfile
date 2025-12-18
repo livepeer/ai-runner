@@ -31,6 +31,8 @@ RUN source /root/.bashrc && \
 COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
 
 WORKDIR /app
+RUN uv python install $PYTHON_VERSION && uv venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Install torch (older version for batch pipelines)
 RUN uv pip install --no-cache --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0 && \
