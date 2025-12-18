@@ -10,6 +10,7 @@ dependencies = [
     "streamdiffusion[tensorrt,controlnet,ipadapter]",
     "hf_transfer==0.1.4",
     "pip",
+    "peft>=0.17.0",
 ]
 
 [tool.uv.sources]
