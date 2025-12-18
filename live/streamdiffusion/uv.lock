@@ -68,11 +68,12 @@ realtime = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'batch'", specifier = "==0.30.1" },
     { name = "accelerate", marker = "extra == 'llm'" },
-    { name = "ai-runner", extras = ["realtime"], marker = "extra == 'realtime-dev'" },
+    { name = "ai-runner", extras = ["realtime-base"], marker = "extra == 'realtime'" },
+    { name = "ai-runner", extras = ["realtime-base"], marker = "extra == 'realtime-dev'" },
     { name = "aiohttp", specifier = "==3.10.9" },
     { name = "av", marker = "extra == 'batch'", specifier = "==12.1.0" },
     { name = "av", marker = "extra == 'llm'" },
-    { name = "av", marker = "extra == 'realtime'", specifier = "==14.4.0" },
+    { name = "av", marker = "extra == 'realtime-base'", specifier = "==14.4.0" },
     { name = "bitsandbytes", marker = "extra == 'batch'", specifier = "==0.43.3" },
     { name = "bitsandbytes", marker = "extra == 'llm'" },
     { name = "deepcache", marker = "extra == 'batch'", specifier = "==0.1.1" },
@@ -85,7 +86,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'llm'" },
     { name = "numpy", specifier = "==1.26.4" },
     { name = "nvidia-ml-py", specifier = "==12.560.30" },
-    { name = "opencv-python", marker = "extra == 'realtime'", specifier = "==4.10.0.84" },
+    { name = "opencv-python", marker = "extra == 'realtime-base'", specifier = "==4.10.0.84" },
     { name = "peft", marker = "extra == 'batch'", specifier = "==0.11.1" },
     { name = "peft", marker = "extra == 'llm'" },
     { name = "pillow", specifier = "==10.3.0" },
@@ -95,14 +96,14 @@ requires-dist = [
     { name = "psutil", specifier = "==6.0.0" },
     { name = "pydantic", marker = "extra == 'batch'", specifier = "==2.7.2" },
     { name = "pydantic", marker = "extra == 'llm'", specifier = ">=2.7.2" },
-    { name = "pydantic", marker = "extra == 'realtime'", specifier = "==2.11.7" },
+    { name = "pydantic", marker = "extra == 'realtime-base'", specifier = "==2.11.7" },
     { name = "pynvml", specifier = "==12.0.0" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-mock", marker = "extra == 'dev'" },
     { name = "python-multipart", specifier = "==0.0.9" },
     { name = "pytorch-triton", marker = "extra == 'realtime'", specifier = "==3.3.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "pyyaml", marker = "extra == 'batch'", specifier = "==6.0.2" },
-    { name = "pyzmq", marker = "extra == 'realtime'", specifier = "==26.2.0" },
+    { name = "pyzmq", marker = "extra == 'realtime-base'", specifier = "==26.2.0" },
     { name = "safetensors", marker = "extra == 'batch'", specifier = "==0.4.3" },
     { name = "safetensors", marker = "extra == 'llm'" },
     { name = "scipy", marker = "extra == 'batch'", specifier = "==1.13.0" },
@@ -120,11 +121,11 @@ requires-dist = [
     { name = "types-psutil", marker = "extra == 'batch'", specifier = "==6.0.0.20241011" },
     { name = "uvicorn", specifier = "==0.38.0" },
     { name = "vllm", marker = "extra == 'llm'", specifier = "==0.6.5" },
-    { name = "watchdog", marker = "extra == 'realtime'", specifier = "==5.0.2" },
+    { name = "watchdog", marker = "extra == 'realtime-base'", specifier = "==5.0.2" },
     { name = "xformers", marker = "extra == 'batch'", specifier = "==0.0.23" },
     { name = "xformers", marker = "extra == 'llm'" },
 ]
-provides-extras = ["batch", "realtime", "llm", "dev", "realtime-dev"]
+provides-extras = ["batch", "realtime-base", "realtime", "llm", "dev", "realtime-dev"]
 
 [[package]]
 name = "aiohappyeyeballs"

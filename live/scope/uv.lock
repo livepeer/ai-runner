@@ -53,6 +53,7 @@ realtime = [
     { name = "av" },
     { name = "opencv-python" },
     { name = "pydantic" },
+    { name = "pytorch-triton" },
     { name = "pyzmq" },
     { name = "watchdog" },
 ]
@@ -61,11 +62,12 @@ realtime = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'batch'", specifier = "==0.30.1" },
     { name = "accelerate", marker = "extra == 'llm'" },
-    { name = "ai-runner", extras = ["realtime"], marker = "extra == 'realtime-dev'" },
+    { name = "ai-runner", extras = ["realtime-base"], marker = "extra == 'realtime'" },
+    { name = "ai-runner", extras = ["realtime-base"], marker = "extra == 'realtime-dev'" },
     { name = "aiohttp", specifier = "==3.10.9" },
     { name = "av", marker = "extra == 'batch'", specifier = "==12.1.0" },
     { name = "av", marker = "extra == 'llm'" },
-    { name = "av", marker = "extra == 'realtime'", specifier = "==14.4.0" },
+    { name = "av", marker = "extra == 'realtime-base'", specifier = "==14.4.0" },
     { name = "bitsandbytes", marker = "extra == 'batch'", specifier = "==0.43.3" },
     { name = "bitsandbytes", marker = "extra == 'llm'" },
     { name = "deepcache", marker = "extra == 'batch'", specifier = "==0.1.1" },
@@ -78,7 +80,7 @@ requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'llm'" },
     { name = "numpy", specifier = "==1.26.4" },
     { name = "nvidia-ml-py", specifier = "==12.560.30" },
-    { name = "opencv-python", marker = "extra == 'realtime'", specifier = "==4.10.0.84" },
+    { name = "opencv-python", marker = "extra == 'realtime-base'", specifier = "==4.10.0.84" },
     { name = "peft", marker = "extra == 'batch'", specifier = "==0.11.1" },
     { name = "peft", marker = "extra == 'llm'" },
     { name = "pillow", specifier = "==10.3.0" },
@@ -88,13 +90,14 @@ requires-dist = [
     { name = "psutil", specifier = "==6.0.0" },
     { name = "pydantic", marker = "extra == 'batch'", specifier = "==2.7.2" },
     { name = "pydantic", marker = "extra == 'llm'", specifier = ">=2.7.2" },
-    { name = "pydantic", marker = "extra == 'realtime'", specifier = "==2.11.7" },
+    { name = "pydantic", marker = "extra == 'realtime-base'", specifier = "==2.11.7" },
     { name = "pynvml", specifier = "==12.0.0" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-mock", marker = "extra == 'dev'" },
     { name = "python-multipart", specifier = "==0.0.9" },
+    { name = "pytorch-triton", marker = "extra == 'realtime'", specifier = "==3.3.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "pyyaml", marker = "extra == 'batch'", specifier = "==6.0.2" },
-    { name = "pyzmq", marker = "extra == 'realtime'", specifier = "==26.2.0" },
+    { name = "pyzmq", marker = "extra == 'realtime-base'", specifier = "==26.2.0" },
     { name = "safetensors", marker = "extra == 'batch'", specifier = "==0.4.3" },
     { name = "safetensors", marker = "extra == 'llm'" },
     { name = "scipy", marker = "extra == 'batch'", specifier = "==1.13.0" },
@@ -112,11 +115,11 @@ requires-dist = [
     { name = "types-psutil", marker = "extra == 'batch'", specifier = "==6.0.0.20241011" },
     { name = "uvicorn", specifier = "==0.38.0" },
     { name = "vllm", marker = "extra == 'llm'", specifier = "==0.6.5" },
-    { name = "watchdog", marker = "extra == 'realtime'", specifier = "==5.0.2" },
+    { name = "watchdog", marker = "extra == 'realtime-base'", specifier = "==5.0.2" },
     { name = "xformers", marker = "extra == 'batch'", specifier = "==0.0.23" },
     { name = "xformers", marker = "extra == 'llm'" },
 ]
-provides-extras = ["batch", "realtime", "llm", "dev", "realtime-dev"]
+provides-extras = ["batch", "realtime-base", "realtime", "llm", "dev", "realtime-dev"]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -1262,6 +1265,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/5c/0f/9c55ac6c84c0336e22a26fa84ca6c51d58d7ac3a2d78b0dfa8748826c883/python_multipart-0.0.9.tar.gz", hash = "sha256:03f54688c663f1b7977105f021043b0793151e4cb1c1a9d4a11fc13d622c4026", size = 31516, upload-time = "2024-02-10T13:32:04.684Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3d/47/444768600d9e0ebc82f8e347775d24aef8f6348cf00e9fa0e81910814e6d/python_multipart-0.0.9-py3-none-any.whl", hash = "sha256:97ca7b8ea7b05f977dc3849c3ba99d51689822fab725c3703af7c866a0c2b215", size = 22299, upload-time = "2024-02-10T13:32:02.969Z" },
+]
+
+[[package]]
+name = "pytorch-triton"
+version = "3.3.0"
+source = { registry = "https://download.pytorch.org/whl/cu128" }
+dependencies = [
+    { name = "setuptools" },
+]
+wheels = [
+    { url = "https://download.pytorch.org/whl/pytorch_triton-3.3.0-cp310-cp310-linux_aarch64.whl", hash = "sha256:69f22f73c7c54c7bd74f5d9b1c76037f1e19aedd5e2e91513bba6a1efd639211" },
+    { url = "https://download.pytorch.org/whl/pytorch_triton-3.3.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c224c2fbdc5e7c2d3e651ad86e856cca8a0c728fec240f9c902a739876e2894d" },
 ]
 
 [[package]]

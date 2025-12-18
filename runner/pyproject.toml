@@ -93,6 +93,7 @@ conflicts = [
         { extra = "batch" },
         { extra = "llm" },
         { extra = "realtime" },
+        { extra = "realtime-base" },
         { extra = "realtime-dev" },
     ],
 ]
