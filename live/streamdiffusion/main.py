@@ -16,8 +16,8 @@ params_path = Path(__file__).parent / "default_params" / params_filename
 with open(params_path) as f:
     initial_params = json.load(f)
 
-# Use subvariant as suffix unless it's sdturbo (default) or empty
-name_suffix = "" if subvariant in ("sdturbo", "") else f"-{subvariant}"
+# Use subvariant as suffix unless it's empty
+name_suffix = "" if not subvariant else f"-{subvariant}"
 
 pipeline_spec = PipelineSpec(
     name=f"streamdiffusion{name_suffix}",
