@@ -8,7 +8,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterator, Optional, Sequence
+from typing import Dict, Iterator, List, Optional, Sequence, Set
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -39,6 +39,30 @@ OPTIMAL_TIMESTEPS_BY_TYPE: Dict[ModelType, int] = {
     "sd21": 3,
     "sdxl": 2,
 }
+
+# Which model types to build for each SUBVARIANT.
+# This allows splitting engine builds across different container images.
+# If SUBVARIANT is not in this mapping, all model types are built.
+# See .github/workflows/ai-runner-docker-live-streamdiffusion.yaml for the list of subvariants.
+SUBVARIANT_MODEL_TYPES: Dict[str, List[ModelType]] = {
+    "sdturbo": ["sd15", "sd21"],    # Default variant: SD 1.5 and SD 2.1 (turbo)
+    "sd15": ["sd15", "sd21"],       # SD 1.5 variant
+    "sd15-v2v": ["sd15", "sd21"],   # SD 1.5 video-to-video variant
+    "sdxl": ["sdxl"],               # SDXL variant
+    "sdxl-faceid": ["sdxl"],        # SDXL with FaceID variant
+}
+
+def _get_allowed_model_types() -> Set[ModelType]:
+    """Get the set of model types to build based on SUBVARIANT env var."""
+    subvariant = os.environ.get("SUBVARIANT", "")
+    if subvariant in SUBVARIANT_MODEL_TYPES:
+        allowed = set(SUBVARIANT_MODEL_TYPES[subvariant])
+        logging.info("SUBVARIANT=%s: building model types %s", subvariant, sorted(allowed))
+        return allowed
+    # No filtering: build all model types
+    all_types: Set[ModelType] = set(MODEL_ID_TO_TYPE.values())
+    logging.info("SUBVARIANT=%s (unfiltered): building all model types %s", subvariant or "(empty)", sorted(all_types))
+    return all_types
 
 MIN_RESOLUTION = 384
 MAX_RESOLUTION = 1024
@@ -222,7 +246,12 @@ def _ensure_repo(repo: GitRepo) -> Path:
 
 
 def _build_matrix() -> Iterator[BuildJob]:
+    allowed_types = _get_allowed_model_types()
+
     for model_id, model_type in MODEL_ID_TO_TYPE.items():
+        if model_type not in allowed_types:
+            continue
+
         ipa_types: Sequence[Optional[str]]
         ipa_types = [None]
         if model_type in IPADAPTER_SUPPORTED_TYPES:
