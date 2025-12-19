@@ -105,7 +105,7 @@ function display_help() {
   echo "Environment Variables:"
   echo "  PULL_IMAGES  Whether to pull Docker images (default: true)"
   echo "  AI_RUNNER_COMFYUI_IMAGE  ComfyUI Docker image (default: livepeer/ai-runner:live-app-comfyui)"
-  echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion base Docker image (default: livepeer/ai-runner:live-app-streamdiffusion)"
+  echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion docker image for default or variant builds (default: 'livepeer/ai-runner:live-app-streamdiffusion(-{variant})?')"
   echo "  PIPELINE  Pipeline to prepare. Options:"
   echo "            - 'streamdiffusion': base image, builds ALL models (for public operators)"
   echo "            - 'streamdiffusion-sdturbo', 'streamdiffusion-sdxl', etc: variant-specific image"
