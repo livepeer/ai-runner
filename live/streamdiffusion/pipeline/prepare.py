@@ -250,6 +250,7 @@ def _build_matrix() -> Iterator[BuildJob]:
 
     for model_id, model_type in MODEL_ID_TO_TYPE.items():
         if model_type not in allowed_types:
+            logging.info("Skipping model %s (type=%s): not in allowed types for this SUBVARIANT", model_id, model_type)
             continue
 
         ipa_types: Sequence[Optional[str]]
