@@ -7,7 +7,7 @@ set -e
 PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
 _DEFAULT_STREAMDIFFUSION_IMAGE="livepeer/ai-runner:live-app-streamdiffusion"
-AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE}
+AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-$_DEFAULT_STREAMDIFFUSION_IMAGE}
 AI_RUNNER_SCOPE_IMAGE=${AI_RUNNER_SCOPE_IMAGE:-livepeer/ai-runner:live-app-scope}
 PIPELINE=${PIPELINE:-all}
 
@@ -253,7 +253,12 @@ function prepare_streamdiffusion_models() {
     suffix="-${variant}"
     pipeline_name="streamdiffusion-${variant}"
   fi
-  local image="${AI_RUNNER_STREAMDIFFUSION_IMAGE:-"${_DEFAULT_STREAMDIFFUSION_IMAGE}${suffix}"}"
+
+  # Append suffix only if using the default image (not overridden)
+  local image="$AI_RUNNER_STREAMDIFFUSION_IMAGE"
+  if [[ "$image" == "$_DEFAULT_STREAMDIFFUSION_IMAGE" ]]; then
+    image="${image}${suffix}"
+  fi
 
   printf "\nPreparing StreamDiffusion%s using image %s...\n" "${suffix}" "$image"
   run_pipeline_prepare "$pipeline_name" "$image"
