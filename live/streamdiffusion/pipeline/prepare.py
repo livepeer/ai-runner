@@ -281,7 +281,7 @@ def _create_params(
                 continue
             preprocessor = "passthrough" if "TemporalNet" not in cn_model_id else "temporal_net_tensorrt"
             config = ControlNetConfig(
-                model_id=cn_model_id,
+                model_id=cn_model_id,  # type: ignore
                 conditioning_scale=0.5,
                 preprocessor=preprocessor,
                 preprocessor_params={},
