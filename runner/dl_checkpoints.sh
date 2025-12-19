@@ -248,8 +248,9 @@ function run_pipeline_prepare() {
 
 function prepare_streamdiffusion_models() {
   # Base streamdiffusion image - SUBVARIANT is empty, builds ALL models
-  printf "\nPreparing StreamDiffusion (all models) live models...\n"
-  run_pipeline_prepare "streamdiffusion" "${AI_RUNNER_STREAMDIFFUSION_IMAGE:-$_DEFAULT_STREAMDIFFUSION_IMAGE}"
+  local image="${AI_RUNNER_STREAMDIFFUSION_IMAGE:-$_DEFAULT_STREAMDIFFUSION_IMAGE}"
+  printf "\nPreparing StreamDiffusion (all models) live models using image %s...\n" "$image"
+  run_pipeline_prepare "streamdiffusion" "$image"
 }
 
 function prepare_streamdiffusion_variant() {
