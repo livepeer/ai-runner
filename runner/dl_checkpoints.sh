@@ -6,7 +6,8 @@ set -e
 # Docker image configuration
 PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
-AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion}
+_DEFAULT_STREAMDIFFUSION_IMAGE="livepeer/ai-runner:live-app-streamdiffusion"
+AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE}
 AI_RUNNER_SCOPE_IMAGE=${AI_RUNNER_SCOPE_IMAGE:-livepeer/ai-runner:live-app-scope}
 PIPELINE=${PIPELINE:-all}
 
@@ -248,14 +249,13 @@ function run_pipeline_prepare() {
 function prepare_streamdiffusion_models() {
   # Base streamdiffusion image - SUBVARIANT is empty, builds ALL models
   printf "\nPreparing StreamDiffusion (all models) live models...\n"
-  run_pipeline_prepare "streamdiffusion" "$AI_RUNNER_STREAMDIFFUSION_IMAGE"
+  run_pipeline_prepare "streamdiffusion" "${AI_RUNNER_STREAMDIFFUSION_IMAGE:-$_DEFAULT_STREAMDIFFUSION_IMAGE}"
 }
 
 function prepare_streamdiffusion_variant() {
   # Variant-specific streamdiffusion (e.g., sdturbo, sdxl)
-  # Image tag is livepeer/ai-runner:live-app-streamdiffusion-<variant>
   local variant="$1"
-  local image="livepeer/ai-runner:live-app-streamdiffusion-${variant}"
+  local image="${AI_RUNNER_STREAMDIFFUSION_IMAGE:-"$_DEFAULT_STREAMDIFFUSION_IMAGE-${variant}"}"
   printf "\nPreparing StreamDiffusion variant '%s' using image %s...\n" "$variant" "$image"
   run_pipeline_prepare "streamdiffusion-${variant}" "$image"
 }
