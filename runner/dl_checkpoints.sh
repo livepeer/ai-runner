@@ -184,12 +184,10 @@ function download_live_models() {
   streamdiffusion-*)
     # Variant-specific streamdiffusion (e.g., streamdiffusion-sdturbo, streamdiffusion-sdxl)
     local variant="${PIPELINE#streamdiffusion-}"
-    printf "\nPreparing StreamDiffusion variant '%s' live models...\n" "$variant"
-    prepare_streamdiffusion_variant "$variant"
+    prepare_streamdiffusion_models "$variant"
     ;;
   "streamdiffusion")
     # Base streamdiffusion image - builds ALL models (for public operators)
-    printf "\nPreparing StreamDiffusion (all models) live models...\n"
     prepare_streamdiffusion_models
     ;;
   "comfyui")
@@ -247,18 +245,18 @@ function run_pipeline_prepare() {
 }
 
 function prepare_streamdiffusion_models() {
-  # Base streamdiffusion image - SUBVARIANT is empty, builds ALL models
-  local image="${AI_RUNNER_STREAMDIFFUSION_IMAGE:-$_DEFAULT_STREAMDIFFUSION_IMAGE}"
-  printf "\nPreparing StreamDiffusion (all models) live models using image %s...\n" "$image"
-  run_pipeline_prepare "streamdiffusion" "$image"
-}
+  local variant="${1:-}"
 
-function prepare_streamdiffusion_variant() {
-  # Variant-specific streamdiffusion (e.g., sdturbo, sdxl)
-  local variant="$1"
-  local image="${AI_RUNNER_STREAMDIFFUSION_IMAGE:-"$_DEFAULT_STREAMDIFFUSION_IMAGE-${variant}"}"
-  printf "\nPreparing StreamDiffusion variant '%s' using image %s...\n" "$variant" "$image"
-  run_pipeline_prepare "streamdiffusion-${variant}" "$image"
+  local suffix=""
+  local pipeline_name="streamdiffusion"
+  if [[ -n "$variant" ]]; then
+    suffix="-${variant}"
+    pipeline_name="streamdiffusion-${variant}"
+  fi
+  local image="${AI_RUNNER_STREAMDIFFUSION_IMAGE:-"${_DEFAULT_STREAMDIFFUSION_IMAGE}${suffix}"}"
+
+  printf "\nPreparing StreamDiffusion%s using image %s...\n" "${suffix}" "$image"
+  run_pipeline_prepare "$pipeline_name" "$image"
 }
 
 function download_comfyui_live_models() {
