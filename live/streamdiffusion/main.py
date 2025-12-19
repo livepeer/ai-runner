@@ -7,16 +7,17 @@ from runner.live.pipelines import PipelineSpec
 
 initial_params = {}
 
-subvariant = os.environ.get("SUBVARIANT")
-if subvariant:
-    params_filename = subvariant.replace("-", "_") + ".json"
-    params_path = Path(__file__).parent / "default_params" / params_filename
+# SUBVARIANT controls default params. Empty defaults to sdturbo params.
+subvariant = os.environ.get("SUBVARIANT", "")
+params_subvariant = subvariant or "sdturbo"  # Empty SUBVARIANT uses sdturbo params
+params_filename = params_subvariant.replace("-", "_") + ".json"
+params_path = Path(__file__).parent / "default_params" / params_filename
 
-    with open(params_path) as f:
-        initial_params = json.load(f)
+with open(params_path) as f:
+    initial_params = json.load(f)
 
-# Use subvariant as suffix unless it's sdturbo (default)
-name_suffix = "" if subvariant == "sdturbo" else f"-{subvariant}"
+# Use subvariant as suffix unless it's sdturbo (default) or empty
+name_suffix = "" if subvariant in ("sdturbo", "") else f"-{subvariant}"
 
 pipeline_spec = PipelineSpec(
     name=f"streamdiffusion{name_suffix}",

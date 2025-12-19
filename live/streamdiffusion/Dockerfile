@@ -35,7 +35,10 @@ ENV HF_HUB_ENABLE_HF_TRANSFER=1 \
 
 ARG GIT_SHA
 ARG VERSION="undefined"
-ARG SUBVARIANT="sdturbo"
+# SUBVARIANT controls which models are built during prepare and which default params are loaded.
+# Empty (default): builds ALL models, uses sdturbo default params at runtime.
+# Specific value (sdturbo, sdxl, etc.): builds only those models, uses matching default params.
+ARG SUBVARIANT=""
 
 ENV GIT_SHA="${GIT_SHA}" \
     VERSION="${VERSION}" \

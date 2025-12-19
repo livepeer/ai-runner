@@ -42,10 +42,12 @@ OPTIMAL_TIMESTEPS_BY_TYPE: Dict[ModelType, int] = {
 
 # Which model types to build for each SUBVARIANT.
 # This allows splitting engine builds across different container images.
-# If SUBVARIANT is not in this mapping, all model types are built.
 # See .github/workflows/ai-runner-docker-live-streamdiffusion.yaml for the list of subvariants.
+#
+# Empty SUBVARIANT (default for public operators) builds ALL model types.
+# Specific SUBVARIANTs (for internal/optimized builds) build only their model types.
 SUBVARIANT_MODEL_TYPES: Dict[str, List[ModelType]] = {
-    "sdturbo": ["sd15", "sd21"],    # Default variant: SD 1.5 and SD 2.1 (turbo)
+    "sdturbo": ["sd15", "sd21"],    # SD Turbo variant (sd21) + SD 1.5
     "sd15": ["sd15", "sd21"],       # SD 1.5 variant
     "sd15-v2v": ["sd15", "sd21"],   # SD 1.5 video-to-video variant
     "sdxl": ["sdxl"],               # SDXL variant
@@ -53,15 +55,31 @@ SUBVARIANT_MODEL_TYPES: Dict[str, List[ModelType]] = {
 }
 
 def _get_allowed_model_types() -> Set[ModelType]:
-    """Get the set of model types to build based on SUBVARIANT env var."""
+    """Get the set of model types to build based on SUBVARIANT env var.
+
+    Empty SUBVARIANT (default) builds all model types - this is for public operators
+    who want a single image with all models.
+
+    Specific SUBVARIANT values filter to only those model types - this is for
+    internal/optimized builds where we split models across multiple images.
+    """
     subvariant = os.environ.get("SUBVARIANT", "")
+
+    # Empty SUBVARIANT = build everything (public operator use case)
+    if not subvariant:
+        all_types: Set[ModelType] = set(MODEL_ID_TO_TYPE.values())
+        logging.info("SUBVARIANT is empty: building ALL model types %s", sorted(all_types))
+        return all_types
+
+    # Specific SUBVARIANT = filter to those model types (internal optimized builds)
     if subvariant in SUBVARIANT_MODEL_TYPES:
         allowed = set(SUBVARIANT_MODEL_TYPES[subvariant])
         logging.info("SUBVARIANT=%s: building model types %s", subvariant, sorted(allowed))
         return allowed
-    # No filtering: build all model types
-    all_types: Set[ModelType] = set(MODEL_ID_TO_TYPE.values())
-    logging.info("SUBVARIANT=%s (unfiltered): building all model types %s", subvariant or "(empty)", sorted(all_types))
+
+    # Unknown SUBVARIANT = build everything with a warning
+    all_types = set(MODEL_ID_TO_TYPE.values())
+    logging.warning("SUBVARIANT=%s is unknown, building ALL model types %s", subvariant, sorted(all_types))
     return all_types
 
 MIN_RESOLUTION = 384

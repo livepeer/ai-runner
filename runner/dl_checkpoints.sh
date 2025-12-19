@@ -3,11 +3,10 @@
 set -e
 [ -v DEBUG ] && set -x
 
-# ComfyUI image configuration
+# Docker image configuration
 PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
 AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion}
-AI_RUNNER_STREAMDIFFUSION_SDXL_IMAGE=${AI_RUNNER_STREAMDIFFUSION_SDXL_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion-sdxl}
 AI_RUNNER_SCOPE_IMAGE=${AI_RUNNER_SCOPE_IMAGE:-livepeer/ai-runner:live-app-scope}
 PIPELINE=${PIPELINE:-all}
 
@@ -105,9 +104,12 @@ function display_help() {
   echo "Environment Variables:"
   echo "  PULL_IMAGES  Whether to pull Docker images (default: true)"
   echo "  AI_RUNNER_COMFYUI_IMAGE  ComfyUI Docker image (default: livepeer/ai-runner:live-app-comfyui)"
-  echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion Docker image for SD15/SD21 (default: livepeer/ai-runner:live-app-streamdiffusion)"
-  echo "  AI_RUNNER_STREAMDIFFUSION_SDXL_IMAGE  StreamDiffusion Docker image for SDXL (default: livepeer/ai-runner:live-app-streamdiffusion-sdxl)"
-  echo "  PIPELINE  When using --live or --tensorrt, specify which pipeline to use: 'streamdiffusion', 'streamdiffusion-sdxl', 'comfyui', 'scope', or 'all' (default)"
+  echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion base Docker image (default: livepeer/ai-runner:live-app-streamdiffusion)"
+  echo "  PIPELINE  Pipeline to prepare. Options:"
+  echo "            - 'streamdiffusion': base image, builds ALL models (for public operators)"
+  echo "            - 'streamdiffusion-sdturbo', 'streamdiffusion-sdxl', etc: variant-specific image"
+  echo "            - 'comfyui', 'scope': other pipelines"
+  echo "            - 'all': all pipelines (default)"
   echo "  HF_TOKEN  HuggingFace token for downloading token-gated models"
   echo "  DEBUG  Enable debug mode with set -x"
 }
@@ -178,13 +180,16 @@ function download_all_models() {
 function download_live_models() {
   # Check PIPELINE environment variable and download accordingly
   case "$PIPELINE" in
-  "streamdiffusion")
-    printf "\nPreparing StreamDiffusion (SD15/SD21) live models only...\n"
-    prepare_streamdiffusion_models
+  streamdiffusion-*)
+    # Variant-specific streamdiffusion (e.g., streamdiffusion-sdturbo, streamdiffusion-sdxl)
+    local variant="${PIPELINE#streamdiffusion-}"
+    printf "\nPreparing StreamDiffusion variant '%s' live models...\n" "$variant"
+    prepare_streamdiffusion_variant "$variant"
     ;;
-  "streamdiffusion-sdxl")
-    printf "\nPreparing StreamDiffusion (SDXL) live models only...\n"
-    prepare_streamdiffusion_sdxl_models
+  "streamdiffusion")
+    # Base streamdiffusion image - builds ALL models (for public operators)
+    printf "\nPreparing StreamDiffusion (all models) live models...\n"
+    prepare_streamdiffusion_models
     ;;
   "comfyui")
     printf "\nDownloading ComfyUI live models only...\n"
@@ -195,14 +200,16 @@ function download_live_models() {
     prepare_scope_models
     ;;
   "all")
+    # For 'all', use the base streamdiffusion image which builds everything
     printf "\nPreparing all live models...\n"
     prepare_streamdiffusion_models
-    prepare_streamdiffusion_sdxl_models
     download_comfyui_live_models
     prepare_scope_models
     ;;
   *)
-    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, streamdiffusion-sdxl, comfyui, scope, all\n" "$PIPELINE"
+    printf "ERROR: Invalid PIPELINE value: %s\n" "$PIPELINE"
+    printf "Valid values: streamdiffusion, streamdiffusion-<variant>, comfyui, scope, all\n"
+    printf "Variants: sdturbo, sd15, sd15-v2v, sdxl, sdxl-faceid\n"
     exit 1
     ;;
   esac
@@ -239,13 +246,18 @@ function run_pipeline_prepare() {
 }
 
 function prepare_streamdiffusion_models() {
-  printf "\nPreparing StreamDiffusion (SD15/SD21) live models...\n"
+  # Base streamdiffusion image - SUBVARIANT is empty, builds ALL models
+  printf "\nPreparing StreamDiffusion (all models) live models...\n"
   run_pipeline_prepare "streamdiffusion" "$AI_RUNNER_STREAMDIFFUSION_IMAGE"
 }
 
-function prepare_streamdiffusion_sdxl_models() {
-  printf "\nPreparing StreamDiffusion (SDXL) live models...\n"
-  run_pipeline_prepare "streamdiffusion-sdxl" "$AI_RUNNER_STREAMDIFFUSION_SDXL_IMAGE"
+function prepare_streamdiffusion_variant() {
+  # Variant-specific streamdiffusion (e.g., sdturbo, sdxl)
+  # Image tag is livepeer/ai-runner:live-app-streamdiffusion-<variant>
+  local variant="$1"
+  local image="livepeer/ai-runner:live-app-streamdiffusion-${variant}"
+  printf "\nPreparing StreamDiffusion variant '%s' using image %s...\n" "$variant" "$image"
+  run_pipeline_prepare "streamdiffusion-${variant}" "$image"
 }
 
 function download_comfyui_live_models() {
@@ -285,11 +297,8 @@ function build_tensorrt_models() {
 
   # Check PIPELINE environment variable and build accordingly
   case "$PIPELINE" in
-  "streamdiffusion")
-    printf "\nStreamDiffusion (SD15/SD21) models already built on prepare...\n"
-    ;;
-  "streamdiffusion-sdxl")
-    printf "\nStreamDiffusion (SDXL) models already built on prepare...\n"
+  streamdiffusion-*|"streamdiffusion")
+    printf "\nStreamDiffusion models already built on prepare...\n"
     ;;
   "scope")
     printf "\nScope models already built on prepare...\n"
@@ -303,7 +312,8 @@ function build_tensorrt_models() {
     build_comfyui_tensorrt
     ;;
   *)
-    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, streamdiffusion-sdxl, comfyui, scope, all\n" "$PIPELINE"
+    printf "ERROR: Invalid PIPELINE value: %s\n" "$PIPELINE"
+    printf "Valid values: streamdiffusion, streamdiffusion-<variant>, comfyui, scope, all\n"
     exit 1
     ;;
   esac

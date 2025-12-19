@@ -32,13 +32,17 @@ jobs:
     strategy:
       matrix:
         include:
+          # Base image: empty SUBVARIANT, builds and can run all models (for public operators)
+          - subtype: ""
+          # sdturbo and sd15* variants use the same models bundle and can be switched interchangeably
           - subtype: "sdturbo"
           - subtype: "sd15"
           - subtype: "sd15-v2v"
+          # sdxl* variants use an SDXL-only models bundle
           - subtype: "sdxl"
           - subtype: "sdxl-faceid"
     env:
-      DOCKER_SUFFIX: ${{ matrix.subtype != 'sdturbo' && format('-{0}', matrix.subtype) || '' }}
+      DOCKER_SUFFIX: ${{ matrix.subtype && format('-{0}', matrix.subtype) || '' }}
     steps:
       - name: Check out code
         uses: actions/checkout@v4
