@@ -47,7 +47,7 @@ SUBVARIANT_MODEL_TYPES: Dict[str, List[ModelType]] = {
     "": ["sd15", "sd21", "sdxl"],    # Empty SUBVARIANT: builds ALL models (for public operators)
     "sdturbo": ["sd15", "sd21"],     # SD Turbo variant (sd21) + SD 1.5
     "sd15": ["sd15", "sd21"],        # SD 1.5 variant
-    "sd15-v2v": ["sd15", "sd21"],    # SD 1.5 video-to-video variant
+    "sd15-v2v": ["sd15", "sd21"],    # SD 1.5 with streamv2v variant
     "sdxl": ["sdxl"],                # SDXL variant
     "sdxl-faceid": ["sdxl"],         # SDXL with FaceID variant
 }
