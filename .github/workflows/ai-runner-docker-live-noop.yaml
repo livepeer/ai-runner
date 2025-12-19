@@ -33,7 +33,7 @@ jobs:
     runs-on: [self-hosted, linux, amd64]
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 50
           ref: ${{ github.event.pull_request.head.sha }}
@@ -87,7 +87,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
