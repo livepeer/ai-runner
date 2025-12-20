@@ -1791,7 +1791,7 @@ wheels = [
 [[package]]
 name = "streamdiffusion"
 version = "0.1.1"
-source = { git = "https://github.com/daydreamlive/StreamDiffusion.git?rev=d17263c2e0c550dfd605d188777c832394efe2e7#d17263c2e0c550dfd605d188777c832394efe2e7" }
+source = { git = "https://github.com/daydreamlive/StreamDiffusion.git?rev=94b9b96cb8a17d401ffbce516393d6482326ce62#94b9b96cb8a17d401ffbce516393d6482326ce62" }
 dependencies = [
     { name = "accelerate" },
     { name = "diffusers" },
@@ -1844,7 +1844,7 @@ requires-dist = [
     { name = "hf-transfer", specifier = "==0.1.4" },
     { name = "peft", specifier = ">=0.17.0" },
     { name = "pip" },
-    { name = "streamdiffusion", extras = ["tensorrt", "controlnet", "ipadapter"], git = "https://github.com/daydreamlive/StreamDiffusion.git?rev=d17263c2e0c550dfd605d188777c832394efe2e7" },
+    { name = "streamdiffusion", extras = ["tensorrt", "controlnet", "ipadapter"], git = "https://github.com/daydreamlive/StreamDiffusion.git?rev=94b9b96cb8a17d401ffbce516393d6482326ce62" },
     { name = "torch", specifier = "==2.7.1+cu128", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchaudio", specifier = "==2.7.1+cu128", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchvision", specifier = "==0.22.1+cu128", index = "https://download.pytorch.org/whl/cu128" },
