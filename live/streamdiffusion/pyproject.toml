@@ -18,7 +18,7 @@ ai-runner = { path = "../../runner", editable = true }
 torch = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
 torchaudio = { index = "pytorch-cu128" }
-streamdiffusion = { git = "https://github.com/daydreamlive/StreamDiffusion.git", rev = "d17263c2e0c550dfd605d188777c832394efe2e7" }
+streamdiffusion = { git = "https://github.com/daydreamlive/StreamDiffusion.git", rev = "94b9b96cb8a17d401ffbce516393d6482326ce62" }
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
