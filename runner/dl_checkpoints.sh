@@ -208,7 +208,7 @@ function download_live_models() {
   *)
     printf "ERROR: Invalid PIPELINE value: %s\n" "$PIPELINE"
     printf "Valid values: streamdiffusion, streamdiffusion-<variant>, comfyui, scope, all\n"
-    printf "Variants: sdturbo, sd15, sd15-v2v, sdxl, sdxl-faceid\n"
+    printf "Variants: sdturbo, sd15, sd15-v2v, sdxl, sdxl-faceid, sdxl-v2v\n"
     exit 1
     ;;
   esac

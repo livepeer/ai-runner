@@ -50,6 +50,7 @@ SUBVARIANT_MODEL_TYPES: Dict[str, List[ModelType]] = {
     "sd15-v2v": ["sd15", "sd21"],    # SD 1.5 with streamv2v variant
     "sdxl": ["sdxl"],                # SDXL variant
     "sdxl-faceid": ["sdxl"],         # SDXL with FaceID variant
+    "sdxl-v2v": ["sdxl"],            # SDXL with streamv2v (cached attention) variant
 }
 
 def _get_allowed_model_types() -> Set[ModelType]:

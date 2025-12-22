@@ -41,6 +41,7 @@ jobs:
           # sdxl* variants use an SDXL-only models bundle
           - subtype: "sdxl"
           - subtype: "sdxl-faceid"
+          - subtype: "sdxl-v2v"
     env:
       DOCKER_SUFFIX: ${{ matrix.subtype && format('-{0}', matrix.subtype) || '' }}
     steps:
