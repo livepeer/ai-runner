@@ -41,17 +41,6 @@ batch = [
     "types-psutil==6.0.0.20241011",
     "PyYAML==6.0.2",
 ]
-realtime-base = [
-    "pydantic==2.11.7",
-    "pyzmq==26.2.0",
-    "watchdog==5.0.2",
-    "opencv-python==4.10.0.84",
-    "av==14.4.0",
-]
-realtime = [
-    "ai-runner[realtime-base]",
-    "pytorch-triton==3.3.0",
-]
 llm = [
     "setuptools==69.5.1",
     "pydantic>=2.7.2",
@@ -71,17 +60,29 @@ llm = [
     "protobuf",
     "bitsandbytes",
 ]
-dev = [
-    "pytest",
-    "pytest-mock",
+# Base dependencies for the GPU and CPU-only extras below.
+realtime-base = [
+    "pydantic==2.11.7",
+    "pyzmq==26.2.0",
+    "watchdog==5.0.2",
+    "opencv-python==4.10.0.84",
+    "av==14.4.0",
 ]
-# Local development for realtime pipelines with CPU-only torch.
-# Also used by the noop pipeline Docker image.
+# Actual extra for realtime pipelines with CUDA-enabled torch. This requires a GPU, so use realtime-dev if unavailable.
+realtime = [
+    "ai-runner[realtime-base]",
+    "pytorch-triton==3.3.0",
+]
+# Local development for realtime pipelines with CPU-only torch. Also used by the noop pipeline Docker image.
 realtime-dev = [
     "ai-runner[realtime-base]",
     "torch",
     "diffusers",
     "transformers",
+]
+dev = [
+    "pytest",
+    "pytest-mock",
 ]
 
 [tool.setuptools.packages.find]
