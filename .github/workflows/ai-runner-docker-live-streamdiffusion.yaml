@@ -166,3 +166,16 @@ jobs:
     steps:
       - name: Notify new build upload
         run: curl -X POST https://holy-bread-207a.livepeer.workers.dev
+
+  release:
+    name: Create release
+    needs: app
+    if: github.ref_type == 'tag'
+    runs-on: [self-hosted, linux, amd64]
+    steps:
+      - name: Create a GitHub release
+        id: create-gh-release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: "ai-runner ${{ github.ref_name }}"
