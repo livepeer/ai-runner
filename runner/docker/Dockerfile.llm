@@ -3,9 +3,6 @@
 FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu20.04
 LABEL maintainer="Yondon Fu <yondon@livepeer.org>"
 
-# Add any system dependency here
-# RUN apt-get update -y && apt-get install libXXX -y
-
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install prerequisites
@@ -15,32 +12,28 @@ RUN apt-get update && \
     xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git \
     ffmpeg
 
-# Install pyenv
-RUN curl https://pyenv.run | bash
+# Install uv (pinned version copied from official image)
+COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
 
-# Set environment variables for pyenv
-ENV PYENV_ROOT=/root/.pyenv
-ENV PATH=$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH
-
-# Install your desired Python version
-ARG PYTHON_VERSION=3.11
-RUN pyenv install $PYTHON_VERSION && \
-    pyenv global $PYTHON_VERSION && \
-    pyenv rehash
+# Install Python 3.11 via uv and create venv
+RUN uv python install 3.11 && uv venv
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Upgrade pip and install your desired packages
 ARG PIP_VERSION=24.2
-RUN pip install --no-cache-dir --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0 && \
-    pip install --no-cache-dir torch==2.4.0 torchvision torchaudio pip-tools
+RUN uv pip install --no-cache --upgrade pip==${PIP_VERSION} setuptools==69.5.1 wheel==0.43.0 && \
+    uv pip install --no-cache torch==2.4.0 torchvision torchaudio
 
 ARG VERSION="undefined"
 ENV VERSION=${VERSION}
 
 WORKDIR /app
 
-COPY ./requirements.llm.in /app
-RUN pip-compile requirements.llm.in -o requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy lockfile and pyproject.toml first (for layer caching)
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies
+RUN uv sync --locked --extra llm --no-install-project
 
 # Most DL models are quite large in terms of memory, using workers is a HUGE
 # slowdown because of the fork and GIL with python.
@@ -69,9 +62,13 @@ ENV PIPELINE_PARALLEL_SIZE=1
 # - Option 2: TENSOR_PARALLEL_SIZE=4, PIPELINE_PARALLEL_SIZE=1
 # - Option 3: TENSOR_PARALLEL_SIZE=1, PIPELINE_PARALLEL_SIZE=4
 
-COPY app/ /app/app
+# Copy application files
+COPY src/runner/ /app/src/runner
 COPY images/ /app/images
 COPY bench.py /app/bench.py
 COPY example_data/ /app/example_data
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+# Final sync to install the project
+RUN uv sync --locked --extra llm
+
+CMD ["uv", "run", "--frozen", "uvicorn", "runner.main:app", "--log-config", "src/runner/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

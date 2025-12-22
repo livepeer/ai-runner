@@ -12,12 +12,15 @@ RUN apt update && \
     xz-utils tk-dev libffi-dev liblzma-dev python3-openssl git runit libzmq3-dev && \
     apt clean && rm -rf /var/lib/apt/lists/*
 
-# Install pyenv
-RUN curl https://pyenv.run | bash
-
-# Set environment variables for pyenv
+# TODO: Remove pyenv section once we're confident on the nexus migration
+# --- pyenv for backwards compatibility ---
 ENV PYENV_ROOT="/root/.pyenv"
 ENV PATH="$PYENV_ROOT/shims:$PYENV_ROOT/bin:$PATH"
+RUN curl https://pyenv.run | bash
+# --- end pyenv ---
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:0.9.17 /uv /uvx /bin/
 
 # Install ffmpeg
 RUN apt update && apt install -yqq --no-install-recommends \
@@ -62,3 +65,9 @@ RUN git clone --branch n7.1 --depth 1 https://github.com/FFmpeg/FFmpeg.git ffmpe
     cp -R /compiled/* /usr/local/ && \
     cd .. \
     rm -rf ffmpeg
+
+# Common environment variables for AI runner pipelines
+ENV MAX_WORKERS=1 \
+    HUGGINGFACE_HUB_CACHE=/models \
+    DIFFUSERS_CACHE=/models \
+    MODEL_DIR=/models

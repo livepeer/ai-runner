@@ -14,3 +14,6 @@ runner/run-lv2v.log
 .vscode
 *.code-workspace
 engines
+
+*.egg-info/
+.venv/

@@ -1,0 +1,68 @@
+{
+  "model_id": "Lykon/dreamshaper-8",
+  "prompt": "cyberpunk desert structures, masterpiece",
+  "prompt_interpolation_method": "slerp",
+  "normalize_prompt_weights": true,
+  "negative_prompt": "blurry, low quality, flat, 2d",
+  "guidance_scale": 1.0,
+  "delta": 0.7,
+  "num_inference_steps": 50,
+  "t_index_list": [5, 15, 32],
+  "width": 512,
+  "height": 512,
+  "lora_dict": null,
+  "use_lcm_lora": true,
+  "lcm_lora_id": "latent-consistency/lcm-lora-sdv1-5",
+  "acceleration": "tensorrt",
+  "use_denoising_batch": true,
+  "do_add_noise": true,
+  "seed": 789,
+  "seed_interpolation_method": "linear",
+  "normalize_seed_weights": true,
+  "enable_similar_image_filter": false,
+  "similar_image_filter_threshold": 0.98,
+  "similar_image_filter_max_skip_frame": 10,
+  "controlnets": [
+    {
+      "model_id": "lllyasviel/control_v11f1p_sd15_depth",
+      "conditioning_scale": 1.0,
+      "preprocessor": "depth_tensorrt",
+      "preprocessor_params": {},
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "lllyasviel/control_v11f1e_sd15_tile",
+      "conditioning_scale": 0.0,
+      "preprocessor": "feedback",
+      "preprocessor_params": {},
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "lllyasviel/control_v11p_sd15_canny",
+      "conditioning_scale": 0.0,
+      "preprocessor": "canny",
+      "preprocessor_params": {},
+      "enabled": true,
+      "control_guidance_start": 0.0,
+      "control_guidance_end": 1.0
+    },
+    {
+      "model_id": "daydreamlive/TemporalNet2-stable-diffusion-v1-5",
+      "conditioning_scale": 0.0,
+      "preprocessor": "temporal_net_tensorrt",
+      "preprocessor_params": {
+        "flow_strength": 0.4
+      },
+      "enabled": true
+    }
+  ],
+  "ip_adapter": { "scale": 0.5, "enabled": true },
+  "ip_adapter_style_image_url": "https://storage.googleapis.com/lp-ai-assets/ipadapter_style_imgs/textures/vortex.jpeg",
+  "cached_attention": {
+    "enabled": true
+  }
+}

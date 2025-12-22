@@ -1,11 +1,11 @@
-diff --git a/runner/app/pipelines/image_to_image.py b/runner/app/pipelines/image_to_image.py
+diff --git a/runner/src/runner/pipelines/image_to_image.py b/runner/src/runner/pipelines/image_to_image.py
 index fda2dfb..8256b64 100644
---- a/runner/app/pipelines/image_to_image.py
-+++ b/runner/app/pipelines/image_to_image.py
+--- a/runner/src/runner/pipelines/image_to_image.py
++++ b/runner/src/runner/pipelines/image_to_image.py
 @@ -48,6 +48,10 @@ class ImageToImagePipeline(Pipeline):
          self.model_id = model_id
          kwargs = {"cache_dir": get_model_dir()}
- 
+
 +        if os.getenv("MOCK_PIPELINE", "").strip().lower() == "true":
 +            logger.info("Mocking ImageToImagePipeline for %s", model_id)
 +            return
@@ -22,15 +22,15 @@ index fda2dfb..8256b64 100644
 +
          seed = kwargs.pop("seed", None)
          safety_check = kwargs.pop("safety_check", True)
- 
-diff --git a/runner/app/pipelines/image_to_video.py b/runner/app/pipelines/image_to_video.py
+
+diff --git a/runner/src/runner/pipelines/image_to_video.py b/runner/src/runner/pipelines/image_to_video.py
 index c3a528e..81dab05 100644
---- a/runner/app/pipelines/image_to_video.py
-+++ b/runner/app/pipelines/image_to_video.py
+--- a/runner/src/runner/pipelines/image_to_video.py
++++ b/runner/src/runner/pipelines/image_to_video.py
 @@ -24,6 +24,10 @@ class ImageToVideoPipeline(Pipeline):
          self.model_id = model_id
          kwargs = {"cache_dir": get_model_dir()}
- 
+
 +        if os.getenv("MOCK_PIPELINE", "").strip().lower() == "true":
 +            logger.info("Mocking ImageToVideoPipeline for %s", model_id)
 +            return
@@ -52,15 +52,15 @@ index c3a528e..81dab05 100644
 +
          seed = kwargs.pop("seed", None)
          safety_check = kwargs.pop("safety_check", True)
- 
-diff --git a/runner/app/pipelines/text_to_image.py b/runner/app/pipelines/text_to_image.py
+
+diff --git a/runner/src/runner/pipelines/text_to_image.py b/runner/src/runner/pipelines/text_to_image.py
 index 278c04e..8a0c4b6 100644
---- a/runner/app/pipelines/text_to_image.py
-+++ b/runner/app/pipelines/text_to_image.py
+--- a/runner/src/runner/pipelines/text_to_image.py
++++ b/runner/src/runner/pipelines/text_to_image.py
 @@ -32,6 +32,10 @@ class TextToImagePipeline(Pipeline):
          self.model_id = model_id
          kwargs = {"cache_dir": get_model_dir()}
- 
+
 +        if os.getenv("MOCK_PIPELINE", "").strip().lower() == "true":
 +            logger.info("Mocking TextToImagePipeline for %s", model_id)
 +            return
@@ -77,15 +77,15 @@ index 278c04e..8a0c4b6 100644
 +
          seed = kwargs.pop("seed", None)
          safety_check = kwargs.pop("safety_check", True)
- 
-diff --git a/runner/app/pipelines/upscale.py b/runner/app/pipelines/upscale.py
+
+diff --git a/runner/src/runner/pipelines/upscale.py b/runner/src/runner/pipelines/upscale.py
 index bd2e4f2..830d27c 100644
---- a/runner/app/pipelines/upscale.py
-+++ b/runner/app/pipelines/upscale.py
+--- a/runner/src/runner/pipelines/upscale.py
++++ b/runner/src/runner/pipelines/upscale.py
 @@ -27,6 +27,10 @@ class UpscalePipeline(Pipeline):
          self.model_id = model_id
          kwargs = {"cache_dir": get_model_dir()}
- 
+
 +        if os.getenv("MOCK_PIPELINE", "").strip().lower() == "true":
 +            logger.info("Mocking UpscalePipeline for %s", model_id)
 +            return
@@ -102,7 +102,7 @@ index bd2e4f2..830d27c 100644
 +
          seed = kwargs.pop("seed", None)
          safety_check = kwargs.pop("safety_check", True)
- 
+
 diff --git a/worker/docker.go b/worker/docker.go
 index 48131a7..c822efb 100644
 --- a/worker/docker.go
@@ -118,7 +118,7 @@ index 48131a7..c822efb 100644
 @@ -168,6 +169,11 @@ func (m *DockerManager) createContainer(ctx context.Context, pipeline string, mo
  		envVars = append(envVars, key+"="+value.String())
  	}
- 
+
 +	if value, ok := os.LookupEnv("MOCK_PIPELINE"); ok {
 +		envVars = append(envVars, "MOCK_PIPELINE="+value)
 +		slog.Info("MOCK_PIPELINE set to " + value + ", passing to runner container")

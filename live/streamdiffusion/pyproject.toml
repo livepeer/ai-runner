@@ -1,0 +1,33 @@
+[project]
+name = "streamdiffusion-pipeline"
+version = "0.1.0"
+requires-python = "==3.11.*"
+dependencies = [
+    "ai-runner[realtime]",
+    "torch==2.7.1+cu128",
+    "torchvision==0.22.1+cu128",
+    "torchaudio==2.7.1+cu128",
+    "streamdiffusion[tensorrt,controlnet,ipadapter]",
+    "hf_transfer==0.1.4",
+    "pip",
+    "peft>=0.17.0",
+]
+
+[tool.uv.sources]
+ai-runner = { path = "../../runner", editable = true }
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+torchaudio = { index = "pytorch-cu128" }
+streamdiffusion = { git = "https://github.com/daydreamlive/StreamDiffusion.git", rev = "94b9b96cb8a17d401ffbce516393d6482326ce62" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv]
+package = true
+override-dependencies = ["pillow==10.3.0"]
+
+[tool.setuptools]
+packages = ["pipeline"]

@@ -1,6 +1,8 @@
 ARG BASE_IMAGE=livepeer/ai-runner:base
 FROM ${BASE_IMAGE}
 
+WORKDIR /app
+
 # Install CUDA Toolkit to enable flash attention.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -8,20 +10,18 @@ RUN apt-get update && \
     g++ && \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
+# Install dependencies (flash_attn needs torch at build time, so use --no-build-isolation)
+RUN uv pip install --no-cache \
     ninja \
     transformers==4.43.3 \
     peft \
     deepcache \
     soundfile \
     g2p-en \
-    flash_attn==2.5.6 \
-    git+https://github.com/huggingface/parler-tts.git@5d0aca9753ab74ded179732f5bd797f7a8c6f8ee
-
-# Override base working directory to ensure the correct working directory.
-WORKDIR /app
+    "parler-tts @ git+https://github.com/huggingface/parler-tts.git@5d0aca9753ab74ded179732f5bd797f7a8c6f8ee" && \
+    uv pip install --no-cache --no-build-isolation flash_attn==2.5.6
 
 # Copy app directory to avoid rebuilding the base image during development.
-COPY app/ /app/app
+COPY src/runner/ /app/src/runner
 
-CMD ["uvicorn", "app.main:app", "--log-config", "app/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "uvicorn", "runner.main:app", "--log-config", "src/runner/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]

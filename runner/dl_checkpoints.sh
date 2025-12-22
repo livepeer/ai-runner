@@ -3,12 +3,12 @@
 set -e
 [ -v DEBUG ] && set -x
 
-# ComfyUI image configuration
+# Docker image configuration
 PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
-AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-livepeer/ai-runner:live-app-streamdiffusion}
+_DEFAULT_STREAMDIFFUSION_IMAGE="livepeer/ai-runner:live-app-streamdiffusion"
+AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-$_DEFAULT_STREAMDIFFUSION_IMAGE}
 AI_RUNNER_SCOPE_IMAGE=${AI_RUNNER_SCOPE_IMAGE:-livepeer/ai-runner:live-app-scope}
-CONDA_PYTHON="/workspace/miniconda3/envs/comfystream/bin/python"
 PIPELINE=${PIPELINE:-all}
 
 # Select a single NVIDIA GPU interactively and export NVIDIA_VISIBLE_DEVICES.
@@ -105,8 +105,12 @@ function display_help() {
   echo "Environment Variables:"
   echo "  PULL_IMAGES  Whether to pull Docker images (default: true)"
   echo "  AI_RUNNER_COMFYUI_IMAGE  ComfyUI Docker image (default: livepeer/ai-runner:live-app-comfyui)"
-  echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion Docker image (default: livepeer/ai-runner:live-app-streamdiffusion)"
-  echo "  PIPELINE  When using --live or --tensorrt, specify which pipeline to use: 'streamdiffusion', 'comfyui', 'scope', or 'all' (default)"
+  echo "  AI_RUNNER_STREAMDIFFUSION_IMAGE  StreamDiffusion docker image for default or variant builds (default: 'livepeer/ai-runner:live-app-streamdiffusion(-{variant})?')"
+  echo "  PIPELINE  Pipeline to prepare. Options:"
+  echo "            - 'streamdiffusion': base image, builds ALL models (for public operators)"
+  echo "            - 'streamdiffusion-sdturbo', 'streamdiffusion-sdxl', etc: variant-specific image"
+  echo "            - 'comfyui', 'scope': other pipelines"
+  echo "            - 'all': all pipelines (default)"
   echo "  HF_TOKEN  HuggingFace token for downloading token-gated models"
   echo "  DEBUG  Enable debug mode with set -x"
 }
@@ -177,8 +181,13 @@ function download_all_models() {
 function download_live_models() {
   # Check PIPELINE environment variable and download accordingly
   case "$PIPELINE" in
+  streamdiffusion-*)
+    # Variant-specific streamdiffusion (e.g., streamdiffusion-sdturbo, streamdiffusion-sdxl)
+    local variant="${PIPELINE#streamdiffusion-}"
+    prepare_streamdiffusion_models "$variant"
+    ;;
   "streamdiffusion")
-    printf "\nPreparing StreamDiffusion live models only...\n"
+    # Base streamdiffusion image - builds ALL models (for public operators)
     prepare_streamdiffusion_models
     ;;
   "comfyui")
@@ -190,13 +199,16 @@ function download_live_models() {
     prepare_scope_models
     ;;
   "all")
-    printf "\Preparing all live models...\n"
+    # For 'all', use the base streamdiffusion image which builds everything
+    printf "\nPreparing all live models...\n"
     prepare_streamdiffusion_models
     download_comfyui_live_models
     prepare_scope_models
     ;;
   *)
-    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, scope, all\n" "$PIPELINE"
+    printf "ERROR: Invalid PIPELINE value: %s\n" "$PIPELINE"
+    printf "Valid values: streamdiffusion, streamdiffusion-<variant>, comfyui, scope, all\n"
+    printf "Variants: sdturbo, sd15, sd15-v2v, sdxl, sdxl-faceid, sdxl-v2v\n"
     exit 1
     ;;
   esac
@@ -220,25 +232,36 @@ function run_pipeline_prepare() {
   # ai-worker has live-app tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here
   docker image tag "$image" "livepeer/ai-runner:live-app-$pipeline"
 
-  # NOTE: We use the legacy HF_HUB_ENABLE_HF_TRANSFER env var and install hf_transfer package
-  # because the container image has huggingface_hub==0.35.0 (from conda), which doesn't support
-  # the newer HF_XET_HIGH_PERFORMANCE feature (introduced in v1.0+). The hf_transfer package
-  # provides fast downloads compatible with older huggingface_hub versions.
-  # TODO: Migrate container's huggingface_hub to v1.0+ and switch to HF_XET_HIGH_PERFORMANCE
+  # Run model preparation using PREPARE_MODELS env var (triggers main.py prepare mode)
   docker run --rm --name "ai-runner-${pipeline}-prepare" -v ./models:/models "${docker_run_flags[@]}" \
     -l "$label" \
     -e HF_HUB_OFFLINE=0 \
-    -e HF_HUB_ENABLE_HF_TRANSFER=1 \
     -e HF_TOKEN="${HF_TOKEN:-}" \
-    "$image" bash -c "set -euo pipefail && \
-      $CONDA_PYTHON -m pip install --no-cache-dir hf_transfer==0.1.4 && \
-      $CONDA_PYTHON -m app.tools.prepare_models --pipeline ${pipeline} && \
-      chown -R $(id -u):$(id -g) /models"
+    -e PREPARE_MODELS=1 \
+    "$image"
+
+  # Fix ownership of downloaded models
+  docker run --rm -v ./models:/models "$image" chown -R "$(id -u):$(id -g)" /models
 }
 
 function prepare_streamdiffusion_models() {
-  printf "\nPreparing StreamDiffusion live models...\n"
-  run_pipeline_prepare "streamdiffusion" "$AI_RUNNER_STREAMDIFFUSION_IMAGE"
+  local variant="${1:-}"
+
+  local suffix=""
+  local pipeline_name="streamdiffusion"
+  if [[ -n "$variant" ]]; then
+    suffix="-${variant}"
+    pipeline_name="streamdiffusion-${variant}"
+  fi
+
+  # Append suffix only if using the default image (not overridden)
+  local image="$AI_RUNNER_STREAMDIFFUSION_IMAGE"
+  if [[ "$image" == "$_DEFAULT_STREAMDIFFUSION_IMAGE" ]]; then
+    image="${image}${suffix}"
+  fi
+
+  printf "\nPreparing StreamDiffusion%s using image %s...\n" "${suffix}" "$image"
+  run_pipeline_prepare "$pipeline_name" "$image"
 }
 
 function download_comfyui_live_models() {
@@ -258,7 +281,7 @@ function download_comfyui_live_models() {
   docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream && \
-                 $CONDA_PYTHON src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
+                 python src/comfystream/scripts/setup_models.py --workspace /workspace/ComfyUI && \
                  chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI setup_models.py"
@@ -278,7 +301,7 @@ function build_tensorrt_models() {
 
   # Check PIPELINE environment variable and build accordingly
   case "$PIPELINE" in
-  "streamdiffusion")
+  streamdiffusion-*|"streamdiffusion")
     printf "\nStreamDiffusion models already built on prepare...\n"
     ;;
   "scope")
@@ -293,7 +316,8 @@ function build_tensorrt_models() {
     build_comfyui_tensorrt
     ;;
   *)
-    printf "ERROR: Invalid PIPELINE value: %s. Valid values are: streamdiffusion, comfyui, scope, all\n" "$PIPELINE"
+    printf "ERROR: Invalid PIPELINE value: %s\n" "$PIPELINE"
+    printf "Valid values: streamdiffusion, streamdiffusion-<variant>, comfyui, scope, all\n"
     exit 1
     ;;
   esac
@@ -310,8 +334,8 @@ function build_comfyui_tensorrt() {
   # Depth-Anything-Tensorrt
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/ComfyUI/models/tensorrt/depth-anything && \
-                $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
-                $CONDA_PYTHON /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
+                python /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_v2_vitl-fp16.engine --onnx-path=./depth_anything_v2_vitl.onnx && \
+                python /workspace/ComfyUI/custom_nodes/ComfyUI-Depth-Anything-Tensorrt/export_trt.py --trt-path=./depth_anything_vitl14-fp16.engine --onnx-path=./depth_anything_vitl14.onnx && \
                 chown -R $(id -u):$(id -g) /models" ||
     (
       echo "failed ComfyUI Depth-Anything-Tensorrt"
@@ -321,7 +345,7 @@ function build_comfyui_tensorrt() {
   # Dreamshaper-8-Dmd-1kstep
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
-                $CONDA_PYTHON ./build_trt.py \
+                python ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/static-dreamshaper8_SD15_\\\$stat-b-1-h-512-w-512_00001_.engine && \
                  chown -R $(id -u):$(id -g) /models" ||
@@ -333,7 +357,7 @@ function build_comfyui_tensorrt() {
   # Dreamshaper-8-Dmd-1kstep static dynamic 488x704
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
     bash -c "cd /workspace/comfystream/src/comfystream/scripts && \
-                $CONDA_PYTHON ./build_trt.py \
+                python ./build_trt.py \
                 --model /workspace/ComfyUI/models/unet/dreamshaper-8-dmd-1kstep.safetensors \
                 --out-engine /workspace/ComfyUI/output/tensorrt/dynamic-dreamshaper8_SD15_\$dyn-b-1-4-2-h-448-704-512-w-448-704-512_00001_.engine \
                 --width 512 \
@@ -351,7 +375,7 @@ function build_comfyui_tensorrt() {
   # FasterLivePortrait
   FASTERLIVEPORTRAIT_DIR="/workspace/ComfyUI/models/liveportrait_onnx"
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l TensorRT-engines $AI_RUNNER_COMFYUI_IMAGE \
-    bash -c "conda run -n comfystream --no-capture-output /workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
+    bash -c "/workspace/ComfyUI/custom_nodes/ComfyUI-FasterLivePortrait/scripts/build_fasterliveportrait_trt.sh \
              $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR $FASTERLIVEPORTRAIT_DIR && \
                 chown -R $(id -u):$(id -g) /models" ||
     (

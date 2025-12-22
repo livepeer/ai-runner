@@ -5,8 +5,8 @@ import torch
 from fastapi import status
 from fastapi.responses import JSONResponse
 
-from app.pipelines.utils import LoraLoadingError
-from app.routes.utils import handle_pipeline_exception
+from runner.pipelines.utils import LoraLoadingError
+from runner.routes.utils import handle_pipeline_exception
 
 
 class TestHandlePipelineException:

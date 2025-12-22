@@ -1,0 +1,548 @@
+import os
+import logging
+import asyncio
+import base64
+import re
+from pathlib import Path
+from typing import Dict, List, Optional, Any, cast
+
+import torch
+from streamdiffusion import StreamDiffusionWrapper
+from PIL import Image
+from io import BytesIO
+import aiohttp
+
+from runner.live.pipelines import Pipeline
+from runner.live.trickle import VideoFrame, VideoOutput
+
+from .params import (
+    StreamDiffusionParams,
+    IPAdapterConfig,
+    ProcessingConfig,
+    get_model_type,
+    IPADAPTER_SUPPORTED_TYPES,
+    LCM_LORAS_BY_TYPE,
+    CachedAttentionConfig,
+    CACHED_ATTENTION_MIN_FRAMES,
+    CACHED_ATTENTION_MAX_FRAMES,
+)
+
+ENGINES_DIR = Path("./engines")
+# this one is used only for realesrgan_trt which has ./models hardcoded
+LOCAL_MODELS_DIR = Path("./models")
+
+class StreamDiffusion(Pipeline):
+    def __init__(self):
+        super().__init__()
+        self.pipe: Optional[StreamDiffusionWrapper] = None
+        self.params: Optional[StreamDiffusionParams] = None
+        self.first_frame = True
+        self.frame_queue: asyncio.Queue[VideoOutput] = asyncio.Queue()
+        self._pipeline_lock = asyncio.Lock()  # Protects pipeline initialization/reinitialization
+        self._cached_style_image_tensor: Optional[torch.Tensor] = None
+        self._cached_style_image_url: Optional[str] = None
+
+    async def initialize(self, **params):
+        logging.info(f"Initializing StreamDiffusion pipeline with params: {params}")
+        reload_task = await self.update_params(**params)
+        if reload_task:
+            logging.info("Task returned, waiting for pipeline reload")
+            await reload_task
+        logging.info("Pipeline initialization complete")
+
+    async def put_video_frame(self, frame: VideoFrame, request_id: str):
+        if self.params is None:
+            raise RuntimeError("Pipeline not initialized")
+
+        async with self._pipeline_lock:
+            if self.pipe is None:
+                # We are likely loading a new pipeline, so drop input input frames
+                return
+            out_tensor = await asyncio.to_thread(self.process_tensor_sync, frame.tensor)
+            output = VideoOutput(frame, request_id).replace_tensor(out_tensor)
+
+        await self.frame_queue.put(output)
+
+    def process_tensor_sync(self, img_tensor: torch.Tensor):
+        assert self.pipe is not None
+        # The incoming frame.tensor is (B, H, W, C) in range [-1, 1] while the
+        # VaeImageProcessor inside the wrapper expects (B, C, H, W) in [0, 1].
+        img_tensor = img_tensor.permute(0, 3, 1, 2)
+        img_tensor = cast(
+            torch.Tensor, self.pipe.stream.image_processor.denormalize(img_tensor)
+        )
+        img_tensor = self.pipe.preprocess_image(img_tensor)
+
+        if self.params and self.params.controlnets:
+            enabled_cnets = [cn for cn in self.params.controlnets if cn.enabled]
+            for i, cn in enumerate(enabled_cnets):
+                if cn.conditioning_scale > 0:
+                    self.pipe.update_control_image(i, img_tensor)
+
+        if self.first_frame:
+            self.first_frame = False
+            for _ in range(self.pipe.batch_size):
+                self.pipe(image=img_tensor)
+
+        out_tensor = self.pipe(image=img_tensor)
+        if isinstance(out_tensor, list):
+            out_tensor = out_tensor[0]
+
+        # Workaround as the some post-processors produce tensors without the batch dimension
+        if out_tensor.dim() == 3:
+            out_tensor = out_tensor.unsqueeze(0)
+
+        # Encoder expects (B, H, W, C) format, so convert from (B, C, H, W) if needed.
+        if _is_bchw_format(out_tensor):
+            out_tensor = out_tensor.permute(0, 2, 3, 1)
+
+        return out_tensor
+
+    async def get_processed_video_frame(self) -> VideoOutput:
+        return await self.frame_queue.get()
+
+    async def update_params(self, **params):
+        new_params = StreamDiffusionParams(**params)
+        if new_params == self.params:
+            logging.info("No parameters changed")
+            return
+
+        # Pre-fetch the style image before locking. This raises any errors early (e.g. invalid URL or image) and also
+        # allows us to fetch the style image without blocking inference with the lock.
+        if (
+            new_params.ip_adapter_style_image_url
+            and new_params.ip_adapter_style_image_url != self._cached_style_image_url
+        ):
+            await self._fetch_style_image(new_params.ip_adapter_style_image_url)
+
+        async with self._pipeline_lock:
+            try:
+                if await self._update_params_dynamic(new_params):
+                    return
+            except Exception as e:
+                logging.error(
+                    f"[update_params] Error updating params dynamically, reloading pipeline: {e}",
+                    extra={"report_error": True},
+                    exc_info=True,
+                )
+
+        logging.info(f"Resetting pipeline for params change")
+        return asyncio.create_task(self._reload_pipeline(new_params))
+
+    async def _reload_pipeline(self, new_params: StreamDiffusionParams):
+        async with self._pipeline_lock:
+            # Clear the pipeline while loading the new one.
+            self.pipe = None
+            prev_params = self.params
+
+        new_pipe: Optional[StreamDiffusionWrapper] = None
+        try:
+            new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+        except Exception as e:
+            logging.error(
+                f"[update_params] Error reloading pipeline, falling back to previous params: {e}",
+                extra={"report_error": True},
+                exc_info=True,
+            )
+            try:
+                new_params = prev_params or StreamDiffusionParams()
+                new_pipe = await asyncio.to_thread(load_streamdiffusion_sync, new_params)
+            except Exception as e:
+                # No need to log here as we have to bubble up the error to the caller.
+                raise RuntimeError(f"Failed to reload pipeline with previous params: {e}") from e
+
+        async with self._pipeline_lock:
+            self.pipe = new_pipe
+            self.params = new_params
+            self.first_frame = True
+
+            if new_params.ip_adapter and new_params.ip_adapter.enabled:
+                await self._update_style_image(new_params)
+                # no-op update prompt to cause an IPAdapter reload
+                self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
+
+    async def _update_params_dynamic(self, new_params: StreamDiffusionParams):
+        if self.pipe is None:
+            return False
+
+        updatable_params = {
+            'num_inference_steps', 'guidance_scale', 'delta', 't_index_list',
+            'prompt', 'prompt_interpolation_method', 'normalize_prompt_weights', 'negative_prompt',
+            'seed', 'seed_interpolation_method', 'normalize_seed_weights',
+            'use_safety_checker', 'safety_checker_threshold', 'controlnets',
+            'image_preprocessing', 'image_postprocessing', 'latent_preprocessing', 'latent_postprocessing',
+            'ip_adapter', 'ip_adapter_style_image_url',
+            'cached_attention',
+        }
+
+        update_kwargs = {}
+        curr_params = self.params.model_dump() if self.params else {}
+        changed_ipadapter = False
+        for key, new_value in new_params.model_dump().items():
+            curr_value = curr_params.get(key, None)
+            if new_value == curr_value:
+                continue
+            elif key not in updatable_params:
+                logging.info(f"Non-updatable parameter changed: {key}")
+                return False
+
+            # at this point, we know it's an updatable parameter that changed
+            if key == 'prompt':
+                update_kwargs['prompt_list'] = [(new_value, 1.0)] if isinstance(new_value, str) else new_value
+            elif key == 'seed':
+                update_kwargs['seed_list'] = [(new_value, 1.0)] if isinstance(new_value, int) else new_value
+            elif key == 'controlnets':
+                update_kwargs['controlnet_config'] = _prepare_controlnet_configs(new_params)
+            elif key == 'ip_adapter':
+                # Check if only dynamic params have changed
+                only_dynamic_changes = curr_params.get('ip_adapter') or IPAdapterConfig().model_dump()
+                for k in ['enabled', 'scale', 'weight_type']:
+                    only_dynamic_changes[k] = new_value[k]
+                if new_value != only_dynamic_changes:
+                    return False
+
+                update_kwargs['ipadapter_config'] = _prepare_ipadapter_configs(new_params)
+                changed_ipadapter = True
+            elif key == 'ip_adapter_style_image_url':
+                # Do not set on update_kwargs, we'll update it separately.
+                changed_ipadapter = True
+            elif key == 'image_preprocessing':
+                update_kwargs['image_preprocessing_config'] = _prepare_processing_config(new_params.image_preprocessing)['processors']
+            elif key == 'image_postprocessing':
+                update_kwargs['image_postprocessing_config'] = _prepare_processing_config(new_params.image_postprocessing)['processors']
+            elif key == 'latent_preprocessing':
+                update_kwargs['latent_preprocessing_config'] = _prepare_processing_config(new_params.latent_preprocessing)['processors']
+            elif key == 'latent_postprocessing':
+                update_kwargs['latent_postprocessing_config'] = _prepare_processing_config(new_params.latent_postprocessing)['processors']
+            elif key == 'cached_attention':
+                curr_cfg = curr_params.get('cached_attention') or CachedAttentionConfig().model_dump()
+                if curr_cfg.get('enabled') != new_value['enabled']:
+                    # Cannot change whether cached attention is enabled or disabled without a reload
+                    return False
+
+                if not new_value['enabled']:
+                    # noop if it's disabled
+                    continue
+
+                update_kwargs.update({
+                    'cache_maxframes': new_value['max_frames'],
+                    'cache_interval': new_value['interval'],
+                })
+            else:
+                update_kwargs[key] = new_value
+
+        logging.info(f"Updating parameters dynamically update_kwargs={update_kwargs}")
+
+        if update_kwargs:
+            self.pipe.update_stream_params(**update_kwargs)
+        if changed_ipadapter:
+            await self._update_style_image(new_params)
+            # no-op update prompt to cause an IPAdapter reload
+            self.pipe.update_stream_params(prompt_list=self.pipe.stream._param_updater.get_current_prompts())
+
+        self.params = new_params
+        self.first_frame = True
+        return True
+
+    async def _update_style_image(self, params: StreamDiffusionParams) -> None:
+        assert self.pipe is not None
+
+        style_image_url = params.ip_adapter_style_image_url
+        ipadapter_enabled = params.ip_adapter is not None and params.ip_adapter.enabled
+        if not ipadapter_enabled:
+            return
+
+        if style_image_url and style_image_url != self._cached_style_image_url:
+            await self._fetch_style_image(style_image_url)
+
+        if self._cached_style_image_tensor is not None:
+            self.pipe.update_style_image(self._cached_style_image_tensor)
+        else:
+            logging.warning("[IPAdapter] No cached style image tensor; skipping style image update")
+
+    async def _fetch_style_image(self, style_image_url: str):
+        """
+        Pre-fetches the style image and caches it in self._cached_style_image_tensor.
+
+        If the pipe is not initialized, this just validates that the image in the URL is valid and return.
+        """
+        image = await _load_image_from_url_or_b64(style_image_url)
+        if self.pipe is None:
+            return
+
+        tensor = self.pipe.preprocess_image(image)
+        self._cached_style_image_tensor = tensor
+        self._cached_style_image_url = style_image_url
+
+    async def stop(self):
+        async with self._pipeline_lock:
+            self.pipe = None
+            self.params = None
+            self.frame_queue = asyncio.Queue()
+
+    @classmethod
+    def prepare_models(cls):
+        from .prepare import prepare_streamdiffusion_models
+
+        prepare_streamdiffusion_models()
+
+
+def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
+    """Prepare ControlNet configurations for wrapper"""
+    if not params.controlnets:
+        return None
+
+    controlnet_configs = []
+    for cn_config in params.controlnets:
+        if not cn_config.enabled:
+            continue
+
+        preprocessor_params = (cn_config.preprocessor_params or {}).copy()
+
+        # Inject preprocessor-specific parameters
+        default_cond_chans = 3
+        if cn_config.preprocessor == "depth_tensorrt":
+            preprocessor_params.update({
+                "engine_path": "./engines/depth-anything/depth_anything_v2_vits.engine",
+            })
+        elif cn_config.preprocessor == "pose_tensorrt":
+            confidence_threshold = preprocessor_params.pop("confidence_threshold", 0.5)
+
+            engine_path = f"./engines/pose/yolo_nas_pose_l_{confidence_threshold}.engine"
+            if not os.path.exists(engine_path):
+                raise ValueError(f"Engine file not found: {engine_path}")
+
+            preprocessor_params.update({
+                "engine_path": engine_path,
+            })
+        elif cn_config.preprocessor == "temporal_net_tensorrt":
+            default_cond_chans = 6
+            preprocessor_params.update({
+                "engine_path": "./engines/temporal_net/raft_small_min_384x384_max_1024x1024.engine",
+            })
+
+        # Any preprocessors may make use of the image resolution params from the base preprocessor class.
+        if not any(k in preprocessor_params for k in ['image_resolution', 'image_width', 'image_height']):
+            if params.width == params.height:
+                preprocessor_params.update({'image_resolution': params.width})
+            else:
+                preprocessor_params.update({'image_width': params.width, 'image_height': params.height})
+
+        controlnet_config = {
+            'model_id': cn_config.model_id,
+            'preprocessor': cn_config.preprocessor,
+            'conditioning_scale': cn_config.conditioning_scale,
+            'conditioning_channels': cn_config.conditioning_channels or default_cond_chans,
+            'enabled': cn_config.enabled,
+            'preprocessor_params': preprocessor_params,
+            'control_guidance_start': cn_config.control_guidance_start,
+            'control_guidance_end': cn_config.control_guidance_end,
+        }
+        controlnet_configs.append(controlnet_config)
+
+    return controlnet_configs
+
+def _prepare_ipadapter_configs(params: StreamDiffusionParams) -> Optional[Dict[str, Any]]:
+    """Prepare IPAdapter configurations for wrapper"""
+    if not params.ip_adapter:
+        return None
+
+    ip_cfg = params.ip_adapter.model_copy()
+    if ip_cfg.ipadapter_model_path:
+        logging.warning(f"[IPAdapter] ipadapter_model_path is deprecated and will be ignored. Use type instead.")
+    if ip_cfg.image_encoder_path:
+        logging.warning(f"[IPAdapter] image_encoder_path is deprecated and will be ignored. Use type instead.")
+
+    model_type = get_model_type(params.model_id)
+    dir = 'sdxl_models' if model_type == 'sdxl' else 'models'
+
+    if not ip_cfg.ipadapter_model_path:
+        match ip_cfg.type:
+            case 'regular':
+                ip_cfg.ipadapter_model_path = f"h94/IP-Adapter/{dir}/ip-adapter_{model_type}.bin" # type: ignore
+            case 'faceid':
+                ip_cfg.ipadapter_model_path = f"h94/IP-Adapter-FaceID/ip-adapter-faceid_{model_type}.bin" # type: ignore
+    if not ip_cfg.image_encoder_path:
+        ip_cfg.image_encoder_path = f"h94/IP-Adapter/{dir}/image_encoder" # type: ignore
+
+    if not ip_cfg.enabled:
+        # Enabled flag is ignored, so we set scale to 0.0 to disable it.
+        ip_cfg.scale = 0.0
+
+    return ip_cfg.model_dump()
+
+
+def _prepare_lora_dict(params: StreamDiffusionParams) -> Optional[Dict[str, float]]:
+    """Prepare LoRA dictionary with LCM LoRA logic applied externally."""
+
+    is_turbo = "turbo" in params.model_id
+    if not params.use_lcm_lora or is_turbo:
+        return params.lora_dict
+
+    lora_dict = params.lora_dict.copy() if params.lora_dict else {}
+    model_type = get_model_type(params.model_id)
+    lcm_lora = LCM_LORAS_BY_TYPE.get(model_type)
+    if lcm_lora and lcm_lora not in lora_dict:
+        lora_dict[lcm_lora] = 1.0
+
+    return lora_dict
+
+def _prepare_processing_config(cfg: Optional[ProcessingConfig[Any]]) -> Dict[str, Any]:
+    """
+    Prepare processing configuration for wrapper in the raw JSON format expected by the library.
+    Always sends enabled=True to the library. When cfg.enabled=False, sends empty processors list.
+    Automatically sets the order of the processors based on the index of the processor in the list.
+    """
+    if not cfg or not cfg.enabled:
+        return {"enabled": True, "processors": []}
+
+    processors: List[Dict[str, Any]] = []
+    for idx, p in enumerate(cfg.processors):
+        processors.append({
+            "type": p.type,
+            "enabled": p.enabled,
+            "order": idx,
+            "params": p.params or {},
+        })
+
+    return {
+        "enabled": True,
+        "processors": processors,
+    }
+
+
+def load_streamdiffusion_sync(
+    params: StreamDiffusionParams,
+    min_batch_size=1,
+    max_batch_size=4,
+    engine_dir: str | Path = ENGINES_DIR,
+    build_engines=False,
+) -> StreamDiffusionWrapper:
+    pipe = StreamDiffusionWrapper(
+        model_id_or_path=params.model_id,
+        t_index_list=params.t_index_list,
+        min_batch_size=min_batch_size,
+        max_batch_size=max_batch_size,
+        lora_dict=_prepare_lora_dict(params),
+        mode="img2img",
+        output_type="pt",
+        frame_buffer_size=1,
+        width=params.width,
+        height=params.height,
+        warmup=10,
+        acceleration=params.acceleration,
+        do_add_noise=params.do_add_noise,
+        skip_diffusion=params.skip_diffusion,
+        enable_similar_image_filter=params.enable_similar_image_filter,
+        similar_image_filter_threshold=params.similar_image_filter_threshold,
+        similar_image_filter_max_skip_frame=params.similar_image_filter_max_skip_frame,
+        use_denoising_batch=params.use_denoising_batch,
+        seed=params.seed if isinstance(params.seed, int) else params.seed[0][0],
+        normalize_seed_weights=params.normalize_seed_weights,
+        normalize_prompt_weights=params.normalize_prompt_weights,
+        use_controlnet=True,
+        controlnet_config=_prepare_controlnet_configs(params),
+        use_ipadapter=get_model_type(params.model_id) in IPADAPTER_SUPPORTED_TYPES,
+        ipadapter_config=_prepare_ipadapter_configs(params),
+        engine_dir=engine_dir,
+        build_engines_if_missing=build_engines,
+        compile_engines_only=build_engines,
+        image_preprocessing_config=_prepare_processing_config(params.image_preprocessing),
+        image_postprocessing_config=_prepare_processing_config(params.image_postprocessing),
+        latent_preprocessing_config=_prepare_processing_config(params.latent_preprocessing),
+        latent_postprocessing_config=_prepare_processing_config(params.latent_postprocessing),
+        use_safety_checker=params.use_safety_checker,
+        safety_checker_threshold=params.safety_checker_threshold,
+        use_cached_attn=params.cached_attention.enabled,
+        cache_maxframes=params.cached_attention.max_frames,
+        cache_interval=params.cached_attention.interval,
+        min_cache_maxframes=CACHED_ATTENTION_MIN_FRAMES,
+        max_cache_maxframes=CACHED_ATTENTION_MAX_FRAMES,
+    )
+
+    pipe.prepare(
+        prompt=params.prompt,
+        prompt_interpolation_method=params.prompt_interpolation_method,
+        negative_prompt=params.negative_prompt,
+        num_inference_steps=params.num_inference_steps,
+        guidance_scale=params.guidance_scale,
+        delta=params.delta,
+        seed_list=[(params.seed, 1.0)] if isinstance(params.seed, int) else params.seed,
+        seed_interpolation_method=params.seed_interpolation_method,
+    )
+    return pipe
+
+
+async def _load_image_from_url_or_b64(url: str) -> Image.Image:
+    """
+    Load an image from a URL or base64 encoded string.
+
+    Supports:
+    - HTTP/HTTPS URLs: http://example.com/image.png
+    - Data URIs: data:image/png;base64,iVBORw0KG...
+    - Raw base64 strings: iVBORw0KG...
+    """
+    if not url or not isinstance(url, str):
+        raise ValueError("Image URL or base64 string cannot be empty")
+
+    # Handle HTTP/HTTPS URLs
+    if url.startswith('http://') or url.startswith('https://'):
+        # Set user-agent to prevent 403 errors from servers like Wikipedia
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (compatible; AI-Runner/1.0; +https://github.com/livepeer/ai-runner)',
+        }
+        try:
+            timeout = aiohttp.ClientTimeout(total=5)
+            async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+                async with session.get(url) as resp:
+                    resp.raise_for_status()
+                    data = await resp.read()
+        except aiohttp.ClientError as e:
+            raise ValueError(f"Failed to fetch image from URL: {e}") from e
+        except asyncio.TimeoutError as e:
+            raise ValueError("Request timeout while fetching image from URL") from e
+
+    # Handle data URI format: data:image/png;base64,<base64_data>
+    elif url.startswith('data:'):
+        match = re.match(r'^data:image/[a-zA-Z+]+;base64,(.+)$', url)
+        if not match:
+            raise ValueError(
+                "Invalid data URI format. Expected format: data:image/<type>;base64,<base64_data>"
+            )
+        base64_data = match.group(1)
+        try:
+            data = base64.b64decode(base64_data, validate=True)
+        except Exception as e:
+            raise ValueError(f"Invalid base64 encoding in data URI: {e}") from e
+
+    # Handle raw base64 string
+    else:
+        # Check if it looks like base64 (alphanumeric + / + = padding)
+        if not re.match(r'^[A-Za-z0-9+/]+=*$', url):
+            raise ValueError(
+                "Invalid format. Must be a valid HTTP/HTTPS URL, data URI, or base64 string"
+            )
+        try:
+            data = base64.b64decode(url, validate=True)
+        except Exception as e:
+            raise ValueError(f"Invalid base64 encoding: {e}") from e
+
+    # Attempt to decode the image data
+    try:
+        image = Image.open(BytesIO(data))
+        return image.convert('RGB')
+    except Exception as e:
+        raise ValueError(f"Failed to decode image data: {e}") from e
+
+def _is_bchw_format(tensor: torch.Tensor) -> bool:
+    """
+    Detect if a 4D tensor is in (B, C, H, W) format vs (B, H, W, C).
+
+    Simple heuristic: if dim 1 is small (channels, typically 3-4) and dim -1 is large (spatial),
+    it's (B, C, H, W). If it's the other way around, it's (B, H, W, C).
+    """
+    if tensor.dim() != 4:
+        return False
+    dim1_size = tensor.shape[1]
+    dim_last_size = tensor.shape[-1]
+    return dim1_size <= 4 and dim_last_size > 4

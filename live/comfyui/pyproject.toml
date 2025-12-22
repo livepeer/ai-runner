@@ -1,0 +1,31 @@
+[project]
+name = "comfyui-pipeline"
+version = "0.1.0"
+requires-python = "==3.11.*"
+dependencies = [
+    "ai-runner[realtime]",
+    "comfystream",
+]
+
+[tool.uv.sources]
+ai-runner = { path = "../../runner", editable = true }
+# comfystream is pre-installed in Docker; this source is mostly for local development
+comfystream = { git = "https://github.com/livepeer/comfystream.git", tag = "v0.1.2" }
+
+[tool.uv]
+package = true
+# Pin versions to match comfyui-base image (must match for CUDA/library compatibility)
+override-dependencies = [
+    "aiohttp>=3.11.8",
+    "torch==2.7.0",
+    "torchvision==0.22.0",
+    "torchaudio==2.7.0",
+    "xformers==0.0.30",
+    "diffusers==0.33.1",
+    "transformers==4.51.3",
+    "peft==0.15.2",
+]
+
+[tool.setuptools]
+packages = ["pipeline"]
+

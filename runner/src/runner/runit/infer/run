@@ -1,0 +1,6 @@
+#!/bin/sh
+
+echo "Starting infer"
+exec 2>&1
+cd /app
+exec python -u -m runner.live.infer
