@@ -463,5 +463,36 @@ class StreamDiffusionParams(BaseParams):
         if model.width != 512 or model.height != 512:
             raise ValueError("Cached attention currently supports only 512x512 resolution")
 
+        # SDXL cached attention memory constraints based on denoise steps
+        model_type = get_model_type(model.model_id)
+        if model_type == "sdxl":
+            denoise_steps = len(model.t_index_list)
+            max_frames = cfg.max_frames
+
+            # Matrix: denoise_steps -> max allowed cache_maxframes
+            # 1 step: 1-4 frames allowed
+            # 2 steps: 1-2 frames allowed
+            # 3 steps: 1 frame allowed
+            # 4 steps: not allowed (NA)
+            sdxl_max_frames_limit = {
+                1: 4,
+                2: 2,
+                3: 1,
+            }
+
+            if denoise_steps >= 4:
+                raise ValueError(
+                    f"SDXL cached attention does not support {denoise_steps} denoise steps "
+                    f"(t_index_list length). Maximum supported is 3 steps."
+                )
+
+            allowed_max = sdxl_max_frames_limit.get(denoise_steps, 0)
+            if max_frames > allowed_max:
+                raise ValueError(
+                    f"SDXL cached attention with {denoise_steps} denoise step(s) "
+                    f"supports up to {allowed_max} max_frames, but got {max_frames}. "
+                    f"Reduce max_frames or use fewer denoise steps to avoid memory issues."
+                )
+
         return model
 
