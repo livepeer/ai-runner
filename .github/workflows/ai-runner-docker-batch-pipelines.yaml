@@ -69,7 +69,7 @@ jobs:
           images: |
             livepeer/ai-runner
           tags: |
-            type=raw,value=${{ steps.docker-tag.outputs.suffix }},enable={{is_default_branch}}
+            type=raw,value=${{ steps.docker-tag.outputs.suffix }},enable=${{ github.ref_type == 'tag' }}
             type=sha,prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=ref,event=pr,prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=ref,event=tag,prefix=${{ steps.docker-tag.outputs.suffix }}-
@@ -79,7 +79,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=semver,pattern={{version}},prefix=${{ steps.docker-tag.outputs.suffix }}-v
             type=semver,pattern={{major}}.{{minor}},prefix=${{ steps.docker-tag.outputs.suffix }}-v
-            type=raw,value=latest,enable={{is_default_branch}},prefix=${{ steps.docker-tag.outputs.suffix }}-
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }},prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=raw,value=${{ github.event.pull_request.head.ref }},enable=${{ github.event_name == 'pull_request' }},prefix=${{ steps.docker-tag.outputs.suffix }}-
             type=raw,value=stable,enable=${{ startsWith(github.event.ref, 'refs/tags/v') }},prefix=${{ steps.docker-tag.outputs.suffix }}-
 

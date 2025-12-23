@@ -43,13 +43,13 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=live-app-comfyui,enable={{is_default_branch}}
+            type=raw,value=live-app-comfyui,enable=${{ github.ref_type == 'tag' }}
             type=sha,prefix=live-app-comfyui-sha-
             type=sha,format=long,prefix=live-app-comfyui-sha-
             type=ref,event=pr,prefix=live-app-comfyui-pr-
             type=ref,event=tag,prefix=live-app-comfyui-
             type=ref,event=branch,prefix=live-app-comfyui-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-comfyui-
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }},prefix=live-app-comfyui-
 
       - name: Get version information (for docker build tag)
         id: version

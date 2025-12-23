@@ -45,13 +45,13 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=live-app-scope,enable={{is_default_branch}}
+            type=raw,value=live-app-scope,enable=${{ github.ref_type == 'tag' }}
             type=sha,prefix=live-app-scope-sha-
             type=sha,format=long,prefix=live-app-scope-sha-
             type=ref,event=pr,prefix=live-app-scope-pr-
             type=ref,event=tag,prefix=live-app-scope-
             type=ref,event=branch,prefix=live-app-scope-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-scope-
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }},prefix=live-app-scope-
 
       - name: Get version information (for docker build tag)
         id: version
