@@ -13,6 +13,7 @@ import time
 from typing import Any
 
 import torch
+import uvloop
 
 from ..pipelines import Pipeline, BaseParams, PipelineSpec
 from ..pipelines.loader import load_pipeline, parse_pipeline_params
@@ -196,6 +197,9 @@ class PipelineProcess:
         # Setting here to override and supress excessive INFO logging
         # ( load_gpu_models is calling logging.info() for every frame )
         logging.getLogger("comfy").setLevel(logging.WARNING)
+
+        # Use uvloop for better performance
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
         try:
             asyncio.run(self._run_pipeline_loops())
