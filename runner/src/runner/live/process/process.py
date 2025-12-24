@@ -141,8 +141,8 @@ class PipelineProcess:
         self.param_update_queue.put(params)
 
     def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
-        # Clear queues to avoid using frames from previous sessions
-        clear_queue(self.input_queue)
+        # we cannot clear the input_queue as we send CUDA tensors on it, which can't be received by the same process that sent it.
+        # So we clear only the other queues, and rely on the request_id checks to avoid using frames from previous sessions.
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
@@ -158,6 +158,8 @@ class PipelineProcess:
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
     def send_input(self, frame: InputFrame):
+        if isinstance(frame, VideoFrame) and not frame.tensor.is_cuda and torch.cuda.is_available():
+            frame = frame.replace_tensor(frame.tensor.cuda())
         self._try_queue_put(self.input_queue, frame)
 
     async def recv_output(self) -> OutputFrame | None:
@@ -276,10 +278,6 @@ class PipelineProcess:
                 if isinstance(input, VideoFrame):
                     input.log_timestamps["pre_process_frame"] = time.time()
 
-                    # Move CPU tensors to GPU before sending to pipeline
-                    if not input.tensor.is_cuda and torch.cuda.is_available():
-                        input = input.replace_tensor(input.tensor.cuda())
-
                     if self._is_loading() and self._last_params.show_reloading_frame:
                         await self._render_loading_frame(overlay, input)
                     else:
@@ -298,10 +296,8 @@ class PipelineProcess:
 
         w, h = self._last_params.get_output_resolution()
         loading_tensor = await overlay.render(w, h)
-
-        # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
-        if loading_tensor.is_cuda:
-            loading_tensor = loading_tensor.cpu()
+        if torch.cuda.is_available() and not loading_tensor.is_cuda:
+            loading_tensor = loading_tensor.cuda()
 
         out_frame = input.replace_tensor(loading_tensor)
         out = VideoOutput(out_frame, self.request_id, is_loading_frame=True)
@@ -321,9 +317,8 @@ class PipelineProcess:
                         continue
                     overlay.end_reload()
 
-                # Move to CPU before sending over multiprocessing queue to avoid CUDA IPC overhead
-                if isinstance(out, VideoOutput) and out.tensor.is_cuda:
-                    out = out.replace_tensor(out.tensor.cpu())
+                if isinstance(out, VideoOutput) and not out.tensor.is_cuda and torch.cuda.is_available():
+                    out = out.replace_tensor(out.tensor.cuda())
 
                 out.log_timestamps["post_process_frame"] = time.time()
                 self._try_queue_put(self.output_queue, out)
