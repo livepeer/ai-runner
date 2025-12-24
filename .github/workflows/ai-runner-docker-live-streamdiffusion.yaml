@@ -60,13 +60,13 @@ jobs:
         with:
           images: livepeer/ai-runner
           tags: |
-            type=raw,value=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }},enable={{is_default_branch}}
+            type=raw,value=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }},enable=${{ github.ref_type == 'tag' }}
             type=sha,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-sha-
             type=sha,format=long,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-sha-
             type=ref,event=pr,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-pr-
             type=ref,event=tag,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-
             type=ref,event=branch,prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-
-            type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }},prefix=live-app-streamdiffusion${{ env.DOCKER_SUFFIX }}-
 
       - name: Get version information (for docker build tag)
         id: version
