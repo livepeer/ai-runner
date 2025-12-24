@@ -148,9 +148,11 @@ jobs:
           images: livepeer/ai-runner
           tags: |
             type=raw,value=live-app-noop,enable={{is_default_branch}}
-            type=sha,prefix=live-app-noop-
-            type=ref,event=pr,prefix=live-app-noop-
+            type=sha,prefix=live-app-noop-sha-
+            type=sha,format=long,prefix=live-app-noop-sha-
+            type=ref,event=pr,prefix=live-app-noop-pr-
             type=ref,event=tag,prefix=live-app-noop-
+            type=ref,event=branch,prefix=live-app-noop-
             type=raw,value=latest,enable={{is_default_branch}},prefix=live-app-noop-
 
       - name: Get version information (for docker build tag)
