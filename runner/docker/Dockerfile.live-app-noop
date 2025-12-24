@@ -39,4 +39,8 @@ ENV MAX_WORKERS=1 \
 ARG VERSION="undefined"
 ENV VERSION=${VERSION}
 
+# The orchestrator always sets these, but we set them in the docker image so we can run it easily for testing.
+ENV PIPELINE=live-video-to-video
+ENV MODEL_ID=noop
+
 CMD ["uv", "run", "--frozen", "uvicorn", "runner.main:app", "--log-config", "src/runner/cfg/uvicorn_logging_config.json", "--host", "", "--port", "8000"]
