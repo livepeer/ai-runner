@@ -282,6 +282,8 @@ function download_comfyui_live_models() {
     echo "ERROR: ComfyUI base image $AI_RUNNER_COMFYUI_IMAGE not found"
     exit 1
   fi
+  # comfystream setup_models.py should ultimately handle these missing nested directories
+  mkdir -p ./models/text_encoders/CLIPText
   # ai-worker has tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here:
   docker image tag $AI_RUNNER_COMFYUI_IMAGE livepeer/ai-runner:live-app-comfyui
   docker run --rm -v ./models:/models "${docker_run_flags[@]}" -l ComfyUI-Setup-Models $AI_RUNNER_COMFYUI_IMAGE \
