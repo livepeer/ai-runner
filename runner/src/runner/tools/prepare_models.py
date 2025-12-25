@@ -27,13 +27,13 @@ def parse_args():
         type=str,
         required=True,
         help="Pipeline built-in name or import path for loading the pipeline"
-        "(e.g. streamdiffusion, scope, custom_pipeline.package:PipelineClass).",
+        "(e.g. noop, custom_pipeline.package:PipelineClass).",
     )
     parser.add_argument(
         "--pipeline-name",
         type=str,
         required=False,
-        help="Custom pipeline name (e.g. streamdiffusion, scope, custom).",
+        help="Custom pipeline name (e.g. noop, custom).",
     )
     parser.add_argument(
         "--verbose",
