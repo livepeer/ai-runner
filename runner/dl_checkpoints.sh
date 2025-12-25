@@ -8,7 +8,7 @@ PULL_IMAGES=${PULL_IMAGES:-true}
 AI_RUNNER_COMFYUI_IMAGE=${AI_RUNNER_COMFYUI_IMAGE:-livepeer/ai-runner:live-app-comfyui}
 _DEFAULT_STREAMDIFFUSION_IMAGE="livepeer/ai-runner:live-app-streamdiffusion"
 AI_RUNNER_STREAMDIFFUSION_IMAGE=${AI_RUNNER_STREAMDIFFUSION_IMAGE:-$_DEFAULT_STREAMDIFFUSION_IMAGE}
-AI_RUNNER_SCOPE_IMAGE=${AI_RUNNER_SCOPE_IMAGE:-livepeer/ai-runner:live-app-scope}
+AI_RUNNER_SCOPE_IMAGE=${AI_RUNNER_SCOPE_IMAGE:-daydreamlive/scope-runner}
 PIPELINE=${PIPELINE:-all}
 
 # Select a single NVIDIA GPU interactively and export NVIDIA_VISIBLE_DEVICES.
@@ -229,8 +229,13 @@ function run_pipeline_prepare() {
     docker pull "$image"
   fi
 
-  # ai-worker has live-app tags hardcoded in `var livePipelineToImage` so we need to use the same tag in here
-  docker image tag "$image" "livepeer/ai-runner:live-app-$pipeline"
+  # ai-worker has "latest" tags hardcoded in `var livePipelineToImage` so we tag it here in case the user runs the orch after this
+  if [ "$pipeline" = "scope" ]; then
+    # scope image is managed in the daydreamlive org
+    docker image tag "$image" "daydreamlive/scope-runner:latest"
+  else
+    docker image tag "$image" "livepeer/ai-runner:live-app-$pipeline"
+  fi
 
   # Run model preparation using PREPARE_MODELS env var (triggers main.py prepare mode)
   docker run --rm --name "ai-runner-${pipeline}-prepare" -v ./models:/models "${docker_run_flags[@]}" \
