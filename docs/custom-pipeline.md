@@ -421,6 +421,8 @@ Batch pipelines extend a different base class:
 from runner.pipelines.base import Pipeline
 
 class MyBatchPipeline(Pipeline):
+    name: str = "my-batch-pipeline"
+
     def __init__(self, model_id: str, model_dir: str = "/models"):
         self.model_id = model_id
         self.model_dir = model_dir
