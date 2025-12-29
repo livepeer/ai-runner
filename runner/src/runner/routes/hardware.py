@@ -39,10 +39,11 @@ class HardwareStats(BaseModel):
     include_in_schema=False,
 )
 async def hardware_info(request: Request):
+    pipeline = request.app.pipeline
     gpu_info = await asyncio.to_thread(request.app.hardware_info_service.get_gpu_compute_info)
     return HardwareInformation(
-        pipeline=os.environ["PIPELINE"],
-        model_id=os.environ["MODEL_ID"],
+        pipeline=os.environ.get("PIPELINE", pipeline.name),
+        model_id=os.environ.get("MODEL_ID", pipeline.model_id),
         gpu_info=gpu_info,
     )
 
@@ -58,9 +59,10 @@ async def hardware_info(request: Request):
     include_in_schema=False,
 )
 async def hardware_stats(request: Request):
+    pipeline = request.app.pipeline
     gpu_stats = await asyncio.to_thread(request.app.hardware_info_service.get_gpu_utilization_stats)
     return HardwareStats(
-        pipeline=os.environ["PIPELINE"],
-        model_id=os.environ["MODEL_ID"],
+        pipeline=os.environ.get("PIPELINE", pipeline.name),
+        model_id=os.environ.get("MODEL_ID", pipeline.model_id),
         gpu_stats=gpu_stats,
     )
