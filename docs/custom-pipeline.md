@@ -338,8 +338,7 @@ For full end-to-end testing with the Livepeer stack (gateway, orchestrator, Tric
      {
        "pipeline": "live-video-to-video",
        "model_id": "my-pipeline",
-       "url": "http://localhost:8000",
-       "warm": true
+       "url": "http://localhost:8000"
      }
    ]
    ```
