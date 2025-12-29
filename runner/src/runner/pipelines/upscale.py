@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 
 class UpscalePipeline(Pipeline):
+    name: str = "upscale"
+
     def __init__(self, model_id: str):
         self.model_id = model_id
         kwargs = {"cache_dir": get_model_dir()}

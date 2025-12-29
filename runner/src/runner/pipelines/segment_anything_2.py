@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 
 class SegmentAnything2Pipeline(Pipeline):
+    name: str = "segment-anything-2"
+
     def __init__(self, model_id: str):
         self.model_id = model_id
         kwargs = {"cache_dir": get_model_dir()}

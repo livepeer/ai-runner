@@ -46,6 +46,8 @@ class ModelName(Enum):
 
 
 class ImageToImagePipeline(Pipeline):
+    name: str = "image-to-image"
+
     def __init__(self, model_id: str):
         self.model_id = model_id
         kwargs = {"cache_dir": get_model_dir()}

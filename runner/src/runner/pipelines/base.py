@@ -15,6 +15,12 @@ class Version(BaseModel):
     version: str = Field(..., description="The version of the Runner")
 
 class Pipeline(ABC):
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """The pipeline name used for routing (e.g. 'text-to-image', 'live-video-to-video', etc)."""
+        ...
+
     @abstractmethod
     def __init__(self, model_id: str, model_dir: str):
         self.model_id: str # declare the field here so the type hint is available when using this abstract class

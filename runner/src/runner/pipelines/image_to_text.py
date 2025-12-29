@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class ImageToTextPipeline(Pipeline):
+    name: str = "image-to-text"
+
     def __init__(self, model_id: str):
         self.model_id = model_id
         kwargs = {}

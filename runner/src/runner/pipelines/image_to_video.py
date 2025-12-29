@@ -21,6 +21,8 @@ SFAST_WARMUP_ITERATIONS = 2  # Model warm-up iterations when SFAST is enabled.
 
 
 class ImageToVideoPipeline(Pipeline):
+    name: str = "image-to-video"
+
     def __init__(self, model_id: str):
         self.model_id = model_id
         kwargs = {"cache_dir": get_model_dir()}

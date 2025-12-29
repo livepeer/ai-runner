@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class TextToSpeechPipeline(Pipeline):
+    name: str = "text-to-speech"
+
     def __init__(self, model_id: str):
         self.device = get_torch_device()
         self.model_id = model_id

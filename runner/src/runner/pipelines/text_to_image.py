@@ -48,6 +48,8 @@ class ModelName(Enum):
 
 
 class TextToImagePipeline(Pipeline):
+    name: str = "text-to-image"
+
     def __init__(self, model_id: str):
         self.model_id = model_id
         kwargs = {"cache_dir": get_model_dir()}

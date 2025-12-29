@@ -59,6 +59,8 @@ INCOMPATIBLE_EXTENSIONS = ["mp4", "m4a", "ac3"]
 
 
 class AudioToTextPipeline(Pipeline):
+    name: str = "audio-to-text"
+
     def __init__(self, model_id: str):
         self.model_id = model_id
         kwargs = {}

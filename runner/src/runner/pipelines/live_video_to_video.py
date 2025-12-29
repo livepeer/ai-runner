@@ -19,6 +19,8 @@ from runner.live.pipelines import PipelineSpec
 proc_status_important_fields = ["State", "VmRSS", "VmSize", "Threads", "voluntary_ctxt_switches", "nonvoluntary_ctxt_switches", "CoreDumping"]
 
 class LiveVideoToVideoPipeline(Pipeline):
+    name: str = "live-video-to-video"
+
     def __init__(self, pipeline_spec: PipelineSpec):
         self.version = os.getenv("VERSION", "undefined")
         self.model_id = pipeline_spec.name # we set the parent class model_id to the pipeline name for compatibility

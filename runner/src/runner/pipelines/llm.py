@@ -40,6 +40,8 @@ class GenerationConfig:
 
 
 class LLMPipeline(Pipeline):
+    name: str = "llm"
+
     def __init__(
         self,
         model_id: str,
