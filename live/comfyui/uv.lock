@@ -39,7 +39,7 @@ wheels = [
 
 [[package]]
 name = "ai-runner"
-version = "0.1.0"
+version = "0.14.1"
 source = { editable = "../../runner" }
 dependencies = [
     { name = "aiohttp" },
@@ -630,7 +630,7 @@ dependencies = [
 
 [[package]]
 name = "comfyui-pipeline"
-version = "0.1.0"
+version = "0.14.1"
 source = { editable = "." }
 dependencies = [
     { name = "ai-runner", extra = ["realtime"] },

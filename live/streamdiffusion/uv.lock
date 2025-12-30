@@ -39,7 +39,7 @@ wheels = [
 
 [[package]]
 name = "ai-runner"
-version = "0.1.0"
+version = "0.14.1"
 source = { editable = "../../runner" }
 dependencies = [
     { name = "aiohttp" },
@@ -125,7 +125,7 @@ requires-dist = [
     { name = "xformers", marker = "extra == 'batch'", specifier = "==0.0.23" },
     { name = "xformers", marker = "extra == 'llm'" },
 ]
-provides-extras = ["batch", "realtime-base", "realtime", "llm", "dev", "realtime-dev"]
+provides-extras = ["batch", "llm", "realtime-base", "realtime", "realtime-dev", "dev"]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -1825,7 +1825,7 @@ tensorrt = [
 
 [[package]]
 name = "streamdiffusion-pipeline"
-version = "0.1.0"
+version = "0.14.1"
 source = { editable = "." }
 dependencies = [
     { name = "ai-runner", extra = ["realtime"] },
