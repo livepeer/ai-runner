@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ai-runner"
-version = "0.1.0"
+version = "0.14.1"
 description = "AI Runner - containerized inference runtime for the Livepeer AI network"
 requires-python = ">=3.10,<3.12"
 dependencies = [
