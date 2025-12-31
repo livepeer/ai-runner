@@ -7,7 +7,7 @@ This repository hosts the AI runner for processing AI inference jobs on the Live
 
 ## Overview
 
-The AI runner is a containerized Python application which processes inference requests on Livepeer AI's Pipelines and models. It loads models into GPU memory and exposes a REST API other programs like [the Livepeer node AI worker](../README.md) can use to request AI inference requests. The AI runner code sits in the [runner](https://github.com/livepeer/ai-runner/tree/main/runner) directory.
+The AI runner is a containerized Python application which processes inference requests on Livepeer AI's Pipelines and models. It loads models into GPU memory and exposes a REST API other programs like [the Livepeer node AI worker](https://github.com/livepeer/ai-runner/blob/main/README.md) can use to request AI inference requests. The AI runner code sits in the [runner](https://github.com/livepeer/ai-runner/tree/main/runner) directory.
 
 ## Build
 
