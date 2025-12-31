@@ -88,6 +88,7 @@ jobs:
           file: runner/docker/Dockerfile.models
           cache-from: type=registry,ref=livepeerci/ai-runner-models:dockerbuildcache-batch
           cache-to: type=registry,ref=livepeerci/ai-runner-models:dockerbuildcache-batch,mode=max
+          outputs: type=image,compression=uncompressed,force-compression=true,compression-level=0,push=true
 
   download_build_tensorrt_models:
     strategy:
@@ -159,8 +160,9 @@ jobs:
         with:
           context: .
           platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           file: runner/docker/Dockerfile.models
           cache-from: type=registry,ref=livepeerci/ai-runner-models:dockerbuildcache-tensorrt-${{ matrix.gpu }}
           cache-to: type=registry,ref=livepeerci/ai-runner-models:dockerbuildcache-tensorrt-${{ matrix.gpu }},mode=max
+          outputs: type=image,compression=uncompressed,force-compression=true,compression-level=0,push=true
