@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import queue
 import json
 from typing import AsyncGenerator, Optional
@@ -11,6 +12,40 @@ from ...trickle import media, TricklePublisher, TrickleSubscriber, InputFrame, O
 from .protocol import StreamProtocol
 from .last_value_cache import LastValueCache
 
+DEFAULT_PUBLISH_QUEUE_MAXSIZE = 1
+
+
+def _publish_queue_maxsize() -> int:
+    raw = os.environ.get("LIVE_TRICKLE_PUBLISH_QUEUE_MAXSIZE")
+    if raw is None or raw.strip() == "":
+        return DEFAULT_PUBLISH_QUEUE_MAXSIZE
+    try:
+        value = int(raw)
+    except ValueError:
+        logging.warning(
+            "Invalid LIVE_TRICKLE_PUBLISH_QUEUE_MAXSIZE=%r, using %s",
+            raw,
+            DEFAULT_PUBLISH_QUEUE_MAXSIZE,
+        )
+        return DEFAULT_PUBLISH_QUEUE_MAXSIZE
+    return max(1, value)
+
+
+def _put_drop_oldest(_queue: queue.Queue, item) -> int:
+    dropped = 0
+    while True:
+        try:
+            _queue.put_nowait(item)
+            return dropped
+        except queue.Full:
+            try:
+                old = _queue.get_nowait()
+            except queue.Empty:
+                continue
+            dropped += 1
+            del old
+
+
 class TrickleProtocol(StreamProtocol):
     def __init__(self, subscribe_url: str, publish_url: str, control_url: Optional[str] = None, events_url: Optional[str] = None, input_width: Optional[int] = DEFAULT_WIDTH, input_height: Optional[int] = DEFAULT_HEIGHT, output_width: Optional[int] = None, output_height: Optional[int] = None):
         self.subscribe_url = subscribe_url
@@ -18,7 +53,8 @@ class TrickleProtocol(StreamProtocol):
         self.control_url = control_url
         self.events_url = events_url
         self.subscribe_queue = queue.Queue[InputFrame]()
-        self.publish_queue = queue.Queue[OutputFrame]()
+        self.publish_queue = queue.Queue[OutputFrame](maxsize=_publish_queue_maxsize())
+        self.publish_queue_dropped = 0
         self.control_subscriber = None
         self.events_publisher = None
         self.subscribe_task = None
@@ -30,7 +66,8 @@ class TrickleProtocol(StreamProtocol):
 
     async def start(self):
         self.subscribe_queue = queue.Queue[InputFrame]()
-        self.publish_queue = queue.Queue[OutputFrame]()
+        self.publish_queue = queue.Queue[OutputFrame](maxsize=_publish_queue_maxsize())
+        self.publish_queue_dropped = 0
         metadata_cache = LastValueCache[dict]() # to pass video metadata from decoder to encoder
         self.subscribe_task = asyncio.create_task(
             media.run_subscribe(self.subscribe_url, self.subscribe_queue.put, metadata_cache.put, self.emit_monitoring_event, self.input_width, self.input_height)
@@ -49,7 +86,7 @@ class TrickleProtocol(StreamProtocol):
 
         # send sentinel None values to stop the trickle tasks gracefully
         self.subscribe_queue.put(None)
-        self.publish_queue.put(None)
+        _put_drop_oldest(self.publish_queue, None)
 
         if self.control_subscriber:
             await self.control_subscriber.close()
@@ -86,17 +123,30 @@ class TrickleProtocol(StreamProtocol):
             # TEMP: Put audio immediately into the publish queue
             # TODO: Remove once there is ComfyUI audio support
             if isinstance(image, AudioFrame):
-                publish_queue.put(AudioOutput([image]))
+                self.publish_queue_dropped += _put_drop_oldest(
+                    publish_queue,
+                    AudioOutput([image]),
+                )
                 continue
             yield image
 
     async def egress_loop(self, output_frames: AsyncGenerator[OutputFrame, None]):
         publish_queue = self.publish_queue
         def enqueue_bytes(frame: OutputFrame):
-            publish_queue.put(frame)
+            return _put_drop_oldest(publish_queue, frame)
 
         async for frame in output_frames:
-            await asyncio.to_thread(enqueue_bytes, frame)
+            try:
+                dropped = await asyncio.to_thread(enqueue_bytes, frame)
+                self.publish_queue_dropped += dropped
+                if dropped and self.publish_queue_dropped % 100 == 1:
+                    logging.warning(
+                        "Dropped stale publish frames dropped_total=%s queue_maxsize=%s",
+                        self.publish_queue_dropped,
+                        publish_queue.maxsize,
+                    )
+            finally:
+                del frame
 
     async def emit_monitoring_event(self, event: dict, queue_event_type: str = "ai_stream_events"):
         if not self.events_publisher:
@@ -134,4 +184,3 @@ class TrickleProtocol(StreamProtocol):
             except Exception:
                 logging.error(f"Error in control loop", exc_info=True)
                 continue
-

@@ -108,6 +108,15 @@ class Pipeline(ABC):
         """
         pass
 
+    async def cleanup_stream(self):
+        """Release per-stream state while keeping the warmed pipeline alive.
+
+        Called after a stream goes offline. Implementations should clear
+        frame queues, per-stream caches, and allocator state that does not need
+        to survive into the next stream, without unloading model weights.
+        """
+        pass
+
     @classmethod
     @abstractmethod
     def prepare_models(cls):

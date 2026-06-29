@@ -2,6 +2,8 @@ import os
 import logging
 import asyncio
 import base64
+import ctypes
+import gc
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any, cast
@@ -30,6 +32,10 @@ from .params import (
 ENGINES_DIR = Path("./engines")
 # this one is used only for realesrgan_trt which has ./models hardcoded
 LOCAL_MODELS_DIR = Path("./models")
+STREAM_CLEANUP_GC_ENV = "LIVE_PIPELINE_STREAM_CLEANUP_GC"
+STREAM_CLEANUP_MALLOC_TRIM_ENV = "LIVE_PIPELINE_STREAM_CLEANUP_MALLOC_TRIM"
+STREAM_CLEANUP_CUDA_CACHE_ENV = "LIVE_PIPELINE_STREAM_CLEANUP_CUDA_CACHE"
+STREAM_CLEANUP_STYLE_CACHE_ENV = "LIVE_PIPELINE_STREAM_CLEANUP_STYLE_CACHE"
 
 class StreamDiffusion(Pipeline):
     def __init__(self):
@@ -280,11 +286,49 @@ class StreamDiffusion(Pipeline):
             self.params = None
             self.frame_queue = asyncio.Queue()
 
+    async def cleanup_stream(self):
+        async with self._pipeline_lock:
+            _clear_asyncio_queue(self.frame_queue)
+            if _env_enabled(STREAM_CLEANUP_STYLE_CACHE_ENV, default=False):
+                self._cached_style_image_tensor = None
+                self._cached_style_image_url = None
+
+        if _env_enabled(STREAM_CLEANUP_GC_ENV, default=True):
+            await asyncio.to_thread(gc.collect)
+        if _env_enabled(STREAM_CLEANUP_MALLOC_TRIM_ENV, default=True):
+            await asyncio.to_thread(_malloc_trim)
+        if _env_enabled(STREAM_CLEANUP_CUDA_CACHE_ENV, default=False) and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logging.info("StreamDiffusion stream cleanup complete")
+
     @classmethod
     def prepare_models(cls):
         from .prepare import prepare_streamdiffusion_models
 
         prepare_streamdiffusion_models()
+
+
+def _env_enabled(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _malloc_trim() -> None:
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+        libc.malloc_trim(0)
+    except Exception:
+        logging.debug("malloc_trim unavailable", exc_info=True)
+
+
+def _clear_asyncio_queue(queue: asyncio.Queue) -> None:
+    while True:
+        try:
+            queue.get_nowait()
+        except asyncio.QueueEmpty:
+            return
 
 
 def _prepare_controlnet_configs(params: StreamDiffusionParams) -> Optional[List[Dict[str, Any]]]:
