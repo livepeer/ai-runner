@@ -1,5 +1,10 @@
 # ai-runner
 
+> [!CAUTION]
+> **Deprecated and archived.** The AI runner has been replaced by the **live runner**, shipped in mainline [go-livepeer](https://github.com/livepeer/go-livepeer) since [v0.9.0](https://github.com/livepeer/go-livepeer/releases/tag/v0.9.0). This repository is kept for reference only and is no longer maintained.
+>
+> The live runner passes your app through unchanged, so any existing service runs on the network with little Livepeer-specific code. See the [runner app examples](https://github.com/livepeer/runner-app-examples).
+
 > [!WARNING]
 > The AI network is in it's **Beta** phase and although it is ready for production it is still under development. Please report any issues you encounter to the [Livepeer Discord](https://discord.com/invite/livepeer).
 
