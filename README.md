@@ -5,9 +5,6 @@
 >
 > The live runner passes your app through unchanged, so any existing service runs on the network with little Livepeer-specific code. See the [runner app examples](https://github.com/livepeer/runner-app-examples).
 
-> [!WARNING]
-> The AI network is in it's **Beta** phase and although it is ready for production it is still under development. Please report any issues you encounter to the [Livepeer Discord](https://discord.com/invite/livepeer).
-
 This repository hosts the AI runner for processing AI inference jobs on the Livepeer network.
 
 ## Overview
