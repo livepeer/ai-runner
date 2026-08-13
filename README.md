@@ -5,7 +5,7 @@
 >
 > The live runner passes your app through unchanged, so any existing service runs on the network with little Livepeer-specific code. See the [runner app examples](https://github.com/livepeer/runner-app-examples).
 >
-> Thanks to everyone who contributed to the AI runner over the past years — the pipelines, fixes, and reviews shaped what the live runner is today.
+> Thanks to everyone who contributed to the AI runner over the past years. The pipelines, fixes, and reviews shaped what the live runner is today.
 
 This repository hosts the AI runner for processing AI inference jobs on the Livepeer network.
 
