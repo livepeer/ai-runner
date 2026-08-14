@@ -16,7 +16,7 @@ dependencies = [
     "psutil==6.0.0",
     "nvidia-ml-py==12.560.30",
     "pynvml==12.0.0",
-    "python-multipart==0.0.9",
+    "python-multipart==0.0.22",
     "aiohttp==3.10.9",
 ]
 
