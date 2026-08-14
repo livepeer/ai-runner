@@ -1,0 +1,9 @@
+ARG BASE_IMAGE=livepeer/ai-runner:base
+FROM ${BASE_IMAGE}
+
+RUN pip install --no-cache-dir huggingface_hub
+
+COPY ./dl_checkpoints.sh /app
+COPY ./salad_app.py /app
+
+CMD ["python", "-u", "/app/salad_app.py"]
