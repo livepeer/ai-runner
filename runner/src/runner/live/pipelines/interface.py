@@ -44,9 +44,16 @@ class BaseParams(BaseModel):
         return (self.width, self.height)
 
 class Pipeline(ABC):
-    """Abstract base class for image processing pipelines.
+    """Abstract base class for frame processing pipelines.
 
-    Processes frames sequentially and supports dynamic parameter updates.
+    .. deprecated::
+        For new pipelines, use the ``@pipeline`` decorator instead of
+        subclassing this ABC directly. The decorator handles frame queues,
+        lifecycle management, and parameter validation automatically.
+        See ``docs/custom-pipeline.md`` for usage.
+
+    This ABC is retained for internal use and backward compatibility with
+    existing pipeline implementations (e.g., ComfyUI, StreamDiffusion).
 
     Notes:
     - Error handling is done by the caller, so the implementation can let
@@ -109,7 +116,6 @@ class Pipeline(ABC):
         pass
 
     @classmethod
-    @abstractmethod
     def prepare_models(cls):
         """Download and/or compile any assets required for this pipeline."""
         pass

@@ -95,13 +95,14 @@ def use_route_names_as_operation_ids(app: FastAPI) -> None:
             route.operation_id = route.name
 
 
-def prepare_models(pipeline_spec: PipelineSpec) -> None:
+async def _prepare_models_async(pipeline_spec: PipelineSpec) -> None:
     """Prepare models for a live pipeline (download, compile TensorRT engines, etc.)."""
     from .live.pipelines.loader import load_pipeline_class
+    from .live.pipelines.create import _invoke
 
     logger.info(f"Preparing models for pipeline: {pipeline_spec.name}")
     pipeline_class = load_pipeline_class(pipeline_spec.pipeline_cls)
-    pipeline_class.prepare_models()
+    await _invoke(pipeline_class.prepare_models)
     logger.info("Model preparation complete")
 
 
@@ -181,7 +182,8 @@ def start_app(
     if isinstance(pipeline, PipelineSpec):
         # Check for model preparation mode
         if os.getenv("PREPARE_MODELS") == "1" or "--prepare-models" in sys.argv:
-            prepare_models(pipeline)
+            import asyncio
+            asyncio.run(_prepare_models_async(pipeline))
             return
 
         # Wrap in LiveVideoToVideoPipeline for normal operation
