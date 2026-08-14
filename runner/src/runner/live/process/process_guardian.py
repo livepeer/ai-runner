@@ -301,8 +301,9 @@ class ProcessGuardian:
                     continue
 
                 if state == PipelineState.OFFLINE:
-                    # Revert to initial params when the stream stops
-                    self.process.reset_stream("", "", "")
+                    # Revert to initial params and release stream-scoped state
+                    # while keeping the warmed pipeline alive.
+                    self.process.reset_stream("", "", "", cleanup_stream=True)
                     self.process.update_params(self.pipeline_spec.initial_params)
 
                 if state != PipelineState.ERROR:

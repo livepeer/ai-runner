@@ -99,47 +99,60 @@ def encode_av(
             break
 
         if isinstance(avframe, VideoOutput):
-            if not output_video_stream:
-                # received video but no video output, so drop
-                continue
-            avframe.log_timestamps["frame_end"] = time.time()
-            log_frame_timestamps("Video", avframe.frame)
-
-            tensor = avframe.tensor.squeeze(0)
-            image_np = (tensor * 255).byte().cpu().numpy()
-            image = Image.fromarray(image_np)
-
-            frame = av.video.frame.VideoFrame.from_image(image)
-            frame.pts = rescale_ts(avframe.timestamp, avframe.time_base, output_video_stream.codec_context.time_base)
-            frame.time_base = output_video_stream.codec_context.time_base
-            current = avframe.timestamp * avframe.time_base
-
-            # if there is pending audio, check whether video is too far behind
-            if len(audio_buffer) > 0:
-                audio_ts = audio_buffer[0].timestamp * audio_buffer[0].time_base
-                delta = audio_ts - current
-                if delta > AUDIO_BUFFER_SECS:
-                    # video is too far behind audio, drop the frame to try and catch up
-                    dropped_video += 1
-                    if dropped_video > MAX_DROPPED_VIDEO:
-                        # dropped too many frames, may be unlikely to catch up so stop the stream
-                        logging.error(f"A/V is out of sync, exiting from video audio_ts={float(audio_ts)} video_ts={float(current)} delta={float(delta)}")
-                        break
-                    # drop the frame by skipping the rest of the following code
+            tensor = None
+            image_np = None
+            image = None
+            frame = None
+            encoded_packets = None
+            try:
+                if not output_video_stream:
+                    # received video but no video output, so drop
                     continue
+                avframe.log_timestamps["frame_end"] = time.time()
+                log_frame_timestamps("Video", avframe.frame)
 
-            if not last_kf or float(current - last_kf) >= GOP_SECS:
-                frame.pict_type = av.video.frame.PictureType.I
-                last_kf = current
-                if first_video_ts is None:
-                    first_video_ts = current
-            encoded_packets = output_video_stream.encode(frame)
-            for ep in encoded_packets:
-                if last_video_ts and frame.pts <= last_video_ts:
-                    logging.info(f"Timestamps out of order; dropping video last={last_video_ts} current={frame.pts}")
-                    continue
-                last_video_ts = frame.pts
-                output_container.mux(ep)
+                tensor = avframe.tensor.squeeze(0)
+                image_np = (tensor * 255).byte().cpu().numpy()
+                image = Image.fromarray(image_np)
+
+                frame = av.video.frame.VideoFrame.from_image(image)
+                frame.pts = rescale_ts(avframe.timestamp, avframe.time_base, output_video_stream.codec_context.time_base)
+                frame.time_base = output_video_stream.codec_context.time_base
+                current = avframe.timestamp * avframe.time_base
+
+                # if there is pending audio, check whether video is too far behind
+                if len(audio_buffer) > 0:
+                    audio_ts = audio_buffer[0].timestamp * audio_buffer[0].time_base
+                    delta = audio_ts - current
+                    if delta > AUDIO_BUFFER_SECS:
+                        # video is too far behind audio, drop the frame to try and catch up
+                        dropped_video += 1
+                        if dropped_video > MAX_DROPPED_VIDEO:
+                            # dropped too many frames, may be unlikely to catch up so stop the stream
+                            logging.error(f"A/V is out of sync, exiting from video audio_ts={float(audio_ts)} video_ts={float(current)} delta={float(delta)}")
+                            break
+                        # drop the frame by skipping the rest of the following code
+                        continue
+
+                if not last_kf or float(current - last_kf) >= GOP_SECS:
+                    frame.pict_type = av.video.frame.PictureType.I
+                    last_kf = current
+                    if first_video_ts is None:
+                        first_video_ts = current
+                encoded_packets = output_video_stream.encode(frame)
+                for ep in encoded_packets:
+                    if last_video_ts and frame.pts <= last_video_ts:
+                        logging.info(f"Timestamps out of order; dropping video last={last_video_ts} current={frame.pts}")
+                        continue
+                    last_video_ts = frame.pts
+                    output_container.mux(ep)
+            finally:
+                del encoded_packets
+                del frame
+                del image
+                del image_np
+                del tensor
+                del avframe
             continue
 
         if isinstance(avframe, AudioOutput):

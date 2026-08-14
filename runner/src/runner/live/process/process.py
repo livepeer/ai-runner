@@ -28,6 +28,8 @@ from ..trickle import (
 
 from .loading_overlay import LoadingOverlayRenderer
 
+STREAM_CLEANUP_CONTROL_KEY = "__stream_cleanup__"
+
 
 class PipelineProcess:
     @staticmethod
@@ -139,20 +141,28 @@ class PipelineProcess:
     def update_params(self, params: dict):
         self.param_update_queue.put(params)
 
-    def reset_stream(self, request_id: str, manifest_id: str, stream_id: str):
+    def reset_stream(
+        self,
+        request_id: str,
+        manifest_id: str,
+        stream_id: str,
+        *,
+        cleanup_stream: bool = False,
+    ):
         # Clear queues to avoid using frames from previous sessions
         clear_queue(self.input_queue)
         clear_queue(self.output_queue)
         clear_queue(self.param_update_queue)
         clear_queue(self.error_queue)
         clear_queue(self.log_queue)
-        self.param_update_queue.put(
-            {
-                "request_id": request_id,
-                "manifest_id": manifest_id,
-                "stream_id": stream_id,
-            }
-        )
+        message = {
+            "request_id": request_id,
+            "manifest_id": manifest_id,
+            "stream_id": stream_id,
+        }
+        if cleanup_stream:
+            message[STREAM_CLEANUP_CONTROL_KEY] = True
+        self.param_update_queue.put(message)
 
     # TODO: Once audio is implemented, combined send_input with input_loop
     # We don't need additional queueing as comfystream already maintains a queue
@@ -330,7 +340,7 @@ class PipelineProcess:
         while not self.is_done():
             reload_task = None
             try:
-                params = await self._get_latest_params(timeout=0.1)
+                params = await self._get_latest_params(timeout=0.1, pipeline=pipeline, overlay=overlay)
                 if params is None:
                     continue
 
@@ -382,7 +392,12 @@ class PipelineProcess:
                 except Exception:
                     logging.warning("Failed to prewarm loading overlay caches", exc_info=True)
 
-    async def _get_latest_params(self, timeout: float) -> dict | None:
+    async def _get_latest_params(
+        self,
+        timeout: float,
+        pipeline: Pipeline,
+        overlay: LoadingOverlayRenderer,
+    ) -> dict | None:
         """
         Get the latest params from the param_update_queue, skipping stale entries before the latest. Already filters
         and processes params that are only logging updates. Waits for timeout seconds for a new params entry, or returns
@@ -396,19 +411,43 @@ class PipelineProcess:
         except queue.Empty:
             return None
 
-        if self._handle_logging_params(params):
+        if await self._handle_process_message(params, pipeline, overlay):
             params = None
 
         # Drain the params queue to get the latest params
         while not self.param_update_queue.empty():
             try:
                 new_params = self.param_update_queue.get_nowait()
-                if not self._handle_logging_params(new_params):
+                if not await self._handle_process_message(new_params, pipeline, overlay):
                     params = new_params
             except queue.Empty:
                 break
 
         return params
+
+    async def _handle_process_message(
+        self,
+        params: dict,
+        pipeline: Pipeline,
+        overlay: LoadingOverlayRenderer,
+    ) -> bool:
+        consumed = self._handle_logging_params(params)
+        if isinstance(params, dict) and params.get(STREAM_CLEANUP_CONTROL_KEY):
+            await self._cleanup_stream_state(pipeline, overlay)
+            consumed = True
+        return consumed
+
+    async def _cleanup_stream_state(self, pipeline: Pipeline, overlay: LoadingOverlayRenderer):
+        logging.info("PipelineProcess: stream cleanup requested")
+        clear_queue(self.input_queue)
+        clear_queue(self.output_queue)
+        overlay.end_reload()
+        try:
+            await pipeline.cleanup_stream()
+        except Exception as e:
+            self._report_error("Error cleaning up pipeline stream state", e)
+        else:
+            logging.info("PipelineProcess: stream cleanup complete")
 
     def _report_error(self, msg: str, error: Exception | None = None, silent=False):
         if not silent:
